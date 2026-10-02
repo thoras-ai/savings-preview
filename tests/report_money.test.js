@@ -160,3 +160,43 @@ test('names from the file are escaped', () => {
   assert.doesNotMatch(html, /<img/);
   assert.doesNotMatch(html, /data-workload="[^"]*a"b/);
 });
+
+test('a view with nothing to save says so, without a map of only hatched cells', () => {
+  const r = large(3);
+  r.workloads.forEach(w => { w.annualSavings = 0; w.savingsPct = 0; });
+  r.workloads[2].series = null;
+  r.totals = { spend: r.workloads[0].annualSpend + r.workloads[1].annualSpend, savings: 0, workloads: 3, counted: 2 };
+  const sum = money.summarize(r);
+  assert.deepStrictEqual(money.cells(r, sum, VIEW, false), []);
+  const html = money.html(r, state.DEFAULTS, VIEW, false, 1100);
+  assert.match(html, /No workload in this view has anything to save, so there is nothing to map\. 1 workload could not be counted\./);
+  assert.doesNotMatch(html, /tm-gap/);
+  assert.doesNotMatch(html, /No workload has complete data/);
+
+  r.workloads.forEach(w => { w.annualSpend = 0; });
+  r.totals.spend = 0;
+  const spend = money.html(r, state.DEFAULTS, Object.assign({}, VIEW, { metric: 'spend' }), false, 1100);
+  assert.match(spend, /no spend to map/);
+  assert.match(spend, /nothing requested/);
+  assert.doesNotMatch(spend, /0% of/);
+
+  const none = large(2);
+  none.workloads.forEach(w => { w.series = null; });
+  none.totals = { spend: 0, savings: 0, workloads: 2, counted: 0 };
+  assert.match(money.html(none, state.DEFAULTS, VIEW, false, 1100), /No workload has complete data/);
+});
+
+test('the legend lists only the namespaces on the map', () => {
+  const r = model.compute(fixture());
+  const html = money.html(r, state.DEFAULTS, Object.assign({}, VIEW, { ns: 'shop' }), false, 1100);
+  const legend = html.match(/<div class="legend">(.*?)<\/div>/)[1];
+  assert.match(legend, /shop/);
+  assert.doesNotMatch(legend, /data|search/);
+});
+
+test('the shared cell for smaller workloads gives its share and how to see them', () => {
+  const r = large(1000);
+  const html = money.html(r, state.DEFAULTS, Object.assign({}, VIEW, { level: 'workloads' }), false, 1100);
+  assert.match(html, /more workloads<\/b><span>\$[\d,.M]+ · \d+% of savings/);
+  assert.match(html, /select one to see all of its workloads/);
+});

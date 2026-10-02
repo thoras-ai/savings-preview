@@ -303,7 +303,7 @@ button.tm-cell:hover { filter: brightness(0.94); }
 .tm-cell.tm-gap span { font-family: var(--primitive-font-sans); color: var(--text-light); }
 .tm-key { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
 .money-ranks .rank { grid-template-columns: minmax(0, 150px) minmax(0, 1fr) 130px; gap: var(--primitive-space-12); }
-.money-ranks .rank-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.money-ranks .rank-sub { max-width: 100%; overflow-wrap: anywhere; }
 .money-ranks .rank-bar { height: 14px; border-radius: 2px; }
 .money-ranks .rank-bar i { background: var(--primitive-brand-500); border-radius: 2px; }
 [data-theme="dark"] .money-ranks .rank-bar i { background: var(--primitive-brand-400); }

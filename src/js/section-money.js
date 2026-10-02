@@ -114,23 +114,28 @@
       if (shown.length < counted.length) {
         var rest = counted.slice(shown.length), restValue = 0;
         rest.forEach(function (w) { restValue += w[metric]; });
-        out.push({ kind: 'rest', key: 'rest', name: ui.num(rest.length, 0) + ' more workloads', value: restValue, tone: 'other', note: ui.money(restValue, approx) });
+        var all = restValue;
+        shown.forEach(function (w) { all += w[metric]; });
+        out.push({ kind: 'rest', key: 'rest', name: ui.num(rest.length, 0) + ' more workloads', value: restValue, tone: 'other',
+          note: ui.money(restValue, approx) + ' · ' + ui.pct(restValue / all) + ' of ' + (view.metric === 'spend' ? 'spend' : 'savings') });
       }
       var missing = ws.filter(function (w) { return !w.series; });
       if (missing.length > NAMED_GAPS) gaps.push({ name: ui.num(missing.length, 0) + ' workloads not counted' });
       else missing.forEach(function (w) { gaps.push({ name: w.name + ' · ' + lowerFirst(w.reason) }); });
     }
     out.forEach(function (c) { total += c.value; });
-    var share = total > 0 ? total * Math.min(0.02, 0.1 / Math.max(1, gaps.length)) : 1;
+    // Hatched cells alone would read as if nothing was counted.
+    if (!(total > 0)) return [];
+    var share = total * Math.min(0.02, 0.1 / Math.max(1, gaps.length));
     gaps.forEach(function (g, i) { out.push({ kind: 'gap', key: 'gap-' + i, name: g.name, value: share, tone: 'gap' }); });
     return out;
   }
 
   function pc(v, of) { return Math.round(v / of * 10000) / 100 + '%'; }
 
-  function mapHTML(list, width, height) {
+  function mapHTML(list, width, height, empty) {
     var rects = squarify(list, width, height);
-    if (!rects.length) return '<p class="empty">No workload has complete data, so there is nothing to map.</p>';
+    if (!rects.length) return '<p class="empty">' + esc(empty) + '</p>';
     return '<div class="tm" style="height:' + height + 'px">' + rects.map(function (r) {
       var c = r.item, px = r.w, py = r.h;
       var size = px < 44 || py < 26 ? ' tm-xs' : px < 84 || py < 46 ? ' tm-s' : '';
@@ -152,9 +157,11 @@
     }).join('') + '</div>';
   }
 
-  function legend(sum, list) {
-    var keys = sum.namespaces.filter(function (n) { return n.tone !== 'other'; }).map(function (n) { return [n.tone, n.name]; });
-    if (list.some(function (c) { return c.tone === 'other'; })) keys.push(['other', 'other namespaces']);
+  function legend(sum, list, view) {
+    var shown = {};
+    list.forEach(function (c) { shown[c.ns || c.key] = true; });
+    var keys = sum.namespaces.filter(function (n) { return n.tone !== 'other' && shown[n.name]; }).map(function (n) { return [n.tone, n.name]; });
+    if (list.some(function (c) { return c.tone === 'other'; })) keys.push(['other', view.ns ? 'smaller workloads' : 'other namespaces']);
     if (list.some(function (c) { return c.kind === 'gap'; })) keys.push(['gap', 'not counted']);
     return '<div class="legend">' + keys.map(function (k) { return '<span><i class="tm-key tm-' + k[0] + '"></i>' + esc(k[1]) + '</span>'; }).join('') + '</div>';
   }
@@ -168,6 +175,11 @@
       var n = sum.namespaces.filter(function (x) { return x.name === view.ns; })[0];
       counted = n.counted; uncounted = n.workloads - n.counted; value = spend ? n.spend : n.savings;
     }
+    var empty = !counted ? 'No workload has complete data, so there is nothing to map.' :
+      (spend ? 'No workload in this view requests anything, so there is no spend to map.' : 'No workload in this view has anything to save, so there is nothing to map.') +
+      (uncounted ? ' ' + ui.num(uncounted, 0) + ' ' + ui.plural(uncounted, 'workload') + ' could not be counted.' : '');
+    var hint = !view.ns && list.some(function (c) { return c.kind === 'rest'; }) ?
+      '<p class="money-more muted">The smaller workloads share one cell. Choose Namespaces and select one to see all of its workloads.</p>' : '';
     var sub = ui.money(value, approx) + ' a year' + (spend ? ' of spend' : '') + ' across ' + ui.num(counted, 0) + ' counted ' + ui.plural(counted, 'workload') +
       (uncounted ? '; ' + ui.num(uncounted, 0) + ' not counted.' : '.');
     return '<div class="card"><div class="card-head"><div><h2>' + esc(title) +
@@ -175,10 +187,10 @@
       '<div class="card-tools">' + (view.ns ? '<button type="button" class="link" data-map-back>← All namespaces</button>' : '') +
       tabs('level', [['namespaces', 'Namespaces'], ['workloads', 'Workloads']], view.ns ? '' : lvl) +
       tabs('metric', [['savings', 'Savings'], ['spend', 'Spend']], spend ? 'spend' : 'savings') + '</div></div>' +
-      legend(sum, list) + '<div class="tm-host">' + mapHTML(list, width, MAP_HEIGHT) + '</div></div>';
+      legend(sum, list, view) + '<div class="tm-host">' + mapHTML(list, width, MAP_HEIGHT, empty) + '</div>' + hint + '</div>';
   }
 
-  function share(savings, spend, approx) { return ui.pct(spend > 0 ? savings / spend : 0) + ' of ' + ui.money(spend, approx); }
+  function share(savings, spend, approx) { return spend > 0 ? ui.pct(savings / spend) + ' of ' + ui.money(spend, approx) : 'nothing requested'; }
 
   function bar(v, max) { return '<span class="rank-bar"><i style="width:' + (v > 0 ? Math.max(1, Math.round(v / max * 1000) / 10) : 0) + '%"></i></span>'; }
 
