@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,7 +17,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thoras-ai/savings-preview/internal/compact"
 	"github.com/thoras-ai/savings-preview/internal/contract"
+	"github.com/thoras-ai/savings-preview/internal/savings"
+	contractcheck "github.com/thoras-ai/savings-preview/internal/validate"
 )
 
 // recording holds the API responses to one Run, keyed by method, path and
@@ -275,6 +279,7 @@ func TestReplayRecordings(t *testing.T) {
 			if rep.Containers == 0 || rep.Workloads == 0 {
 				t.Errorf("report: %+v", rep)
 			}
+			checkCompacts(t, file)
 		})
 	}
 }
@@ -314,4 +319,36 @@ func TestScrubbedRecordingReplays(t *testing.T) {
 			t.Errorf("container %q was not renamed", r.Container)
 		}
 	}
+}
+
+// checkCompacts writes the compact copy of f, which must follow the contract
+// and count the same workloads and requests.
+func checkCompacts(t *testing.T, f *contract.File) {
+	t.Helper()
+	var full, small bytes.Buffer
+	if err := f.Write(&full); err != nil {
+		t.Fatal(err)
+	}
+	st, err := compact.Compact(bytes.NewReader(full.Bytes()), &small, compact.DefaultStep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Compacted == 0 {
+		t.Fatalf("nothing compacted: %+v", st)
+	}
+	if errs := contractcheck.Validate(small.Bytes()); len(errs) > 0 {
+		t.Fatalf("compact file: %v", errs)
+	}
+	a, err := savings.Analyze(full.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := savings.Analyze(small.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Totals.Counted != b.Totals.Counted || math.Abs(a.Totals.RequestedCores-b.Totals.RequestedCores) > 1e-9*a.Totals.RequestedCores {
+		t.Errorf("full %+v, compact %+v", a.Totals, b.Totals)
+	}
+	t.Logf("%d to %d bytes; savings %.2f full, %.2f compact", full.Len(), small.Len(), a.Totals.AnnualSavings, b.Totals.AnnualSavings)
 }

@@ -8,10 +8,12 @@
 package savings
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"slices"
 	"sort"
@@ -53,16 +55,20 @@ var required = []string{cpuUse, memUse, cpuReq, memReq}
 
 // Summary is the JSON written next to the report.
 type Summary struct {
-	Cluster     string    `json:"cluster"`
-	Source      string    `json:"source"`
-	Tier        int       `json:"tier"`
-	StepSeconds int       `json:"step_seconds"`
-	Start       time.Time `json:"start"`
-	End         time.Time `json:"end"`
-	SpanSeconds int64     `json:"span_seconds"`
-	Snapshot    bool      `json:"snapshot"`
-	Pricing     string    `json:"pricing"`
-	Totals      Totals    `json:"totals"`
+	Cluster string `json:"cluster"`
+	Source  string `json:"source"`
+	Tier    int    `json:"tier"`
+	// StepSeconds is the coarsest step the data was collected at. For a
+	// compact file that is its source step, and CompactStepSeconds is the
+	// step of its points.
+	StepSeconds        int       `json:"step_seconds"`
+	CompactStepSeconds int       `json:"compact_step_seconds,omitempty"`
+	Start              time.Time `json:"start"`
+	End                time.Time `json:"end"`
+	SpanSeconds        int64     `json:"span_seconds"`
+	Snapshot           bool      `json:"snapshot"`
+	Pricing            string    `json:"pricing"`
+	Totals             Totals    `json:"totals"`
 	// FidelityNotes is every thoras.fidelity_notes value in the file, sorted.
 	FidelityNotes []string `json:"fidelity_notes,omitempty"`
 }
@@ -81,11 +87,9 @@ type Totals struct {
 
 // OTLP-JSON shape, as far as the totals need it. encoding/json matches the
 // field names to the camelCase keys without tags.
-type otlpDoc struct {
-	ResourceMetrics []struct {
-		Resource     struct{ Attributes []otlpAttr }
-		ScopeMetrics []struct{ Metrics []otlpMetric }
-	}
+type otlpResource struct {
+	Resource     struct{ Attributes []otlpAttr }
+	ScopeMetrics []struct{ Metrics []otlpMetric }
 }
 
 type otlpAttr struct {
@@ -120,8 +124,10 @@ type resource struct {
 	step, tier       float64
 	spans            []span
 	coarseStep       float64
+	sourceStep       float64
 	source, id, kind string
 	series           map[string]series
+	held             map[string]bool
 }
 
 type node struct {
@@ -131,19 +137,18 @@ type node struct {
 
 // Analyze computes the summary of an OTLP-JSON Savings Preview file.
 func Analyze(doc []byte) (*Summary, error) {
-	var d otlpDoc
-	if err := json.Unmarshal(doc, &d); err != nil {
-		return nil, err
-	}
-	if len(d.ResourceMetrics) == 0 {
-		return nil, errors.New("No resourceMetrics found. This is not a Savings Preview file.")
-	}
+	return AnalyzeReader(bytes.NewReader(doc))
+}
+
+// AnalyzeReader is Analyze for a file read from r. It decodes one resource at
+// a time and keeps only the numbers of each series.
+func AnalyzeReader(rd io.Reader) (*Summary, error) {
 	cluster := ""
 	var containers []*resource
 	var nodes []node
 	workloads := map[string]*resource{}
 	var notes []string
-	for _, rm := range d.ResourceMetrics {
+	n, err := eachResource(rd, func(rm *otlpResource) {
 		strs, nums := map[string]string{}, map[string]float64{}
 		// Array entries without a stringValue stay nil, the JS undefined.
 		lists := map[string][]*string{}
@@ -171,7 +176,13 @@ func Analyze(doc []byte) (*Summary, error) {
 				notes = append(notes, *x)
 			}
 		}
-		r := &resource{step: nums["thoras.step_seconds"], tier: nums["thoras.fidelity_tier"], source: strs["thoras.source"], series: map[string]series{}}
+		r := &resource{step: nums["thoras.step_seconds"], tier: nums["thoras.fidelity_tier"], source: strs["thoras.source"],
+			series: map[string]series{}, held: map[string]bool{}}
+		for _, x := range lists["thoras.held_metrics"] {
+			if x != nil {
+				r.held[*x] = true
+			}
+		}
 		if r.tier == 0 {
 			r.tier = 3
 		}
@@ -181,6 +192,10 @@ func Analyze(doc []byte) (*Summary, error) {
 			for _, sp := range r.spans[1:] {
 				r.coarseStep = math.Max(r.coarseStep, sp.step)
 			}
+		}
+		r.sourceStep = r.coarseStep
+		if n := nums["thoras.source_step_seconds"]; n > 0 && n < r.coarseStep {
+			r.sourceStep = n
 		}
 		for _, sm := range rm.ScopeMetrics {
 			for _, m := range sm.Metrics {
@@ -195,7 +210,7 @@ func Analyze(doc []byte) (*Summary, error) {
 		switch {
 		case strs["k8s.node.name"] != "":
 			nodes = append(nodes, node{hostType: strs["host.type"], region: strs["cloud.region"], capacity: strs["thoras.node.capacity_type"],
-				cores: mean(r.series["k8s.node.cpu.allocatable"].v, nil), gib: mean(r.series["k8s.node.memory.allocatable"].v, nil) / gib})
+				cores: r.levelMean("k8s.node.cpu.allocatable"), gib: r.levelMean("k8s.node.memory.allocatable") / gib})
 		case r.kind != "":
 			r.id = strs["k8s.namespace.name"] + "/" + r.kind + "/" + strs["k8s."+r.kind+".name"]
 			if strs["k8s.container.name"] != "" {
@@ -204,6 +219,12 @@ func Analyze(doc []byte) (*Summary, error) {
 				workloads[r.id] = r
 			}
 		}
+	})
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, errors.New("No resourceMetrics found. This is not a Savings Preview file.")
 	}
 	if len(containers) == 0 {
 		return nil, errors.New("The file has no container series, so there is nothing to analyze.")
@@ -235,11 +256,11 @@ func Analyze(doc []byte) (*Summary, error) {
 	// past the last usage point.
 	slices.Sort(notes)
 	s := &Summary{Cluster: cluster, Pricing: rates.basis, Totals: t, FidelityNotes: slices.Compact(notes)}
-	tier, step := 1.0, 0.0
+	tier, step, sourceStep := 1.0, 0.0, 0.0
 	t0, t1 := math.Inf(1), math.Inf(-1)
 	var sources []string
 	for _, c := range containers {
-		tier, step = math.Max(tier, c.tier), math.Max(step, c.coarseStep)
+		tier, step, sourceStep = math.Max(tier, c.tier), math.Max(step, c.coarseStep), math.Max(sourceStep, c.sourceStep)
 		if c.source != "" && !slices.Contains(sources, c.source) {
 			sources = append(sources, c.source)
 		}
@@ -258,7 +279,58 @@ func Analyze(doc []byte) (*Summary, error) {
 	}
 	s.Source, s.Tier, s.StepSeconds, s.SpanSeconds = strings.Join(sources, ", "), int(tier), int(step), int64(span)
 	s.Snapshot = !(step > 0) || span/step <= 1
+	if sourceStep < step {
+		s.StepSeconds, s.CompactStepSeconds = int(sourceStep), int(step)
+	}
 	return s, nil
+}
+
+// eachResource calls fn with each element of the resourceMetrics array of the
+// JSON object read from r, and returns how many there were.
+func eachResource(r io.Reader, fn func(*otlpResource)) (int, error) {
+	dec := json.NewDecoder(r)
+	if tok, err := dec.Token(); err != nil {
+		return 0, err
+	} else if tok != json.Delim('{') {
+		return 0, errors.New("No resourceMetrics found. This is not a Savings Preview file.")
+	}
+	n := 0
+	for dec.More() {
+		key, err := dec.Token()
+		if err != nil {
+			return n, err
+		}
+		if k, _ := key.(string); !strings.EqualFold(k, "resourceMetrics") {
+			var skip json.RawMessage
+			if err := dec.Decode(&skip); err != nil {
+				return n, err
+			}
+			continue
+		}
+		if tok, err := dec.Token(); err != nil {
+			return n, err
+		} else if tok != json.Delim('[') {
+			return n, errors.New("resourceMetrics is not an array")
+		}
+		for dec.More() {
+			var rm otlpResource
+			if err := dec.Decode(&rm); err != nil {
+				return n, err
+			}
+			fn(&rm)
+			n++
+		}
+		if _, err := dec.Token(); err != nil {
+			return n, err
+		}
+	}
+	if _, err := dec.Token(); err != nil {
+		return n, err
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return n, errors.New("extra data after the JSON value")
+	}
+	return n, nil
 }
 
 func readSeries(m otlpMetric) series {
@@ -281,6 +353,24 @@ func readSeries(m otlpMetric) series {
 		s.v = append(s.v, v)
 	}
 	return s
+}
+
+// levelMean is the mean of a level series over the time it covers. A held
+// series weights each point by the time until the next one.
+func (r *resource) levelMean(name string) float64 {
+	s := r.series[name]
+	if !r.held[name] || len(s.t) == 0 {
+		return mean(s.v, nil)
+	}
+	w := make([]float64, len(s.t))
+	for i := range s.t {
+		if i+1 < len(s.t) {
+			w[i] = s.t[i+1] - s.t[i]
+		} else {
+			w[i] = stepAt(r.spans, s.t[i], r.step)
+		}
+	}
+	return mean(s.v, w)
 }
 
 func isFinite(x float64) bool { return !math.IsNaN(x) && !math.IsInf(x, 0) }
@@ -376,7 +466,9 @@ func nans(n int) []float64 {
 
 // resample takes the latest point at or before each grid time, only while it
 // is younger than the series step, or the step of the span the point is in.
-func resample(s series, grid []float64, step float64, spans []span) []float64 {
+// A held series has points only where its value changes, so every point but
+// the last stays current until the next one.
+func resample(s series, grid []float64, step float64, spans []span, held bool) []float64 {
 	out := nans(len(grid))
 	if len(s.t) == 0 {
 		return out
@@ -390,7 +482,7 @@ func resample(s series, grid []float64, step float64, spans []span) []float64 {
 		if st := stepAt(spans, s.t[j], step); st > 0 {
 			age = st
 		}
-		if s.t[j] <= g && g-s.t[j] < age {
+		if s.t[j] <= g && (g-s.t[j] < age || held && j+1 < len(s.t)) {
 			out[i] = s.v[j]
 		}
 	}
@@ -443,7 +535,7 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 		return
 	}
 	sort.Float64s(grid)
-	replicas := resample(rep, grid, wl.step, wl.spans)
+	replicas := resample(rep, grid, wl.step, wl.spans, wl.held["k8s."+parts[0].kind+".pod.desired"])
 	n := len(grid)
 
 	// Sums in the order of required: cpu use, mem use, cpu request, mem request.
@@ -455,7 +547,7 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 	// rolled-up point counts for its whole step.
 	weight := make([]float64, n)
 	for _, c := range usable {
-		at := func(name string) []float64 { return resample(c.series[name], grid, c.step, c.spans) }
+		at := func(name string) []float64 { return resample(c.series[name], grid, c.step, c.spans, c.held[name]) }
 		var v [4][]float64
 		for k, name := range required {
 			v[k] = at(name)

@@ -13,9 +13,11 @@ Or build for this machine only with `go build -o bin/savings-preview ./cmd/savin
 
 1. Looks for a Prometheus-compatible store and pulls 14 days of usage from it (`--days`, `--step`, `--target` to name the store).
 2. If there is no store, none answers, or the store lacks the per-container usage and request series, it says why and polls metrics-server instead, every `--interval` until `--duration` passes or Ctrl-C. It takes the same `--keep-raw`, `--rollup` and `--write-every` flags as `poll`. Fewer than 7 days of readings give a tier 3 (limited history) report. `--source prometheus` or `--source poll` skips the choice.
-3. Writes `savings-preview.otlp.json` (`--out` or `-o`) and checks it against the contract.
-4. Serves the report on 127.0.0.1 on a random port and opens the browser; `--no-open` only prints the address. Ctrl-C stops the server.
-5. Writes `savings-preview.zip` next to the file: the contract file, `summary.json` (cluster, time span, tier, totals) and `report.html`, a copy of the report with the data inside that opens from disk. Send the zip to Thoras or attach it to an email. Nothing is uploaded.
+3. Writes `savings-preview.otlp.json` (`--out` or `-o`) at full resolution, then a compact copy next to it, `savings-preview.compact.otlp.json`, at 15-minute steps that keep the peak and the mean of usage. The savings math takes its target from 15-minute peaks, so totals from the compact file come within about 1% of the full file's while it stays small enough for a browser: 14 days of 1-minute data for 1,000 workload-containers is about 6.3 GB in full and 330 MB compact. It checks the compact file against the contract.
+4. Serves the report on the compact file on 127.0.0.1 on a random port and opens the browser; `--no-open` only prints the address. Ctrl-C stops the server.
+5. Writes `savings-preview.zip` next to the file: `summary.json` (cluster, time span, tier, totals, and the name and size of the full file) and `report.html`, a copy of the report with the compact file inside that opens from disk. `savings-preview export -o savings-preview.otlp.json report.html` writes that file back out. The full file stays on disk and is not in the zip. Send the zip to Thoras or attach it to an email. Nothing is uploaded.
+
+`savings-preview export --compact FILE` writes the compact copy of any contract file, of a poll's readings directory (`FILE.readings`), or of the data in a report page, reading it as a stream. `docs/contract.md` describes compact files and how their totals compare with the full file. `docs/upgrading.md` lists what changed in the zip and `summary.json` since v0.1.0.
 
 `savings-preview --version` prints the version.
 

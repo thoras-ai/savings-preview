@@ -134,6 +134,20 @@ func writeOutput(path string, src source, cluster string, budget int64) (Summary
 	return sum, err
 }
 
+// ExportReadings writes the contract file for the readings saved in dir to w,
+// the same file a poll writes. It works while a poll is running.
+func ExportReadings(dir string, w io.Writer) (Summary, error) {
+	m, err := readMeta(dir)
+	if err != nil {
+		return Summary{}, fmt.Errorf("no readings to export: %w", err)
+	}
+	sum, err := Export(dirSource(dir), m.Cluster, w, DefaultExportBudget)
+	if err == nil && sum.Records == 0 {
+		err = fmt.Errorf("%s has no readings yet", dir)
+	}
+	return sum, err
+}
+
 type lockedWriter struct {
 	mu sync.Mutex
 	w  io.Writer

@@ -4,6 +4,7 @@
 package validate
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -58,6 +59,13 @@ var (
 		{"k8s.node.cpu.allocatable", updown, "{cpu}", false, true},
 		{"k8s.node.memory.allocatable", updown, "By", true, true},
 	}
+	// Metrics a resource may write only where they change (thoras.held_metrics).
+	levelMetrics = []string{
+		"k8s.container.cpu.request.desired", "k8s.container.memory.request.desired",
+		"k8s.container.cpu.limit.desired", "k8s.container.memory.limit.desired",
+		"k8s.deployment.pod.desired", "k8s.statefulset.pod.desired",
+		"k8s.node.cpu.allocatable", "k8s.node.memory.allocatable",
+	}
 	commonAttrs = []string{"k8s.cluster.name", "thoras.source", "thoras.step_seconds", "thoras.fidelity_tier"}
 	nodeAttrs   = []string{"host.type", "cloud.provider", "cloud.region", "thoras.node.capacity_type"}
 )
@@ -73,19 +81,133 @@ func lookup(specs []spec, name string) (spec, bool) {
 // Validate checks an OTLP-JSON document against docs/contract.md and returns
 // every problem found; an empty slice means the document is valid.
 func Validate(doc []byte) []string {
-	dec := json.NewDecoder(bytes.NewReader(doc))
+	return ValidateReader(bytes.NewReader(doc))
+}
+
+// ValidateReader is Validate for a document read from r. It holds one
+// resource at a time, so memory does not grow with the file.
+func ValidateReader(r io.Reader) []string {
+	br := bufio.NewReader(r)
+	if !startsObject(br) {
+		// Not an object: read it whole to tell bad JSON from a wrong shape.
+		dec := json.NewDecoder(br)
+		dec.UseNumber()
+		var v any
+		if err := decodeAll(dec, &v); err != nil {
+			return []string{"cannot read: " + err.Error()}
+		}
+		return validate(v)
+	}
+	dec := json.NewDecoder(br)
 	dec.UseNumber()
-	var v any
-	err := dec.Decode(&v)
+	c := newChecker()
+	shape, n, err := streamResources(dec, c.check)
 	if err == nil {
 		if _, tail := dec.Token(); tail != io.EOF {
 			err = errors.New("extra data after the JSON value")
 		}
 	}
-	if err != nil {
+	switch {
+	case err != nil:
 		return []string{"cannot read: " + err.Error()}
+	case !shape:
+		return []string{"top level must be an object with a resourceMetrics array"}
+	case n == 0:
+		return []string{"resourceMetrics is empty"}
 	}
-	return validate(v)
+	return c.finish()
+}
+
+func decodeAll(dec *json.Decoder, v any) error {
+	if err := dec.Decode(v); err != nil {
+		return err
+	}
+	if _, tail := dec.Token(); tail != io.EOF {
+		return errors.New("extra data after the JSON value")
+	}
+	return nil
+}
+
+// startsObject reports whether the next non-space byte is '{'.
+func startsObject(br *bufio.Reader) bool {
+	for i := 1; ; i++ {
+		b, err := br.Peek(i)
+		if err != nil {
+			return false
+		}
+		switch b[i-1] {
+		case ' ', '\t', '\n', '\r':
+			continue
+		}
+		return b[i-1] == '{'
+	}
+}
+
+// streamResources reads the top-level object, passing each element of its
+// first resourceMetrics array to fn. shape is false when there is no such
+// array; n counts the elements.
+func streamResources(dec *json.Decoder, fn func(int, any)) (shape bool, n int, err error) {
+	if _, err := dec.Token(); err != nil {
+		return false, 0, err
+	}
+	for dec.More() {
+		key, err := dec.Token()
+		if err != nil {
+			return shape, n, err
+		}
+		if key != "resourceMetrics" || shape {
+			var skip json.RawMessage
+			if err := dec.Decode(&skip); err != nil {
+				return shape, n, err
+			}
+			continue
+		}
+		tok, err := dec.Token()
+		if err != nil {
+			return shape, n, err
+		}
+		if tok != json.Delim('[') {
+			// A scalar is consumed; skip the rest of an object.
+			if tok == json.Delim('{') {
+				if err := skipRest(dec); err != nil {
+					return shape, n, err
+				}
+			}
+			continue
+		}
+		shape = true
+		for dec.More() {
+			var v any
+			if err := dec.Decode(&v); err != nil {
+				return shape, n, err
+			}
+			fn(n, v)
+			n++
+		}
+		if _, err := dec.Token(); err != nil {
+			return shape, n, err
+		}
+	}
+	_, err = dec.Token()
+	return shape, n, err
+}
+
+// skipRest reads to the end of an object or array whose opening token was
+// already read.
+func skipRest(dec *json.Decoder) error {
+	for depth := 1; depth > 0; {
+		tok, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		switch tok {
+		case json.Delim('{'), json.Delim('['):
+			depth++
+		case json.Delim('}'), json.Delim(']'):
+			depth--
+		}
+	}
+	return nil
 }
 
 func validate(doc any) []string {
@@ -97,7 +219,21 @@ func validate(doc any) []string {
 	if len(rms) == 0 {
 		return []string{"resourceMetrics is empty"}
 	}
+	c := newChecker()
+	for ri, rmv := range rms {
+		c.check(ri, rmv)
+	}
+	return c.finish()
+}
 
+// checker holds what the checks need across resources, so resources can be
+// checked one at a time.
+type checker struct {
+	check  func(ri int, rmv any)
+	finish func() []string
+}
+
+func newChecker() checker {
 	var errs []string
 	add := func(format string, args ...any) { errs = append(errs, fmt.Sprintf(format, args...)) }
 	clusters := map[string]bool{}
@@ -105,12 +241,12 @@ func validate(doc any) []string {
 	workloads := map[string]bool{}
 	containerWL := map[string]bool{}
 
-	for ri, rmv := range rms {
+	check := func(ri int, rmv any) {
 		rm := asMap(rmv)
 		at, err := attrs(asMap(rm["resource"])["attributes"])
 		if err != nil {
 			add("resource %d: bad attributes: %s", ri, err)
-			continue
+			return
 		}
 		where := fmt.Sprintf("resource %d", ri)
 		if rm["schemaUrl"] != schemaURL {
@@ -133,6 +269,22 @@ func validate(doc any) []string {
 		var spans []stepSpan
 		if raw, ok := at["thoras.step_spans"]; ok && stepOK {
 			spans = parseSpans(where, raw, step, add)
+		}
+		var sourceStep int64
+		if v, ok := at["thoras.source_step_seconds"]; ok {
+			n, isInt := v.(int64)
+			coarse := step
+			for _, s := range spans {
+				coarse = max(coarse, s.step)
+			}
+			switch {
+			case !isInt || n <= 0:
+				add("%s: thoras.source_step_seconds must be a positive integer", where)
+			case stepOK && n > coarse:
+				add("%s: thoras.source_step_seconds must not be coarser than the step of the points", where)
+			default:
+				sourceStep = n
+			}
 		}
 		if str(at, "thoras.source") == "" {
 			add("%s: thoras.source must be a non-empty string", where)
@@ -161,7 +313,7 @@ func validate(doc any) []string {
 		} else {
 			if (dep == "") == (sts == "") {
 				add("%s: set exactly one of k8s.deployment.name or k8s.statefulset.name", where)
-				continue
+				return
 			}
 			if str(at, "k8s.namespace.name") == "" {
 				add("%s: missing attribute k8s.namespace.name", where)
@@ -207,6 +359,18 @@ func validate(doc any) []string {
 		if nv, ok := at["thoras.fidelity_notes"]; ok {
 			if notes, good := stringList(nv); !good || slices.Contains(notes, "") {
 				add("%s: thoras.fidelity_notes must be an array of non-empty strings", where)
+			}
+		}
+		var held []string
+		if hv, ok := at["thoras.held_metrics"]; ok {
+			var good bool
+			if held, good = stringList(hv); !good {
+				add("%s: thoras.held_metrics must be an array of strings", where)
+			}
+		}
+		for _, m := range held {
+			if _, ok := lookup(specs, m); !ok || !slices.Contains(levelMetrics, m) {
+				add("%s: thoras.held_metrics lists %s, which is not a request, limit, replica or allocatable metric here", where, m)
 			}
 		}
 
@@ -267,6 +431,9 @@ func validate(doc any) []string {
 			if listed && present[sp.name] {
 				add("%s: %s is listed in thoras.missing_metrics but present", where, sp.name)
 			}
+			if slices.Contains(held, sp.name) && slices.Contains(levelMetrics, sp.name) && !present[sp.name] {
+				add("%s: thoras.held_metrics lists %s, which is absent", where, sp.name)
+			}
 		}
 
 		if tierOK && stepOK && spanned {
@@ -277,34 +444,42 @@ func validate(doc any) []string {
 				coarse = max(coarse, s.step)
 			}
 			span := hi - lo + coarse
-			if floor := tierFloor(coarse, span); tier < floor {
+			// A compact file keeps the peaks of its source, so the tier
+			// follows the source step.
+			judged := coarse
+			if sourceStep > 0 {
+				judged = sourceStep
+			}
+			if floor := tierFloor(judged, span); tier < floor {
 				add("%s: fidelity tier %d claims more than step %ds over %.1f days supports (best is %d)",
-					where, tier, coarse, float64(span)/day, floor)
+					where, tier, judged, float64(span)/day, floor)
 			}
 		}
 	}
-
-	if len(clusters) > 1 {
-		names := slices.Sorted(maps.Keys(clusters))
-		for i, c := range names {
-			names[i] = quote(c)
+	finish := func() []string {
+		if len(clusters) > 1 {
+			names := slices.Sorted(maps.Keys(clusters))
+			for i, c := range names {
+				names[i] = quote(c)
+			}
+			add("file mixes clusters: [%s]", strings.Join(names, ", "))
 		}
-		add("file mixes clusters: [%s]", strings.Join(names, ", "))
-	}
-	var orphans []string
-	for wl := range containerWL {
-		if !workloads[wl] {
-			orphans = append(orphans, wl)
+		var orphans []string
+		for wl := range containerWL {
+			if !workloads[wl] {
+				orphans = append(orphans, wl)
+			}
 		}
+		// Python sorts the (ns, kind, name) tuples by their repr, where a quote
+		// ends each field; swapping the separator for one keeps that order.
+		tupleKey := func(wl string) string { return strings.ReplaceAll(wl, "/", "'") }
+		sort.Slice(orphans, func(i, j int) bool { return tupleKey(orphans[i]) < tupleKey(orphans[j]) })
+		for _, wl := range orphans {
+			add("workload %s has containers but no workload resource carrying its replica count", wl)
+		}
+		return errs
 	}
-	// Python sorts the (ns, kind, name) tuples by their repr, where a quote
-	// ends each field; swapping the separator for one keeps that order.
-	tupleKey := func(wl string) string { return strings.ReplaceAll(wl, "/", "'") }
-	sort.Slice(orphans, func(i, j int) bool { return tupleKey(orphans[i]) < tupleKey(orphans[j]) })
-	for _, wl := range orphans {
-		add("workload %s has containers but no workload resource carrying its replica count", wl)
-	}
-	return errs
+	return checker{check, finish}
 }
 
 func tierFloor(step, span int64) int64 {

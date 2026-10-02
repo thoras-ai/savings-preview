@@ -19,6 +19,7 @@ Commands:
                or by URL (Mimir, Grafana Cloud, Amazon Managed Prometheus)
   poll         Write the file from requests, nodes and metrics-server usage read at an interval (alias: snapshot)
   datadog      Write the file from the Datadog metrics query API
+  export       Write a compact copy of a file, or the file for a poll's readings
 
 Run "savings-preview <command> -h" for the flags of a command.
 "savings-preview --version" prints the version.
@@ -50,6 +51,8 @@ func main() {
 		err = polling.Main(cmd, args)
 	case "datadog":
 		err = datadog.Main(args)
+	case "export":
+		err = runExport(args)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", cmd, usage)
 		os.Exit(2)
