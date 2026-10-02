@@ -6,6 +6,7 @@ const path = require('node:path');
 const model = require('../src/js/model.js');
 const state = require('../src/js/state.js');
 const wl = require('../src/js/section-workloads.js');
+const { budget } = require('./budget');
 
 const GIB = 1 << 30;
 const T0 = 1000000;
@@ -239,9 +240,9 @@ test('the section renders 1,000 workloads within the page budget', () => {
   require('../src/js/chart.js').downsample(d.w.series, require('../src/js/chart.js').modes.cpu);
   const tDetail = performance.now() - t2;
   // A lever change has about 200 ms for compute and every section together.
-  assert.ok(tList < 100, `list ${tList.toFixed(1)} ms`);
-  assert.ok(tFilter < 50, `filter ${tFilter.toFixed(1)} ms`);
-  assert.ok(tDetail < 50, `drill-down ${tDetail.toFixed(1)} ms`);
+  assert.ok(tList < budget(100), `list ${tList.toFixed(1)} ms`);
+  assert.ok(tFilter < budget(50), `filter ${tFilter.toFixed(1)} ms`);
+  assert.ok(tDetail < budget(50), `drill-down ${tDetail.toFixed(1)} ms`);
 });
 
 test('the spend view leaves OOM kills out of its legend, and tiny usage is not shown as 0', () => {

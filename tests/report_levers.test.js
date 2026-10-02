@@ -8,6 +8,7 @@ const state = require('../src/js/state.js');
 const prices = require('../src/js/prices.js');
 const levers = require('../src/js/levers.js');
 const ui = require('../src/js/components.js');
+const { budget } = require('./budget');
 
 const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'savings-preview.otlp.json'), 'utf8'));
 const close = (a, b, tol = 1e-9) => Math.abs(a - b) <= tol * Math.max(1, Math.abs(b));
@@ -222,5 +223,5 @@ test('a lever change on 1,000 workloads recomputes and builds the figures within
     return performance.now() - t;
   }).sort((a, b) => a - b);
   const median = times[Math.floor(times.length / 2)];
-  assert.ok(median < 200, 'median ' + median.toFixed(0) + ' ms, all ' + times.map(x => x.toFixed(0)).join(', '));
+  assert.ok(median < budget(200), 'median ' + median.toFixed(0) + ' ms, all ' + times.map(x => x.toFixed(0)).join(', '));
 });
