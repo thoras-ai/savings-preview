@@ -114,8 +114,7 @@ func runRun(args []string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	source, err := collect(ctx, conn, cluster, o)
-	if err != nil {
+	if err := collect(ctx, conn, cluster, o); err != nil {
 		return err
 	}
 
@@ -139,7 +138,7 @@ func runRun(args []string) error {
 	if err != nil {
 		return err
 	}
-	zipPath, err := writeBundle(o.out, data, page, summaryFile{Summary: *sum, Source: source, Version: versionString(),
+	zipPath, err := writeBundle(o.out, data, page, summaryFile{Summary: *sum, Version: versionString(),
 		Generated: time.Now().UTC().Truncate(time.Second)})
 	if err != nil {
 		return fmt.Errorf("write zip: %w", err)
@@ -154,14 +153,14 @@ func runRun(args []string) error {
 	return serve(page, data, !o.noOpen)
 }
 
-// collect writes the contract file to o.out and names the source it used.
-func collect(ctx context.Context, conn *kube.Conn, cluster string, o *runOptions) (string, error) {
+// collect writes the contract file to o.out.
+func collect(ctx context.Context, conn *kube.Conn, cluster string, o *runOptions) error {
 	if o.source != "poll" {
 		res, err := tryStore(ctx, newStoreSteps(conn, cluster, o), o.target, func(m string) { fmt.Fprintln(os.Stderr, m) })
 		switch {
 		case err == nil:
 			if err := writeContract(o.out, res.file); err != nil {
-				return "", err
+				return err
 			}
 			rep := res.report
 			fmt.Fprintf(os.Stderr, "wrote %s from %s: %d containers in %d workloads, %d nodes; data from %s to %s\n", o.out, res.store,
@@ -169,16 +168,13 @@ func collect(ctx context.Context, conn *kube.Conn, cluster string, o *runOptions
 			for _, w := range rep.Warnings {
 				fmt.Fprintln(os.Stderr, "warning:", w)
 			}
-			return "prometheus", nil
+			return nil
 		case !isFallback(err) || o.source == "prometheus":
-			return "", err
+			return err
 		}
 		fmt.Fprintf(os.Stderr, "Not using a metrics store: %v.\nFalling back to polling metrics-server.\n\n", err)
 	}
-	if err := pollWithProgress(ctx, conn, cluster, o); err != nil {
-		return "", err
-	}
-	return "poll", nil
+	return pollWithProgress(ctx, conn, cluster, o)
 }
 
 func newStoreSteps(conn *kube.Conn, cluster string, o *runOptions) storeSteps {
@@ -352,7 +348,6 @@ func zipName(out string) string {
 
 type summaryFile struct {
 	savings.Summary
-	Source    string    `json:"source_adapter"`
 	Version   string    `json:"version"`
 	Generated time.Time `json:"generated_at"`
 }
