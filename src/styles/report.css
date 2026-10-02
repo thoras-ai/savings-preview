@@ -271,6 +271,10 @@ tr.excluded { color: var(--text-light); }
 .rank-bar i { display: block; height: 100%; background: var(--primitive-brand-600); border-radius: var(--primitive-radius-full); }
 [data-theme="dark"] .rank-bar i { background: var(--primitive-brand-400); }
 
+.steps { margin: var(--primitive-space-12) 0 0; padding-left: var(--primitive-space-20); }
+.steps li + li { margin-top: var(--primitive-space-8); }
+.steps strong { font-weight: var(--primitive-weight-medium); }
+
 /* Placeholders for sections 5 and 6. */
 .settings { display: grid; grid-template-columns: max-content 1fr; gap: var(--primitive-space-8) var(--primitive-space-24); margin: var(--primitive-space-16) 0; }
 .settings dt { color: var(--text-light); }

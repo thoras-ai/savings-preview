@@ -398,3 +398,23 @@ test('a time range averages only its points and clips the cluster series', () =>
   assert.ok(outside.workloads.every(w => w.status === 'excluded'));
   assert.ok(outside.workloads.some(w => w.reason === 'No data in the selected time range'));
 });
+
+test('a range covering the whole file gives the same totals as no range', () => {
+  const data = model.prepare(fixture());
+  const all = model.compute(data);
+  const t = all.series.t;
+  for (const range of [[t[0], t[t.length - 1]], [data.fidelity.start, data.fidelity.end], [0, 4e9]]) {
+    const r = model.compute(data, { range });
+    for (const k of TOTALS) assert.strictEqual(r.totals[k], all.totals[k], k + ' ' + range);
+  }
+});
+
+test('a range clips each workload series as well as the cluster series', () => {
+  const data = model.prepare(fixture());
+  const t = model.compute(data).series.t;
+  const r = model.compute(data, { range: [t[10], t[20]] });
+  for (const w of r.workloads.filter(x => x.series)) {
+    assert.strictEqual(w.series.t[0], t[10]);
+    assert.strictEqual(w.series.t[w.series.t.length - 1], t[20]);
+  }
+});

@@ -62,6 +62,22 @@
   function writeHash(st) {
     var h = state.serialize(st);
     try { history.replaceState(null, '', location.pathname + location.search + (h ? '#' + h : '')); } catch (e) { /* not allowed here */ }
+    // Each section link carries the settings, so it opens the same view in a new tab.
+    Array.prototype.forEach.call($('secbar').querySelectorAll('a[data-section]'), function (a) {
+      a.setAttribute('href', '#' + state.serialize(Object.assign({}, st, { section: a.getAttribute('data-section') })));
+    });
+  }
+
+  // Settings from a link made for another file: namespaces and a workload
+  // this file does not have are dropped.
+  function fitToData(st, data) {
+    var patch = {};
+    if (st.namespaces) {
+      var known = st.namespaces.filter(function (n) { return data.namespaces.indexOf(n) >= 0; });
+      if (known.length !== st.namespaces.length) patch.namespaces = known.length ? known : null;
+    }
+    if (st.workload && !data.workloads.some(function (w) { return w.id === st.workload; })) patch.workload = null;
+    return patch;
   }
 
   function context() {
@@ -153,11 +169,12 @@
   function load(doc) {
     var t0 = performance.now(), data;
     try { data = model.prepare(doc); } catch (e) { showError(e.message); return; }
+    // Cleared first, so the store does not recompute the previous file.
+    page.data = null;
+    store.set(fitToData(store.get(), data));
+    writeHash(store.get());
     page.data = data;
     page.timing = { prepare: performance.now() - t0 };
-    // A workload from another file's link does not apply to this one.
-    var st = store.get();
-    if (st.workload && !data.workloads.some(function (w) { return w.id === st.workload; })) store.set({ workload: null });
     recompute();
     show('report');
     $('context').textContent = (data.cluster || 'Unnamed cluster') + ' · ' + data.fidelity.label;
@@ -200,6 +217,7 @@
     });
     window.addEventListener('hashchange', function () {
       var next = state.parse(location.hash), before = store.get().section;
+      if (page.data) Object.assign(next, fitToData(next, page.data));
       store.set(next);
       if (page.data && next.section !== before) go(next.section);
     });

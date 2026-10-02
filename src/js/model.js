@@ -287,6 +287,13 @@
     return lo;
   }
 
+  // First index whose time is after t.
+  function upperBound(t, x) {
+    var lo = 0, hi = t.length;
+    while (lo < hi) { var mid = (lo + hi) >> 1; if (t[mid] <= x) lo = mid + 1; else hi = mid; }
+    return lo;
+  }
+
   // The workload's figures under the given levers. The target, spend and
   // waste arrays belong to the prepared workload and are overwritten by the
   // next call.
@@ -300,7 +307,7 @@
     var s = p.s, n = s.t.length, weight = p.weight, lo = 0, hi = n;
     if (lv.range) {
       lo = lowerBound(s.t, lv.range[0]);
-      hi = lowerBound(s.t, lv.range[1] + 1e-9);
+      hi = upperBound(s.t, lv.range[1]);
       var any = false;
       for (var j = lo; j < hi && !any; j++) any = isFinite(s.reqCpu[j]);
       if (!any) { res.status = 'excluded'; res.reason = 'No data in the selected time range'; return res; }
@@ -317,7 +324,7 @@
       p.wasteCpu[k] = Math.max(0, s.reqCpu[k] - s.tgtCpu[k]);
       p.wasteMem[k] = Math.max(0, s.reqMem[k] - s.tgtMem[k]);
     }
-    res.series = s;
+    res.series = lv.range ? clip(s, lv.range) : s;
     res.reqCores = mean(s.reqCpu, weight, lo, hi);
     res.reqGiB = mean(s.reqMem, weight, lo, hi);
     var cur = mean(s.cur, weight, lo, hi);
@@ -431,6 +438,7 @@
     if (!(sourceStep < step)) sourceStep = 0;
     return {
       tier: tier, stepSeconds: step, sourceStepSeconds: sourceStep, spanSeconds: span, snapshot: points <= 1,
+      start: isFinite(t0) ? t0 : null, end: isFinite(t0) ? t1 : null,
       source: sources.join(', '), label: fidelityLabel(step, span, points <= 1, sourceStep)
     };
   }
@@ -533,9 +541,7 @@
   }
 
   function clip(series, range) {
-    var a = 0, b = series.t.length;
-    while (a < b && series.t[a] < range[0]) a++;
-    while (b > a && series.t[b - 1] > range[1]) b--;
+    var a = lowerBound(series.t, range[0]), b = upperBound(series.t, range[1]);
     var out = { step: series.step, t: series.t.subarray(a, b) };
     FIELDS.forEach(function (f) { out[f] = series[f].subarray(a, b); });
     return out;

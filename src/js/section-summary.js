@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var ui = SP.ui, esc = ui.esc;
+  var ui = SP.ui, esc = ui.esc, model = SP.model;
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var WORKDAYS = 220;
   var TOP = 5;
@@ -22,10 +22,20 @@
     return res + '. A window this short cannot show daily or weekly peaks, and coarse samples hide short ones, so the figure can move a lot with more data. Treat it as a direction, not a budget line.';
   }
 
+  function year(sec) { return new Date(sec * 1000).getUTCFullYear(); }
+
+  // The dates the figures cover: the time range when one is set, else the file.
+  function window_(r, st) {
+    var a = st.range ? st.range[0] : r.fidelity.start, b = st.range ? st.range[1] : r.fidelity.end;
+    if (a === null || b === null) return '';
+    return day(a) + (year(a) !== year(b) ? ', ' + year(a) : '') + ' – ' + day(b) + ', ' + year(b) + ' (UTC)';
+  }
+
   function heading(r, st, level) {
-    var filtered = st.namespaces || st.range;
+    var filtered = st.namespaces || st.range, span = window_(r, st);
     return '<div class="sum-head"><div><h1>' + esc(r.cluster || 'Unnamed cluster') + '</h1>' +
       '<div class="sum-meta">' + esc(r.fidelity.label) + (r.fidelity.source ? ' · ' + esc(r.fidelity.source) : '') +
+      (span ? ' · ' + esc(span) : '') +
       (filtered ? ' <span class="pill pill-neutral">Filtered</span>' : '') + '</div></div>' +
       ui.confidencePill(level) + '</div>';
   }
@@ -44,8 +54,8 @@
     return '<div class="kpis">' +
       ui.kpiTile({ label: 'Annual savings opportunity', value: ui.money(t.savings, approx), context: ui.pct(share) + ' of projected spend', variant: 'hero' + edge }) +
       ui.kpiTile({ label: 'Projected annual spend', value: ui.money(t.spend, approx), context: 'Priced from current requests', variant: 'default' + edge }) +
-      ui.kpiTile({ label: 'CPU that could be freed', value: ui.amount(t.cores) + ' cores', context: 'of ' + (t.reqCores < 10 ? ui.amount(t.reqCores) : ui.num(t.reqCores, 0)) + ' cores requested', variant: 'default' + edge }) +
-      ui.kpiTile({ label: 'Memory that could be freed', value: ui.amount(t.gib) + ' GiB', context: 'of ' + (t.reqGiB < 10 ? ui.amount(t.reqGiB) : ui.num(t.reqGiB, 0)) + ' GiB requested', variant: 'default' + edge }) +
+      ui.kpiTile({ label: 'CPU that could be freed', value: ui.num(t.cores, 1) + ' cores', context: 'of ' + ui.num(t.reqCores, t.reqCores < 10 ? 1 : 0) + ' cores requested', variant: 'default' + edge }) +
+      ui.kpiTile({ label: 'Memory that could be freed', value: ui.num(t.gib, 1) + ' GiB', context: 'of ' + ui.num(t.reqGiB, t.reqGiB < 10 ? 1 : 0) + ' GiB requested', variant: 'default' + edge }) +
       '</div>';
   }
 
@@ -84,6 +94,19 @@
       '</div></div>';
   }
 
+  // Shown with provisional figures: what would make them dependable.
+  function budgetCard(r) {
+    var f = r.fidelity;
+    var items = [
+      ['Point the CLI at a store with history.', 'Prometheus, Datadog or Grafana Cloud usually keep 14 days or more, and one run reads all of it.'],
+      ['Leave the poller running for 7 days.', 'Without a store, 7 days of polling reach good confidence and 14 days at 1-minute steps reach high confidence. This file has ' +
+        (f.snapshot ? 'a single snapshot' : ui.esc(model.formatSpan(f.spanSeconds))) + '.'],
+      ['Share this view now.', 'The link keeps these settings, and the figures show the direction of the savings while more data comes in.']
+    ];
+    return '<div class="card"><h2>Get a figure you can budget on</h2><div class="sub">What would raise the confidence of this report</div>' +
+      '<ol class="steps">' + items.map(function (it) { return '<li><strong>' + esc(it[0]) + '</strong> <span class="muted">' + it[1] + '</span></li>'; }).join('') + '</ol></div>';
+  }
+
   function spendCard(r, approx) {
     var t = r.totals, s = r.series;
     var range = s ? day(s.t[0]) + ' – ' + day(s.t[s.t.length - 1]) + ' (UTC)' : '';
@@ -97,6 +120,8 @@
   }
 
   function topCard(r, approx) {
+    var sub = approx ? 'Rounded, from ' + (r.fidelity.snapshot ? 'a single snapshot' : model.formatSpan(r.fidelity.spanSeconds)) + ' of data' :
+      'Where most of the savings are. Select a workload to see its history.';
     var top = r.workloads.filter(function (w) { return w.series && w.annualSavings > 0; })
       .sort(function (a, b) { return b.annualSavings - a.annualSavings || a.name.localeCompare(b.name); }).slice(0, TOP);
     if (!top.length) return '';
@@ -108,7 +133,7 @@
         '<span class="rank-value"><span>' + esc(ui.money(w.annualSavings, approx)) + '</span><span class="rank-sub">' + ui.pct(w.savingsPct) + ' of its spend</span></span>' +
         '</button></li>';
     }).join('');
-    return '<div class="card"><h2>Top opportunities</h2><div class="sub">Where most of the savings are</div><ol class="ranks">' + rows + '</ol></div>';
+    return '<div class="card"><h2>Top opportunities</h2><div class="sub">' + esc(sub) + '</div><ol class="ranks">' + rows + '</ol></div>';
   }
 
   function basis(r, st) {
@@ -123,6 +148,7 @@
     host.innerHTML = heading(r, st, level) + (level === 'provisional' ? provisionalBanner(r.fidelity) : '') +
       tiles(r.totals, approx) +
       '<div class="pair">' + confidenceCard(r, level, st) + meaningCard(r.totals, approx, st) + '</div>' +
+      (level === 'provisional' ? budgetCard(r) : '') +
       spendCard(r, approx) + topCard(r, approx) +
       '<p class="basis">' + esc(basis(r, st)) + '</p>';
     var chartHost = host.querySelector('.sum-chart');
