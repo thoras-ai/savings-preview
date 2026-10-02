@@ -90,6 +90,9 @@
     opts = opts || {};
     var width = Math.max(320, host.clientWidth || 800);
     var height = opts.height || 340;
+    // Pattern ids are document-wide, and a pattern inside a hidden chart does
+    // not paint, so a chart shown only in print passes its own id.
+    var hatchId = opts.patternId || 'hatch';
     var d = downsample(series, mode);
     var n = d.t.length;
     var vals = [];
@@ -165,9 +168,9 @@
     host.innerHTML =
       '<svg class="chart" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' +
       esc((opts.title || 'Chart') + ': ' + legend(modeKey).slice(0, -1).map(function (l) { return l.name; }).join(', ')) + '">' +
-      '<defs><pattern id="hatch" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">' +
+      '<defs><pattern id="' + hatchId + '" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">' +
       '<line x1="0" y1="0" x2="0" y2="3" class="hatch-line" stroke-width="1"/></pattern></defs>' +
-      grid + xt + gaps.replace(/class="gap"/g, 'class="gap" fill="url(#hatch)"') +
+      grid + xt + gaps.replace(/class="gap"/g, 'class="gap" fill="url(#' + hatchId + ')"') +
       (mode.peak ? '<path class="line-u" d="' + uPath + '"/><path class="line-p" d="' + pPath + '"/>' : '') +
       '<path class="line-a" d="' + aPath + '"/><path class="line-b" d="' + bPath + '"/>' + dots +
       '<line class="cursor" y1="' + m.top + '" y2="' + (m.top + h) + '" x1="0" x2="0" visibility="hidden"/>' +

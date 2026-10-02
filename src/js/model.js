@@ -89,12 +89,14 @@
   function parse(doc) {
     var rms = doc && doc.resourceMetrics;
     if (!Array.isArray(rms) || !rms.length) throw new Error('No resourceMetrics found. This is not a Savings Preview file.');
-    var containers = [], workloads = {}, nodes = [], cluster = '';
+    var containers = [], workloads = {}, nodes = [], cluster = '', contract = { version: '', schemaUrl: '' };
     rms.forEach(function (rm) {
       var a = attrMap(rm.resource);
       if (a['k8s.cluster.name'] && !cluster) cluster = a['k8s.cluster.name'];
+      if (rm.schemaUrl && !contract.schemaUrl) contract.schemaUrl = String(rm.schemaUrl);
       var series = {};
       (rm.scopeMetrics || []).forEach(function (sm) {
+        if (sm.scope && sm.scope.version && !contract.version) contract.version = String(sm.scope.version);
         (sm.metrics || []).forEach(function (m) { series[m.name] = readSeries(m); });
       });
       var kind = a['k8s.deployment.name'] ? 'deployment' : a['k8s.statefulset.name'] ? 'statefulset' : null;
@@ -132,7 +134,7 @@
       }
     });
     if (!containers.length) throw new Error('The file has no container series, so there is nothing to analyze.');
-    return { cluster: cluster, containers: containers, workloads: workloads, nodes: nodes };
+    return { cluster: cluster, contract: contract, containers: containers, workloads: workloads, nodes: nodes };
   }
 
   function pricing(nodes) {
@@ -494,7 +496,7 @@
     var fid = fidelity(data.containers);
     fid.notes = noteSummaries(workloads);
     return {
-      cluster: data.cluster, fidelity: fid, pricing: pricing(data.nodes), nodes: data.nodes,
+      cluster: data.cluster, contract: data.contract, fidelity: fid, pricing: pricing(data.nodes), nodes: data.nodes,
       namespaces: namespaces.sort(), workloads: workloads
     };
   }
@@ -552,7 +554,7 @@
   }
 
   var api = {
-    analyze: analyze, prepare: prepare, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, resample: resample, rollingMax: rollingMax,
+    analyze: analyze, prepare: prepare, nodePrices: NODE_PRICES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, resample: resample, rollingMax: rollingMax,
     fidelityLabel: fidelityLabel, formatSpan: formatSpan, formatStep: formatStep, notes: NOTES, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

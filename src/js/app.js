@@ -51,6 +51,9 @@
     $('report').hidden = which !== 'report';
     $('secbar').hidden = which !== 'report';
     $('open-another').hidden = which !== 'report';
+    $('print-summary').hidden = which !== 'report';
+    // Printing shows the summary layout only while a report is open.
+    document.body.classList.toggle('has-print', which === 'report');
     if (which !== 'report') $('context').textContent = '';
   }
 
@@ -242,6 +245,11 @@
       });
     });
     $('open-another').addEventListener('click', function () { showError(''); window.scrollTo(0, 0); });
+    $('print-summary').addEventListener('click', function () { window.print(); });
+    // The print layout is drawn only when it is needed, so lever changes do not pay for it.
+    window.addEventListener('beforeprint', function () {
+      if (page.result && !$('report').hidden) SP.print.render($('print'), context());
+    });
     $('theme').addEventListener('click', function (e) {
       var b = e.target.closest('button[data-theme-choice]');
       if (b) setTheme(b.getAttribute('data-theme-choice'));
