@@ -3,8 +3,8 @@
 Pushing a tag that starts with `v` runs `.github/workflows/release.yml`:
 
 1. **checks** runs the CI workflow (`.github/workflows/ci.yml`): `go vet`, `go test`, `go test -race`, the Python and Node tests, and the fixture check against the contract. Pull requests run the same jobs except `go test -race`, which runs on pushes to `main`, nightly, on demand and here, so a release never skips it.
-2. **build** fails unless the tagged commit is on `main`. It then runs `scripts/release.sh build <tag>`, which cross-compiles `darwin/amd64`, `darwin/arm64`, `linux/amd64` and `linux/arm64` binaries with `CGO_ENABLED=0` and the tag passed as `-X main.version=<tag>`. It uploads them as the `binaries` workflow artifact. CI and the release use the latest Go 1.26 patch release, not the minimum version in `go.mod`; change `go-version` in both workflows when moving to a new minor version.
-3. **publish** downloads the binaries, runs `scripts/release.sh package <tag>`, and creates a draft GitHub release for the tag with generated notes. It then fills in the Homebrew formula from the draft's asset URLs and `checksums.txt` with `scripts/homebrew_formula.py`, attaches it, and publishes the release. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a prerelease.
+2. **build** fails unless the tagged commit is on `main` and `CHANGELOG.md` has a section for the tag. It then runs `scripts/release.sh build <tag>`, which cross-compiles `darwin/amd64`, `darwin/arm64`, `linux/amd64` and `linux/arm64` binaries with `CGO_ENABLED=0` and the tag passed as `-X main.version=<tag>`. It uploads them as the `binaries` workflow artifact. CI and the release use the latest Go 1.26 patch release, not the minimum version in `go.mod`; change `go-version` in both workflows when moving to a new minor version.
+3. **publish** downloads the binaries, runs `scripts/release.sh package <tag>`, and creates a draft GitHub release for the tag. `scripts/release_notes.py` takes the release notes from the tag's `CHANGELOG.md` section, rewriting relative links to point at the tag; a prerelease tag such as `v1.2.0-rc.1` uses its own section when there is one and the `v1.2.0` section otherwise. It then fills in the Homebrew formula from the draft's asset URLs and `checksums.txt` with `scripts/homebrew_formula.py`, attaches it, and publishes the release. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a prerelease.
 
 The `-X main.version` flag sets a `version` variable in `cmd/savings-preview`. The linker ignores it when the variable does not exist, so a binary built from a commit without that variable reports no version.
 
@@ -17,7 +17,9 @@ The release assets are:
 
 ## Cutting a release
 
-Tag a commit on `main` that passed CI and push the tag:
+Add a `## vX.Y.Z` section to `CHANGELOG.md` on `main`: what is new, breaking changes with how to upgrade, and fixes. Check what the release page will show with `scripts/release_notes.py vX.Y.Z`.
+
+Tag a commit on `main` that passed CI and has that section, and push the tag:
 
     git tag -a v0.1.0 -m v0.1.0
     git push origin v0.1.0
