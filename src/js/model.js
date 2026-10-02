@@ -110,6 +110,7 @@
         held: held,
         tier: a['thoras.fidelity_tier'] || 3,
         source: a['thoras.source'] || '',
+        notes: Array.isArray(a['thoras.fidelity_notes']) ? a['thoras.fidelity_notes'] : [],
         listedMissing: a['thoras.missing_metrics'] || [],
         series: series
       };
@@ -338,13 +339,47 @@
     return out;
   }
 
+  // How each thoras.source value is named on the page.
+  var SOURCE_LABELS = { 'kubectl-snapshot': 'live polling' };
+
+  // Fidelity notes the page explains; others are ignored, as the contract asks.
+  var NOTES = {
+    usage_split_from_pod_by_requests: {
+      workload: 'Usage split from pod totals by requests',
+      summary: function (n) {
+        return 'Container usage in ' + n + (n === 1 ? ' workload' : ' workloads') +
+          ' is the pod total split between containers by their requests, because the source has no per-container usage.';
+      }
+    }
+  };
+
+  function workloadNotes(parts) {
+    var out = [];
+    parts.forEach(function (c) {
+      c.notes.forEach(function (n) { if (NOTES[n] && out.indexOf(n) < 0) out.push(n); });
+    });
+    return out;
+  }
+
+  function noteSummaries(workloads) {
+    var counts = {}, order = [];
+    workloads.forEach(function (w) {
+      w.notes.forEach(function (n) {
+        if (!counts[n]) { counts[n] = 0; order.push(n); }
+        counts[n]++;
+      });
+    });
+    return order.map(function (n) { return NOTES[n].summary(counts[n]); });
+  }
+
   function fidelity(containers) {
     var tier = 1, step = 0, sourceStep = 0, t0 = Infinity, t1 = -Infinity, sources = [];
     containers.forEach(function (c) {
       tier = Math.max(tier, c.tier);
       step = Math.max(step, c.coarseStep);
       sourceStep = Math.max(sourceStep, c.sourceStep);
-      if (c.source && sources.indexOf(c.source) < 0) sources.push(c.source);
+      var src = SOURCE_LABELS[c.source] || c.source;
+      if (src && sources.indexOf(src) < 0) sources.push(src);
       [M.cpuUse, M.memUse].forEach(function (n) {
         var s = c.series[n];
         if (s && s.t.length) { t0 = Math.min(t0, s.t[0]); t1 = Math.max(t1, s.t[s.t.length - 1] + stepAt(c.spans, s.t[s.t.length - 1], c.step)); }
@@ -371,6 +406,11 @@
       var d = Math.round(days * 10) / 10;
       return d + (d === 1 ? ' day' : ' days');
     }
+    if (seconds < 60) return seconds + (seconds === 1 ? ' second' : ' seconds');
+    if (seconds < 3570) {
+      var m = Math.round(seconds / 60);
+      return m + (m === 1 ? ' minute' : ' minutes');
+    }
     var hours = Math.round(seconds / 360) / 10;
     return hours + (hours === 1 ? ' hour' : ' hours');
   }
@@ -395,7 +435,9 @@
     var workloads = order.map(function (id) {
       var first = byWorkload[id][0];
       var info = { ns: first.ns, kind: first.kind, name: first.workload, workload: data.workloads[id] };
-      return analyzeWorkload(id, info, byWorkload[id], rates);
+      var w = analyzeWorkload(id, info, byWorkload[id], rates);
+      w.notes = workloadNotes(byWorkload[id]);
+      return w;
     });
     var counted = workloads.filter(function (w) { return w.series; });
     var totals = { spend: 0, savings: 0, cores: 0, gib: 0, reqCores: 0, reqGiB: 0, workloads: workloads.length, counted: counted.length };
@@ -405,7 +447,7 @@
       totals.reqCores += w.reqCores; totals.reqGiB += w.reqGiB;
     });
     return {
-      cluster: data.cluster, fidelity: fidelity(data.containers), pricing: rates,
+      cluster: data.cluster, fidelity: Object.assign(fidelity(data.containers), { notes: noteSummaries(workloads) }), pricing: rates,
       workloads: workloads, totals: totals,
       series: counted.length ? combine(counted) : null
     };
@@ -413,7 +455,7 @@
 
   var api = {
     analyze: analyze, parse: parse, pricing: pricing, resample: resample, rollingMax: rollingMax,
-    fidelityLabel: fidelityLabel, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
+    fidelityLabel: fidelityLabel, notes: NOTES, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else (self.SP = self.SP || {}).model = api;
