@@ -46,6 +46,11 @@
     try { return JSON.parse(raw); } catch (e) { return null; }
   }
 
+  function linkedSample() {
+    var id = store.get().sample;
+    return id && page.samples ? page.samples.filter(function (s) { return s.id === id; })[0] : null;
+  }
+
   function show(which) {
     $('loading').hidden = which !== 'loading';
     $('start').hidden = which !== 'start';
@@ -207,13 +212,16 @@
   }
 
   function readFile(file) {
+    store.set({ sample: null });
     show('loading');
     files.read(file).then(load, function (e) { showError(e.message); });
   }
 
-  function openSample(url) {
+  // The sample's id goes in the link, so the link opens the same sample.
+  function openSample(s) {
+    store.set({ sample: s.id });
     show('loading');
-    fetch(url).then(function (r) {
+    fetch(s.url).then(function (r) {
       if (!r.ok) throw new Error('The sample did not load (HTTP ' + r.status + ').');
       return r.arrayBuffer();
     }).then(function (buf) { return files.fromBytes(new Uint8Array(buf)); })
@@ -328,6 +336,7 @@
   SP.timing = function () { return page.timing; };
   var inline = inlineData();
   if (inline) load(inline);
+  else if (page.samples && linkedSample()) openSample(linkedSample());
   else if (page.samples || location.protocol === 'file:') showError('');
   else fetchData();
 })();

@@ -5,7 +5,7 @@
 
   var esc = SP.ui.esc;
 
-  // opts: samples (list of {url, name, detail} or null), open(file), openSample(url)
+  // opts: samples (list of {id, url, name, detail} or null), open(file), openSample(sample)
   function render(host, opts) {
     host.innerHTML =
       '<div class="start">' +
@@ -18,7 +18,7 @@
       '<label class="button">Choose a file<input class="visually-hidden" type="file" accept=".json,.zip,.html,application/json,application/zip,text/html"></label>' +
       '</div>' +
       (opts.samples && opts.samples.length ? '<h2>Or try a sample</h2><ul class="samples">' + opts.samples.map(function (s) {
-        return '<li><button type="button" class="sample" data-sample="' + esc(s.url) + '"><span class="sample-name">' + esc(s.name) +
+        return '<li><button type="button" class="sample" data-sample="' + esc(s.id) + '"><span class="sample-name">' + esc(s.name) +
           '</span><span class="sample-detail">' + esc(s.detail) + '</span></button></li>';
       }).join('') + '</ul>' : '') +
       '<p class="start-note">The CLI reads existing history from Prometheus, Datadog, Grafana Cloud or live polling, and writes one OpenTelemetry metrics file. It installs nothing in the cluster.</p>' +
@@ -29,7 +29,9 @@
     var list = host.querySelector('.samples');
     if (list) list.addEventListener('click', function (e) {
       var b = e.target.closest('button[data-sample]');
-      if (b) opts.openSample(b.getAttribute('data-sample'));
+      if (!b) return;
+      var id = b.getAttribute('data-sample');
+      opts.openSample(opts.samples.filter(function (s) { return s.id === id; })[0]);
     });
   }
 

@@ -48,16 +48,19 @@ FONTS = [
 ]
 SAMPLES = [
     {
+        "id": "demo",
         "file": "fixtures/demo-cluster.compact.otlp.json",
         "name": "Demo cluster",
         "detail": "60 workloads in 8 namespaces, 14 days at 5-minute steps, generated",
     },
     {
+        "id": "synthetic",
         "file": "fixtures/savings-preview.otlp.json",
         "name": "Synthetic cluster",
         "detail": "14 days at 5-minute steps, generated",
     },
     {
+        "id": "minikube",
         "file": "fixtures/minikube-poll.otlp.json",
         "name": "Minikube, polled",
         "detail": "A short poll of a local cluster, names scrubbed",
@@ -99,7 +102,7 @@ def build_site(out):
         if not os.path.isfile(os.path.join(ROOT, s["file"])):
             raise SystemExit("%s is missing; generate it with go run ./scripts/gen_demo" % s["file"])
         shutil.copyfile(os.path.join(ROOT, s["file"]), os.path.join(out, "samples", name))
-        listed.append({"url": "samples/" + name, "name": s["name"], "detail": s["detail"]})
+        listed.append({"id": s["id"], "url": "samples/" + name, "name": s["name"], "detail": s["detail"]})
     attr = html.escape(json.dumps(listed), quote=True)
     page = build().replace("<body>", '<body data-samples="%s">' % attr, 1)
     open(os.path.join(out, ".nojekyll"), "w").close()
