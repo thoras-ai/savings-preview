@@ -225,3 +225,49 @@ func TestMainNeedsBothKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestRateLimitWaitsDoNotUseUpRetries(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&calls, 1) <= 10 {
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			w.Header().Set("X-RateLimit-Reset", "2")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		io.WriteString(w, `{"status":"ok"}`)
+	}))
+	defer srv.Close()
+	c, ns := testClient(srv.URL)
+	c.Retries = 1
+	if err := c.Validate(context.Background()); err != nil {
+		t.Fatalf("ten rate-limit waits with one retry: %v", err)
+	}
+	if len(ns.waits) != 10 {
+		t.Errorf("waits %v", ns.waits)
+	}
+}
+
+func TestWaitTurnHonorsAnExtendedPause(t *testing.T) {
+	c, ns := testClient("http://unused")
+	c.pauseUntil = ns.now.Add(5 * time.Second)
+	extended := false
+	c.sleep = func(_ context.Context, d time.Duration) error {
+		ns.waits = append(ns.waits, d)
+		ns.now = ns.now.Add(d)
+		if !extended {
+			// Another request pushes the pause out while this one sleeps.
+			extended = true
+			c.mu.Lock()
+			c.pauseUntil = ns.now.Add(3 * time.Second)
+			c.mu.Unlock()
+		}
+		return nil
+	}
+	if err := c.waitTurn(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(ns.waits) != 2 || ns.waits[1] != 3*time.Second {
+		t.Errorf("waits %v", ns.waits)
+	}
+}

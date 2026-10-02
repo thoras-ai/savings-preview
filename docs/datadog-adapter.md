@@ -45,7 +45,7 @@ The adapter calls only `GET /api/v2/validate_keys` and `POST /api/v2/query/times
 | StatefulSet replicas | `kubernetes_state.statefulset.replicas_desired`, `k8s.statefulset.desired_pods` | count |
 | Node allocatable CPU and memory | `kubernetes_state.node.cpu_allocatable`, `kubernetes_state.node.memory_allocatable` | cores, bytes |
 
-Container series are grouped by `kube_namespace`, `kube_deployment` or `kube_stateful_set`, and `kube_container_name`. The Agent's tagger puts these tags on kubelet metrics, the kube-state-metrics core check puts them on its container metrics, and Datadog maps the OpenTelemetry resource attributes `k8s.namespace.name`, `k8s.deployment.name`, `k8s.statefulset.name` and `k8s.container.name` to the same tags. Series without one of the grouping tags are left out, so pods of DaemonSets, Jobs and bare pods are not reported. Replica metrics are grouped by `kube_namespace` and the workload tag; legacy kube-state-metrics check versions that kept the `namespace`, `deployment` and `statefulset` label names are tried as well. Nodes are grouped by `node`, with the region from `kube_region`.
+Container series are grouped by `kube_namespace`, `kube_deployment` or `kube_stateful_set`, and `kube_container_name`. The Agent's tagger puts these tags on kubelet metrics, the kube-state-metrics core check puts them on its container metrics, and Datadog maps the OpenTelemetry resource attributes `k8s.namespace.name`, `k8s.deployment.name`, `k8s.statefulset.name` and `k8s.container.name` to the same tags. The kubeletstats and k8s_cluster receivers do not set `k8s.deployment.name` or `k8s.statefulset.name` themselves: the collector needs the `k8sattributes` processor, or the run stops with no workload containers found. Series without one of the grouping tags are left out, so pods of DaemonSets, Jobs and bare pods are not reported. Replica metrics are grouped by `kube_namespace` and the workload tag; legacy kube-state-metrics check versions that kept the `namespace`, `deployment` and `statefulset` label names are tried as well. Nodes are grouped by `node`, with the region from `kube_region`.
 
 Usage is the mean over the workload's pods at each step, rolled up per pod with `avg`. The peaks (`thoras.container.cpu.usage.max` and `thoras.container.memory.working_set.max`) come from the same query rolled up with `max`. Datadog rolls up each pod's series before it averages across pods, so a peak is the mean of each pod's highest reading within the step. That is at least the highest reading of the mean, which errs toward smaller savings. Requests and limits are the mean over pods; replicas and node allocatable the highest value in the step.
 
@@ -53,11 +53,11 @@ Usage is the mean over the workload's pods at each step, rolled up per pod with 
 
 ## Requests and pulls
 
-Datadog returns at most 1,500 points per series per query, and picks a coarse interval for long ranges unless told otherwise. Every query names the step as its rollup interval and covers at most 1,440 steps: one day at 1 minute, five days at 5 minutes. A 14-day pull at 1 minute is 14 requests per query. Requests group the queries that share a shape: the usage means and peaks of one workload kind, its requests and limits, its replicas, and the nodes. A 14-day run at 1 minute sends about 100 requests, plus one probe per metric looked for.
+Datadog returns at most 1,500 points per series per query, and picks a coarse interval for long ranges unless told otherwise. Every query names the step as its rollup interval and covers at most 1,440 steps: one day at 1 minute, five days at 5 minutes. A 14-day pull at 1 minute is 14 requests per query. Requests group the queries that share a shape: the usage means of one workload kind, its usage peaks, its requests and limits, its replicas, and the nodes. A 14-day run at 1 minute sends about 110 requests, plus one probe per metric looked for.
 
 When Datadog answers with points further apart than the step, the adapter splits the range in half and asks again, down to 60 steps, and then stops with an error that suggests a larger `--step`.
 
-Every response's rate-limit headers are read. When `X-RateLimit-Remaining` reaches 0, or a request is refused with 429, no request starts until `X-RateLimit-Reset` seconds have passed. A 429 without the headers, a 5xx response or a network error is retried after 1, 2, 4 and up to 32 seconds, six times. Datadog publishes no limit for the query endpoint; lower `--concurrency` if a run spends much of its time waiting.
+Every response's rate-limit headers are read. When `X-RateLimit-Remaining` reaches 0, or a request is refused with 429, no request starts until `X-RateLimit-Reset` seconds have passed. Up to 100 such waits per request do not count as retries. A 429 without the headers, a 5xx response or a network error is retried after 1, 2, 4 and up to 32 seconds, six times. Datadog publishes no limit for the query endpoint; lower `--concurrency` if a run spends much of its time waiting.
 
 The pull starts `--days` before now. When usage begins later, the run warns with the date it begins.
 
@@ -74,7 +74,7 @@ The Agent sets `kube_cluster_name` from its configured cluster name, and OpenTel
 - When a request metric exists, a container with usage but no request series has no request set: the kubelet check reports requests only for containers that set one. It gets zero requests at the times its workload has a replica count.
 - No replica metric for a kind: the replica metric is listed as missing on each of its workloads, and the run warns.
 - No node allocatable metric: node resources are left out and the report prices workloads with its default node.
-- Gaps stay gaps. Values are never filled or carried forward.
+- Gaps the series has at every pod stay gaps; the adapter never fills or carries values forward. When Datadog averages pods, it may interpolate a short gap in one pod's series from its neighbors, as it does for graphs.
 - The kube-state-metrics core check reports requests for every pod it lists, including pods that are not running. The kubelet metrics, which come first, cover running containers only.
 
 ## Not covered
@@ -96,4 +96,4 @@ RECORD_DATADOG=1 DD_SITE=us1 DD_API_KEY=... DD_APP_KEY=... RECORD_DATADOG_SELECT
 
 This writes `testdata/live-SITE.json` with one day at 1 minute, which the replay test then runs too. The recording holds the keys of no request, but it does hold the organization's cluster, namespace, workload, container and node names and their usage, so review it before committing it.
 
-Not yet checked against a live organization: whether the 1,500-point cap applies to this endpoint as it does to graphs, whether `times` come back in milliseconds as the API's example shows (the adapter accepts seconds or milliseconds), how series without a grouping tag are labeled (the adapter treats `N/A` as no value), and the endpoint's rate limit.
+Not yet checked against a live organization: whether the 1,500-point cap applies to this endpoint as it does to graphs, whether `times` come back in milliseconds as the API's example shows (the adapter accepts seconds or milliseconds), how series without a grouping tag are labeled (the adapter treats `N/A` as no value), whether averaging across pods interpolates gaps, the endpoint's rate limit, and how it answers a large cluster: a usage request returns two values per container and step, about 5.8 million for 2,000 containers over a day at 1 minute, and the adapter reads at most 256 MiB of a response.

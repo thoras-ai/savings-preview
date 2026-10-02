@@ -253,7 +253,7 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 	}
 	f := assemble(o, p, pl, rep)
 	if rep.Containers == 0 {
-		return nil, rep, fmt.Errorf("no workload containers found: usage series exist, but none carry a %s or %s tag", KubeTags.Deployment, KubeTags.StatefulSet)
+		return nil, rep, fmt.Errorf("no workload containers found: usage series exist, but none carry a %s or %s tag (OpenTelemetry data gets them from the collector's k8sattributes processor)", KubeTags.Deployment, KubeTags.StatefulSet)
 	}
 	return f, rep, nil
 }
@@ -297,8 +297,11 @@ func pull(ctx context.Context, o Options, p *probed, start time.Time) (*pulled, 
 				dst[cKey{kind, s.Tags[t.Namespace], s.Tags[t.workload(kind)], s.Tags[t.Container]}] = pts
 			}
 		}
-		var use job
+		// Means and peaks go in separate requests to keep each response to
+		// two values per container and step.
+		var use, peak job
 		use.name = kind + " usage"
+		peak.name = kind + " usage peaks"
 		var res job
 		res.name = kind + " requests and limits"
 		for _, x := range []struct {
@@ -307,8 +310,8 @@ func pull(ctx context.Context, o Options, p *probed, start time.Time) (*pulled, 
 			dst  map[cKey][]contract.Point
 			j    *job
 		}{
-			{CPUUsage, "avg", pl.cpuUse, &use}, {CPUUsage, "max", pl.cpuMax, &use},
-			{MemoryUsage, "avg", pl.memUse, &use}, {MemoryUsage, "max", pl.memMax, &use},
+			{CPUUsage, "avg", pl.cpuUse, &use}, {CPUUsage, "max", pl.cpuMax, &peak},
+			{MemoryUsage, "avg", pl.memUse, &use}, {MemoryUsage, "max", pl.memMax, &peak},
 			{CPURequest, "avg", pl.cpuReq, &res}, {MemoryRequest, "avg", pl.memReq, &res},
 			{CPULimit, "avg", pl.cpuLim, &res}, {MemoryLimit, "avg", pl.memLim, &res},
 		} {
@@ -319,7 +322,7 @@ func pull(ctx context.Context, o Options, p *probed, start time.Time) (*pulled, 
 			x.j.queries = append(x.j.queries, Query{Name: fmt.Sprintf("q%d", len(x.j.queries)), Query: ContainerQuery(f.Metric, x.role, kind, o.Filters, x.fn, o.Step)})
 			x.j.into = append(x.j.into, scaled(f.scale, container(x.dst, f.Tags)))
 		}
-		jobs = append(jobs, use)
+		jobs = append(jobs, use, peak)
 		if len(res.queries) > 0 {
 			jobs = append(jobs, res)
 		}

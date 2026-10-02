@@ -103,7 +103,7 @@ files or environment variables, never from flags.
 	fmt.Fprintf(os.Stderr, "using Datadog API at %s\n", base)
 	o := Options{Client: c, Filters: filters, Cluster: *cluster, Days: *days, Step: *step, Concurrency: *concurrency, Log: logf}
 	if *list {
-		return List(ctx, o, os.Stdout)
+		return hint(List(ctx, o, os.Stdout))
 	}
 	f, rep, err := Run(ctx, o)
 	if err != nil {
@@ -135,6 +135,9 @@ func printReport(w io.Writer, out string, rep *Report) {
 
 // hint adds the likely fix to an error from the API.
 func hint(err error) error {
+	if err == nil {
+		return nil
+	}
 	var ae *APIError
 	if !errors.As(err, &ae) {
 		return err

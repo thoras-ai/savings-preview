@@ -210,6 +210,10 @@ func parseTags(tags []string) map[string]string {
 	return m
 }
 
+// MaxRateLimitWaits is how many 429 responses with rate-limit headers one
+// request waits out before it gives up.
+const MaxRateLimitWaits = 100
+
 // ValidateKeysPath checks the API key and the application key together and
 // needs no scope.
 const ValidateKeysPath = "/api/v2/validate_keys"
@@ -227,7 +231,8 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte) ([]by
 		retries = 6
 	}
 	var lastErr error
-	for attempt := 0; ; attempt++ {
+	attempt, limited := 0, 0
+	for {
 		if err := c.waitTurn(ctx); err != nil {
 			return nil, err
 		}
@@ -244,8 +249,16 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte) ([]by
 			return raw, nil
 		case status == http.StatusTooManyRequests || status >= 500:
 			lastErr = &APIError{Status: status, Errors: responseErrors(raw)}
-			if c.noteLimit(h, status) {
+			if status == http.StatusTooManyRequests && c.noteLimit(h, status) {
 				// waitTurn holds the next attempt until the window resets.
+				// Such waits follow Datadog's own schedule, so they have a
+				// budget of their own and do not use up the retries.
+				if limited++; limited > MaxRateLimitWaits {
+					return nil, lastErr
+				}
+				continue
+			}
+			if c.noteLimit(h, status) {
 				wait = -1
 			}
 		default:
@@ -255,8 +268,9 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte) ([]by
 		if attempt >= retries {
 			return nil, lastErr
 		}
+		attempt++
 		if wait == 0 {
-			wait = time.Duration(1<<min(attempt, 5)) * time.Second
+			wait = time.Duration(1<<min(attempt-1, 5)) * time.Second
 		}
 		if wait > 0 {
 			if err := c.sleepFor(ctx, wait); err != nil {
@@ -323,14 +337,20 @@ func (c *Client) noteLimit(h http.Header, status int) bool {
 	return true
 }
 
+// waitTurn returns once no pause is in force. Another request can extend
+// the pause while this one sleeps, so it checks again after each sleep.
 func (c *Client) waitTurn(ctx context.Context) error {
-	c.mu.Lock()
-	d := c.pauseUntil.Sub(c.clock())
-	c.mu.Unlock()
-	if d <= 0 {
-		return nil
+	for {
+		c.mu.Lock()
+		d := c.pauseUntil.Sub(c.clock())
+		c.mu.Unlock()
+		if d <= 0 {
+			return nil
+		}
+		if err := c.sleepFor(ctx, d); err != nil {
+			return err
+		}
 	}
-	return c.sleepFor(ctx, d)
 }
 
 func (c *Client) clock() time.Time {
