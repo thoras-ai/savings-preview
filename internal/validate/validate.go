@@ -44,6 +44,8 @@ var (
 	containerSpecs = []spec{
 		{"container.cpu.usage", gauge, "{cpu}", false, true},
 		{"container.memory.working_set", updown, "By", true, true},
+		{"thoras.container.cpu.usage.max", gauge, "{cpu}", false, false},
+		{"thoras.container.memory.working_set.max", updown, "By", true, false},
 		{"k8s.container.cpu.request.desired", updown, "{cpu}", false, true},
 		{"k8s.container.memory.request.desired", updown, "By", true, true},
 		{"k8s.container.cpu.limit.desired", updown, "{cpu}", false, false},
@@ -128,6 +130,10 @@ func validate(doc any) []string {
 		if tierOK = tierOK && tier >= 1 && tier <= 3; !tierOK {
 			add("%s: thoras.fidelity_tier must be one of (1, 2, 3)", where)
 		}
+		var spans []stepSpan
+		if raw, ok := at["thoras.step_spans"]; ok && stepOK {
+			spans = parseSpans(where, raw, step, add)
+		}
 		if str(at, "thoras.source") == "" {
 			add("%s: thoras.source must be a non-empty string", where)
 		}
@@ -198,6 +204,11 @@ func validate(doc any) []string {
 				add("%s: thoras.missing_metrics lists %s, which is not a required metric here", where, m)
 			}
 		}
+		if nv, ok := at["thoras.fidelity_notes"]; ok {
+			if notes, good := stringList(nv); !good || slices.Contains(notes, "") {
+				add("%s: thoras.fidelity_notes must be an array of non-empty strings", where)
+			}
+		}
 
 		scopes := asList(rm["scopeMetrics"])
 		if len(scopes) == 0 {
@@ -234,9 +245,13 @@ func validate(doc any) []string {
 				if !stepOK {
 					continue
 				}
-				first, last, ok := checkPoints(where+" "+name, sp, metric, step, add)
+				times := checkPoints(where+" "+name, sp, metric, step, add)
+				if times != nil && spans != nil {
+					checkSpans(where, name, times, spans, add)
+				}
 				// Optional series must not widen the span a tier is judged on.
-				if ok && sp.required {
+				if times != nil && sp.required {
+					first, last := times[0], times[len(times)-1]
 					if !spanned {
 						lo, hi, spanned = first, last, true
 					}
@@ -255,10 +270,16 @@ func validate(doc any) []string {
 		}
 
 		if tierOK && stepOK && spanned {
-			span := hi - lo + step
-			if floor := tierFloor(step, span); tier < floor {
+			// Mixed steps are judged by the coarsest, since that is what the
+			// older data can resolve.
+			coarse := step
+			for _, s := range spans {
+				coarse = max(coarse, s.step)
+			}
+			span := hi - lo + coarse
+			if floor := tierFloor(coarse, span); tier < floor {
 				add("%s: fidelity tier %d claims more than step %ds over %.1f days supports (best is %d)",
-					where, tier, step, float64(span)/day, floor)
+					where, tier, coarse, float64(span)/day, floor)
 			}
 		}
 	}
@@ -296,22 +317,88 @@ func tierFloor(step, span int64) int64 {
 	return 3
 }
 
-// checkPoints validates one metric's data points and returns the first and
-// last timestamps in seconds; ok is false if the series was rejected.
-func checkPoints(where string, sp spec, metric map[string]any, step int64, add func(string, ...any)) (first, last int64, ok bool) {
+// stepSpan is one thoras.step_spans entry: points in [start, end) are step
+// seconds apart.
+type stepSpan struct{ start, end, step int64 }
+
+// parseSpans reads thoras.step_spans, or returns nil after reporting why it
+// is invalid.
+func parseSpans(where string, raw any, step int64, add func(string, ...any)) []stepSpan {
+	entries, ok := stringList(raw)
+	if !ok || len(entries) == 0 {
+		add("%s: thoras.step_spans must be a non-empty array of strings", where)
+		return nil
+	}
+	var spans []stepSpan
+	for _, x := range entries {
+		var n [3]int64
+		parts := strings.Split(x, "/")
+		ok := len(parts) == 3
+		for i := 0; ok && i < 3; i++ {
+			var err error
+			n[i], err = strconv.ParseInt(parts[i], 10, 64)
+			ok = isDigits(parts[i]) && err == nil
+		}
+		if !ok {
+			add("%s: thoras.step_spans entry %s is not START/END/STEP", where, quote(x))
+			return nil
+		}
+		s := stepSpan{n[0], n[1], n[2]}
+		if s.step <= 0 || s.step%step != 0 || s.end <= s.start || (s.end-s.start)%s.step != 0 {
+			add("%s: thoras.step_spans entry %s needs END > START, a step that is a multiple of %ds, "+
+				"and a length that is a multiple of its step", where, quote(x), step)
+			return nil
+		}
+		if len(spans) > 0 && s.start < spans[len(spans)-1].end {
+			add("%s: thoras.step_spans entries overlap or are out of order", where)
+			return nil
+		}
+		spans = append(spans, s)
+	}
+	finest := spans[0].step
+	for _, s := range spans {
+		finest = min(finest, s.step)
+	}
+	if finest != step {
+		add("%s: thoras.step_seconds must equal the finest step in thoras.step_spans", where)
+		return nil
+	}
+	return spans
+}
+
+// checkSpans reports the first point that is outside every span or off its
+// span's grid.
+func checkSpans(where, name string, times []int64, spans []stepSpan, add func(string, ...any)) {
+	for _, t := range times {
+		i := slices.IndexFunc(spans, func(s stepSpan) bool { return s.start <= t && t < s.end })
+		if i < 0 {
+			add("%s %s: point at %d is outside thoras.step_spans", where, name, t)
+			return
+		}
+		if s := spans[i]; (t-s.start)%s.step != 0 {
+			add("%s %s: point at %d is off the %ds grid of its step span", where, name, t, s.step)
+			return
+		}
+	}
+}
+
+// checkPoints validates one metric's data points and returns their timestamps
+// in seconds, or nil if the series was rejected.
+func checkPoints(where string, sp spec, metric map[string]any, step int64, add func(string, ...any)) []int64 {
 	if metric["unit"] != sp.unit {
 		add("%s: unit is %s, expected %s", where, quote(metric["unit"]), quote(sp.unit))
 	}
 	var body map[string]any
+	var ok bool
 	if sp.inst == gauge {
 		if body, ok = metric["gauge"].(map[string]any); !ok {
 			add("%s: must be a gauge", where)
-			return 0, 0, false
+			return nil
 		}
 	} else {
 		if body, ok = metric["sum"].(map[string]any); !ok {
 			add("%s: must be a sum", where)
-			return 0, 0, false
+			return nil
 		}
 		mono := sp.inst == deltaCounter
 		if b, _ := body["isMonotonic"].(bool); b != mono {
@@ -329,47 +416,48 @@ func checkPoints(where string, sp spec, metric map[string]any, step int64, add f
 	points := asList(body["dataPoints"])
 	if len(points) == 0 {
 		add("%s: no data points (omit the metric and list it in thoras.missing_metrics)", where)
-		return 0, 0, false
+		return nil
 	}
+	times := make([]int64, 0, len(points))
 	for i, pv := range points {
 		p := asMap(pv)
 		ts, _ := p["timeUnixNano"].(string)
 		ns, err := strconv.ParseInt(ts, 10, 64)
 		if !isDigits(ts) || err != nil {
 			add("%s: point %d timeUnixNano must be a digit string", where, i)
-			return 0, 0, false
+			return nil
 		}
 		if ns%1e9 != 0 {
 			add("%s: point %d timestamp is not a whole second", where, i)
-			return 0, 0, false
+			return nil
 		}
 		t := ns / 1e9
-		if i == 0 {
-			first = t
-		} else if d := t - last; d <= 0 || d%step != 0 {
-			add("%s: point %d is %ds after the previous, not a multiple of step %ds", where, i, d, step)
-			return 0, 0, false
+		if i > 0 {
+			if d := t - times[i-1]; d <= 0 || d%step != 0 {
+				add("%s: point %d is %ds after the previous, not a multiple of step %ds", where, i, d, step)
+				return nil
+			}
 		}
-		last = t
+		times = append(times, t)
 		if sp.isInt {
 			if s, _ := p["asInt"].(string); !isDigits(s) {
 				add("%s: point %d must carry asInt as a non-negative digit string", where, i)
-				return 0, 0, false
+				return nil
 			}
 		} else {
 			n, isNum := p["asDouble"].(json.Number)
 			f, err := strconv.ParseFloat(string(n), 64)
 			if !isNum || err != nil || math.IsInf(f, 0) || f < 0 {
 				add("%s: point %d asDouble must be a finite number >= 0", where, i)
-				return 0, 0, false
+				return nil
 			}
 		}
 		if len(asList(p["attributes"])) > 0 {
 			add("%s: data point attributes are not allowed", where)
-			return 0, 0, false
+			return nil
 		}
 	}
-	return first, last, true
+	return times
 }
 
 func isDigits(s string) bool {

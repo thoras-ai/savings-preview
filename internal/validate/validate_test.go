@@ -3,6 +3,7 @@ package validate
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -316,6 +317,65 @@ func mutations() []mutation {
 			points(metrics(app)[0].(obj))[0].(obj)["attributes"] = []any{
 				obj{"key": "cpu.mode", "value": obj{"stringValue": "user"}}}
 		}, "data point attributes"},
+		{"fidelity notes accepted", func(t *testing.T, doc, app, worker obj) {
+			addAttr(app, "thoras.fidelity_notes", stringArray("usage_split_from_pod_by_requests"))
+		}, ""},
+		{"fidelity notes not an array", func(t *testing.T, doc, app, worker obj) {
+			addAttr(app, "thoras.fidelity_notes", obj{"stringValue": "x"})
+		}, "thoras.fidelity_notes must be an array"},
+		{"fidelity notes empty string", func(t *testing.T, doc, app, worker obj) {
+			addAttr(app, "thoras.fidelity_notes", stringArray("usage_split_from_pod_by_requests", ""))
+		}, "thoras.fidelity_notes must be an array"},
+		{"max metrics accepted", func(t *testing.T, doc, app, worker obj) {
+			addMax(t, app, "container.cpu.usage", "{cpu}")
+			addMax(t, app, "container.memory.working_set", "By")
+		}, ""},
+		{"max metric wrong unit", func(t *testing.T, doc, app, worker obj) {
+			addMax(t, app, "container.memory.working_set", "MiBy")
+		}, "working_set.max: unit is 'MiBy', expected 'By'"},
+		{"step spans mixed", func(t *testing.T, doc, app, worker obj) {
+			first, mid, last := mixedSteps(t, app)
+			setSpans(app, fmt.Sprintf("%d/%d/300", first, mid), fmt.Sprintf("%d/%d/60", mid, last+60))
+		}, ""},
+		{"step spans with max metrics", func(t *testing.T, doc, app, worker obj) {
+			first, mid, last := mixedSteps(t, app)
+			setSpans(app, fmt.Sprintf("%d/%d/300", first, mid), fmt.Sprintf("%d/%d/60", mid, last+60))
+			addMax(t, app, "container.cpu.usage", "{cpu}")
+			addMax(t, app, "container.memory.working_set", "By")
+		}, ""},
+		{"step spans point outside", func(t *testing.T, doc, app, worker obj) {
+			first, mid, last := mixedSteps(t, app)
+			setSpans(app, fmt.Sprintf("%d/%d/300", first+300, mid), fmt.Sprintf("%d/%d/60", mid, last+60))
+		}, "outside thoras.step_spans"},
+		{"step spans point off grid", func(t *testing.T, doc, app, worker obj) {
+			first, mid, last := mixedSteps(t, app)
+			setSpans(app, fmt.Sprintf("%d/%d/300", first-60, mid-60), fmt.Sprintf("%d/%d/60", mid-60, last+60))
+		}, "off the 300s grid"},
+		{"step spans overlap", func(t *testing.T, doc, app, worker obj) {
+			first, mid, last := mixedSteps(t, app)
+			setSpans(app, fmt.Sprintf("%d/%d/300", first, mid+300), fmt.Sprintf("%d/%d/60", mid, last+60))
+		}, "entries overlap or are out of order"},
+		{"step spans bad entry", func(t *testing.T, doc, app, worker obj) {
+			first, _, last := mixedSteps(t, app)
+			setSpans(app, fmt.Sprintf("%d-%d-300", first, last))
+		}, "is not START/END/STEP"},
+		{"step spans bad length", func(t *testing.T, doc, app, worker obj) {
+			first, _, last := mixedSteps(t, app)
+			setSpans(app, fmt.Sprintf("%d/%d/300", first, last+60))
+		}, "needs END > START"},
+		{"step spans not an array", func(t *testing.T, doc, app, worker obj) {
+			mixedSteps(t, app)
+			addAttr(app, "thoras.step_spans", obj{"stringValue": "x"})
+		}, "must be a non-empty array of strings"},
+		{"step spans finest step must match", func(t *testing.T, doc, app, worker obj) {
+			first, _, last := mixedSteps(t, app)
+			setSpans(app, fmt.Sprintf("%d/%d/300", first, last+300))
+		}, "finest step"},
+		{"step spans tier follows coarsest", func(t *testing.T, doc, app, worker obj) {
+			first, mid, last := mixedSteps(t, app)
+			setSpans(app, fmt.Sprintf("%d/%d/300", first, mid), fmt.Sprintf("%d/%d/60", mid, last+60))
+			valueOf(app, "thoras.fidelity_tier")["intValue"] = "1"
+		}, "claims more than step 300s"},
 		{"nodes are optional", func(t *testing.T, doc, app, worker obj) {
 			var kept []any
 			for _, r := range resources(doc) {
@@ -326,6 +386,55 @@ func mutations() []mutation {
 			doc["resourceMetrics"] = kept
 		}, ""},
 	}
+}
+
+func stringArray(vs ...string) obj {
+	values := make([]any, len(vs))
+	for i, v := range vs {
+		values[i] = obj{"stringValue": v}
+	}
+	return obj{"arrayValue": obj{"values": values}}
+}
+
+// addMax adds the peak series for a usage metric as a copy of its points.
+func addMax(t *testing.T, rm obj, usage, unit string) {
+	t.Helper()
+	var m obj
+	if err := json.Unmarshal(encode(t, metric(rm, usage)), &m); err != nil {
+		t.Fatal(err)
+	}
+	m["name"] = "thoras." + usage + ".max"
+	m["unit"] = unit
+	setMetrics(rm, append(metrics(rm), m))
+}
+
+// mixedSteps sets up the Python StepSpanTest resource: step_seconds drops to
+// 60 while the fixture's points stay 300s apart, and mid starts the last hour,
+// which a 60s span can cover.
+func mixedSteps(t *testing.T, rm obj) (first, mid, last int64) {
+	t.Helper()
+	pts := points(metrics(rm)[0].(obj))
+	sec := func(p any) int64 {
+		n, err := strconv.ParseInt(p.(obj)["timeUnixNano"].(string), 10, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n / 1e9
+	}
+	first, last = sec(pts[0]), sec(pts[len(pts)-1])
+	valueOf(rm, "thoras.step_seconds")["intValue"] = "60"
+	return first, last - 3600, last
+}
+
+func setSpans(rm obj, spans ...string) {
+	res := rm["resource"].(obj)
+	var kept []any
+	for _, a := range res["attributes"].([]any) {
+		if a.(obj)["key"] != "thoras.step_spans" {
+			kept = append(kept, a)
+		}
+	}
+	res["attributes"] = append(kept, obj{"key": "thoras.step_spans", "value": stringArray(spans...)})
 }
 
 func addSeconds(t *testing.T, ns any, s int64) string {
@@ -399,6 +508,17 @@ func TestMatchesPython(t *testing.T) {
 		doc["resourceMetrics"] = kept
 		valueOf(app, "k8s.cluster.name")["stringValue"] = "other"
 		metrics(app)[0].(obj)["unit"] = nil
+	}})
+	docs["new checks in order"] = mutated(t, mutation{mutate: func(t *testing.T, doc, app, worker obj) {
+		// One resource failing the 1.2 checks alongside older ones, so their order is compared.
+		first, _, last := mixedSteps(t, app)
+		setSpans(app, fmt.Sprintf("%d/%d/300", first, last+300))
+		valueOf(app, "thoras.source")["stringValue"] = ""
+		addAttr(app, "thoras.fidelity_notes", stringArray(""))
+		addMax(t, app, "container.memory.working_set", "MiBy")
+		mixedSteps(t, worker)
+		setSpans(worker, fmt.Sprintf("%d/%d/60", first+60, last+60))
+		valueOf(worker, "thoras.fidelity_tier")["intValue"] = "1"
 	}})
 
 	dir := t.TempDir()

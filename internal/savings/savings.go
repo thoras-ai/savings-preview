@@ -41,10 +41,12 @@ var nodePrices = map[string]float64{
 }
 
 const (
-	cpuUse = "container.cpu.usage"
-	memUse = "container.memory.working_set"
-	cpuReq = "k8s.container.cpu.request.desired"
-	memReq = "k8s.container.memory.request.desired"
+	cpuUse  = "container.cpu.usage"
+	memUse  = "container.memory.working_set"
+	cpuPeak = "thoras.container.cpu.usage.max"
+	memPeak = "thoras.container.memory.working_set.max"
+	cpuReq  = "k8s.container.cpu.request.desired"
+	memReq  = "k8s.container.memory.request.desired"
 )
 
 var required = []string{cpuUse, memUse, cpuReq, memReq}
@@ -61,6 +63,8 @@ type Summary struct {
 	Snapshot    bool      `json:"snapshot"`
 	Pricing     string    `json:"pricing"`
 	Totals      Totals    `json:"totals"`
+	// FidelityNotes is every thoras.fidelity_notes value in the file, sorted.
+	FidelityNotes []string `json:"fidelity_notes,omitempty"`
 }
 
 // Totals are the cluster figures summed over the workloads that could be priced.
@@ -89,6 +93,9 @@ type otlpAttr struct {
 	Value struct {
 		StringValue, IntValue *string
 		DoubleValue           *float64
+		ArrayValue            *struct {
+			Values []struct{ StringValue *string }
+		}
 	}
 }
 
@@ -105,9 +112,14 @@ type otlpMetric struct {
 
 type series struct{ t, v []float64 }
 
+// span is one thoras.step_spans entry: points in [start, end) are step apart.
+type span struct{ start, end, step float64 }
+
 // resource is a container (id and kind set) or a workload.
 type resource struct {
 	step, tier       float64
+	spans            []span
+	coarseStep       float64
 	source, id, kind string
 	series           map[string]series
 }
@@ -130,8 +142,11 @@ func Analyze(doc []byte) (*Summary, error) {
 	var containers []*resource
 	var nodes []node
 	workloads := map[string]*resource{}
+	var notes []string
 	for _, rm := range d.ResourceMetrics {
 		strs, nums := map[string]string{}, map[string]float64{}
+		// Array entries without a stringValue stay nil, the JS undefined.
+		lists := map[string][]*string{}
 		for _, a := range rm.Resource.Attributes {
 			switch v := a.Value; {
 			case v.StringValue != nil:
@@ -140,14 +155,32 @@ func Analyze(doc []byte) (*Summary, error) {
 				nums[a.Key], _ = strconv.ParseFloat(*v.IntValue, 64)
 			case v.DoubleValue != nil:
 				nums[a.Key] = *v.DoubleValue
+			case v.ArrayValue != nil:
+				l := []*string{}
+				for _, x := range v.ArrayValue.Values {
+					l = append(l, x.StringValue)
+				}
+				lists[a.Key] = l
 			}
 		}
 		if cluster == "" {
 			cluster = strs["k8s.cluster.name"]
 		}
+		for _, x := range lists["thoras.fidelity_notes"] {
+			if x != nil {
+				notes = append(notes, *x)
+			}
+		}
 		r := &resource{step: nums["thoras.step_seconds"], tier: nums["thoras.fidelity_tier"], source: strs["thoras.source"], series: map[string]series{}}
 		if r.tier == 0 {
 			r.tier = 3
+		}
+		r.spans, r.coarseStep = parseSpans(lists["thoras.step_spans"]), r.step
+		if r.spans != nil {
+			r.coarseStep = r.spans[0].step
+			for _, sp := range r.spans[1:] {
+				r.coarseStep = math.Max(r.coarseStep, sp.step)
+			}
 		}
 		for _, sm := range rm.ScopeMetrics {
 			for _, m := range sm.Metrics {
@@ -162,7 +195,7 @@ func Analyze(doc []byte) (*Summary, error) {
 		switch {
 		case strs["k8s.node.name"] != "":
 			nodes = append(nodes, node{hostType: strs["host.type"], region: strs["cloud.region"], capacity: strs["thoras.node.capacity_type"],
-				cores: mean(r.series["k8s.node.cpu.allocatable"].v), gib: mean(r.series["k8s.node.memory.allocatable"].v) / gib})
+				cores: mean(r.series["k8s.node.cpu.allocatable"].v, nil), gib: mean(r.series["k8s.node.memory.allocatable"].v, nil) / gib})
 		case r.kind != "":
 			r.id = strs["k8s.namespace.name"] + "/" + r.kind + "/" + strs["k8s."+r.kind+".name"]
 			if strs["k8s.container.name"] != "" {
@@ -198,20 +231,22 @@ func Analyze(doc []byte) (*Summary, error) {
 		}
 	}
 
-	// Fidelity: worst tier and step, span from the first to one step past the
-	// last usage point.
-	s := &Summary{Cluster: cluster, Pricing: rates.basis, Totals: t}
+	// Fidelity: worst tier and coarsest step, span from the first to one step
+	// past the last usage point.
+	slices.Sort(notes)
+	s := &Summary{Cluster: cluster, Pricing: rates.basis, Totals: t, FidelityNotes: slices.Compact(notes)}
 	tier, step := 1.0, 0.0
 	t0, t1 := math.Inf(1), math.Inf(-1)
 	var sources []string
 	for _, c := range containers {
-		tier, step = math.Max(tier, c.tier), math.Max(step, c.step)
+		tier, step = math.Max(tier, c.tier), math.Max(step, c.coarseStep)
 		if c.source != "" && !slices.Contains(sources, c.source) {
 			sources = append(sources, c.source)
 		}
 		for _, name := range []string{cpuUse, memUse} {
 			if ser := c.series[name]; len(ser.t) > 0 {
-				t0, t1 = math.Min(t0, ser.t[0]), math.Max(t1, ser.t[len(ser.t)-1]+c.step)
+				last := ser.t[len(ser.t)-1]
+				t0, t1 = math.Min(t0, ser.t[0]), math.Max(t1, last+stepAt(c.spans, last, c.step))
 			}
 		}
 	}
@@ -250,18 +285,56 @@ func readSeries(m otlpMetric) series {
 
 func isFinite(x float64) bool { return !math.IsNaN(x) && !math.IsInf(x, 0) }
 
-func mean(arr []float64) float64 {
-	s, n := 0.0, 0
-	for _, x := range arr {
-		if isFinite(x) {
-			s += x
-			n++
+// mean of the finite values, weighted when weights is not nil.
+func mean(arr, weights []float64) float64 {
+	s, n := 0.0, 0.0
+	for i, x := range arr {
+		if !isFinite(x) {
+			continue
 		}
+		w := 1.0
+		if weights != nil {
+			w = weights[i]
+		}
+		s, n = s+x*w, n+w
 	}
-	if n == 0 {
+	// JS tests n for truth, which NaN fails too.
+	if n == 0 || math.IsNaN(n) {
 		return math.NaN()
 	}
-	return s / float64(n)
+	return s / n
+}
+
+// parseSpans reads thoras.step_spans entries "START/END/STEP", or returns nil
+// when the resource has one step. Fields convert like JS Number, so a short or
+// garbled entry gives NaN bounds that no time falls in.
+func parseSpans(list []*string) []span {
+	if len(list) == 0 {
+		return nil
+	}
+	// The file passed the contract checks, so every entry is START/END/STEP.
+	out := make([]span, len(list))
+	for i, x := range list {
+		var v [3]float64
+		if x != nil {
+			for k, f := range strings.SplitN(*x, "/", 3) {
+				n, _ := strconv.ParseInt(f, 10, 64)
+				v[k] = float64(n)
+			}
+		}
+		out[i] = span{v[0], v[1], v[2]}
+	}
+	return out
+}
+
+// stepAt is the spacing of a resource's points around time t.
+func stepAt(spans []span, t, step float64) float64 {
+	for _, sp := range spans {
+		if t >= sp.start && t < sp.end {
+			return sp.step
+		}
+	}
+	return step
 }
 
 type rates struct {
@@ -302,22 +375,22 @@ func nans(n int) []float64 {
 }
 
 // resample takes the latest point at or before each grid time, only while it
-// is younger than the series step.
-func resample(s series, grid []float64, step float64) []float64 {
+// is younger than the series step, or the step of the span the point is in.
+func resample(s series, grid []float64, step float64, spans []span) []float64 {
 	out := nans(len(grid))
 	if len(s.t) == 0 {
 		return out
-	}
-	span := math.Inf(1)
-	if step > 0 {
-		span = step
 	}
 	j := 0
 	for i, g := range grid {
 		for j+1 < len(s.t) && s.t[j+1] <= g {
 			j++
 		}
-		if s.t[j] <= g && g-s.t[j] < span {
+		age := math.Inf(1)
+		if st := stepAt(spans, s.t[j], step); st > 0 {
+			age = st
+		}
+		if s.t[j] <= g && g-s.t[j] < age {
 			out[i] = s.v[j]
 		}
 	}
@@ -370,19 +443,49 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 		return
 	}
 	sort.Float64s(grid)
-	replicas := resample(rep, grid, wl.step)
+	replicas := resample(rep, grid, wl.step, wl.spans)
 	n := len(grid)
 
 	// Sums in the order of required: cpu use, mem use, cpu request, mem request.
 	// Zero-filled like Float64Array(n), so NaN spreads in from any container.
 	scale := [4]float64{1, gib, 1, gib}
 	sums := [4][]float64{make([]float64, n), make([]float64, n), make([]float64, n), make([]float64, n)}
+	pkCPU, pkMem := make([]float64, n), make([]float64, n)
+	// Means are weighted by the step of the span each grid point is in, so a
+	// rolled-up point counts for its whole step.
+	weight := make([]float64, n)
 	for _, c := range usable {
+		at := func(name string) []float64 { return resample(c.series[name], grid, c.step, c.spans) }
+		var v [4][]float64
 		for k, name := range required {
-			v := resample(c.series[name], grid, c.step)
-			for i := range n {
-				sums[k][i] += v[i] / scale[k] * replicas[i]
+			v[k] = at(name)
+		}
+		// Rolled-up points carry the peak of the readings they summarize. Where
+		// a peak point is missing, the usage stands in for it.
+		pc, pm := v[0], v[1]
+		if _, ok := c.series[cpuPeak]; ok {
+			pc = at(cpuPeak)
+		}
+		if _, ok := c.series[memPeak]; ok {
+			pm = at(memPeak)
+		}
+		for i := range n {
+			w := stepAt(c.spans, grid[i], c.step)
+			if w == 0 || math.IsNaN(w) { // JS `|| 1`
+				w = 1
 			}
+			weight[i] = math.Max(weight[i], w)
+			for k := range sums {
+				sums[k][i] += v[k][i] / scale[k] * replicas[i]
+			}
+			if !isFinite(pc[i]) {
+				pc[i] = v[0][i]
+			}
+			if !isFinite(pm[i]) {
+				pm[i] = v[1][i]
+			}
+			pkCPU[i] += pc[i] * replicas[i]
+			pkMem[i] += pm[i] / gib * replicas[i]
 		}
 	}
 	anyValid := false
@@ -393,13 +496,14 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 			for k := range sums {
 				sums[k][i] = math.NaN()
 			}
+			pkCPU[i], pkMem[i] = math.NaN(), math.NaN()
 		}
 	}
 	if !anyValid {
 		return
 	}
-	useCPU, useMem, reqCPU, reqMem := sums[0], sums[1], sums[2], sums[3]
-	pc, pm := rollingMax(grid, useCPU, peakWindowSeconds), rollingMax(grid, useMem, peakWindowSeconds)
+	reqCPU, reqMem := sums[2], sums[3]
+	pc, pm := rollingMax(grid, pkCPU, peakWindowSeconds), rollingMax(grid, pkMem, peakWindowSeconds)
 	cur, opt, wasteCPU, wasteMem := make([]float64, n), make([]float64, n), make([]float64, n), make([]float64, n)
 	for k := range n {
 		tgtCPU, tgtMem := pc[k]*targetHeadroom, pm[k]*targetHeadroom
@@ -409,10 +513,10 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 		wasteMem[k] = math.Max(0, reqMem[k]-tgtMem)
 	}
 	t.Counted++
-	t.AnnualSpend += mean(cur) * hoursPerYear
-	t.AnnualSavings += (mean(cur) - mean(opt)) * hoursPerYear
-	t.WasteCores += mean(wasteCPU)
-	t.WasteGiB += mean(wasteMem)
-	t.RequestedCores += mean(reqCPU)
-	t.RequestedGiB += mean(reqMem)
+	t.AnnualSpend += mean(cur, weight) * hoursPerYear
+	t.AnnualSavings += (mean(cur, weight) - mean(opt, weight)) * hoursPerYear
+	t.WasteCores += mean(wasteCPU, weight)
+	t.WasteGiB += mean(wasteMem, weight)
+	t.RequestedCores += mean(reqCPU, weight)
+	t.RequestedGiB += mean(reqMem, weight)
 }
