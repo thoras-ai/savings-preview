@@ -33,7 +33,7 @@ test('the demo cluster reads $41,053 a year, 56%, with three named workloads', {
   const out = text(summary.markup(data, r, st));
   for (const s of [
     '$72,778 / yr', '$31,725 / yr', 'saves $41,053 56%', '149 cores · 465 GiB requested', '46 cores · 255 GiB requested',
-    'From 14 days of your Prometheus data. Computed in your browser.', '2 workloads are being OOM-killed today.',
+    'From 14 days of your Prometheus data. Computed on your laptop. Nothing installed, nothing uploaded.', '2 workloads are being OOM-killed today.',
     'Clusters like this one', 'Book a demo', 'Copy summary'
   ]) assert.ok(out.includes(s), s);
   assert.ok(!out.includes('savings-preview run'), 'a 14-day file needs no longer run');
@@ -81,7 +81,7 @@ test('the picker takes the biggest all-day saver, a burst job and a right-sized 
 
 test('a short poll says what was read, adds the week-long run and nothing about data quality', () => {
   const { data, st, r } = run(prepare('minikube-poll.otlp.json'));
-  assert.strictEqual(summary.provenance(r, st), 'From a 1-minute read of your cluster. Computed in your browser. Nothing installed in your cluster, nothing uploaded.');
+  assert.strictEqual(summary.provenance(r, st), 'From a 1-minute read of your cluster. Computed on your laptop. Nothing installed, nothing uploaded.');
   assert.strictEqual(summary.thin(r, st), true);
   const out = text(summary.markup(data, r, st));
   assert.ok(out.includes('Run it for a week for a full-month figure: savings-preview run --duration 168h'));
@@ -110,7 +110,7 @@ test('the copied summary is four plain lines', () => {
     'Savings preview: demo-cluster',
     'Thoras would cut compute spend by $2,181 a year, 35%.',
     'Utilization: 59% today, 88% with Thoras.',
-    'From 14 days of your Prometheus data. Computed in your browser. Nothing installed in your cluster, nothing uploaded.'
+    'From 14 days of your Prometheus data. Computed on your laptop. Nothing installed, nothing uploaded.'
   ]);
 });
 

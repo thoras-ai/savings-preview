@@ -33,7 +33,7 @@ The figures below are at the default settings. They hold as long as the generato
 
 Show: the headline, today against Thoras, the gap chart and the three workloads.
 
-- "This is a 60-workload production cluster. The CLI read 14 days of usage from the Prometheus it already runs, and the page computed the figures in this browser. Nothing was installed in the cluster, and nothing was uploaded."
+- "This is a 60-workload production cluster. The CLI read 14 days of usage from the Prometheus it already runs, and the figures were computed on the laptop. Nothing was installed, and nothing was uploaded."
 - Read the headline: "Thoras would cut this cluster's compute spend by $41,053 a year, 56%."
 - Point at the two cards: "Today it pays $72,778 a year for 149 cores and 465 GiB of requests at 36% utilization. Right-sized, it is $31,725 for 46 cores and 255 GiB at 89%."
 - Point at the gap chart: the hatched waste between requested today and with Thoras is widest at night and at weekends, when traffic drops and the requests do not.

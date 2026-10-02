@@ -71,7 +71,7 @@
       var names = f.source ? f.source.split(', ').map(function (s) { return SOURCES[s] || s; }) : [];
       from = 'From ' + model.formatSpan(span) + ' of your ' + (names.length ? names.join(' and ') + ' data.' : 'cluster’s metrics.');
     }
-    return from + ' Computed in your browser. Nothing installed in your cluster, nothing uploaded.';
+    return from + ' Computed on your laptop. Nothing installed, nothing uploaded.';
   }
 
   // Usage over requests, CPU and memory weighted by their price, so the
