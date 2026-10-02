@@ -242,7 +242,7 @@ def validate(doc):
                 if step is None:
                     continue
                 r = _check_points("%s %s" % (where, name), name, specs[name], metric, step, errors)
-                if r:
+                if r and specs[name][3]:
                     first_last.append(r)
         for name, spec in specs.items():
             if spec[3] and name not in present and name not in missing:

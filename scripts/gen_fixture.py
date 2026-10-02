@@ -143,7 +143,7 @@ def node(name, instance, capacity, cpu, mem_gib):
 
 
 def build():
-    rng = random.Random(125)
+    rng = random.Random(1)
     rms = []
     # Over-requested: asks for several times what it uses.
     rms += workload(rng, "shop", "deployment", "checkout-api", 6, {

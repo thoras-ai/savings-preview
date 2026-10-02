@@ -163,6 +163,18 @@ class RejectTest(unittest.TestCase):
         attr(self.app, "thoras.fidelity_tier")["value"]["intValue"] = "1"
         self.assertHas("claims more than")
 
+    def test_optional_series_does_not_widen_tier_span(self):
+        for m in metrics(self.app):
+            if m["name"] != "thoras.container.oom_kills":
+                for body in (m.get("gauge"), m.get("sum")):
+                    if body:
+                        body["dataPoints"] = body["dataPoints"][-288 * 3:]
+        metrics(self.app).append({"name": "thoras.container.oom_kills", "unit": "{oom_kill}",
+                                  "sum": {"isMonotonic": True, "aggregationTemporality": 1, "dataPoints": [
+                                      {"timeUnixNano": str(1789516800 * 10**9), "asInt": "1"}]}})
+        attr(self.app, "thoras.fidelity_tier")["value"]["intValue"] = "2"
+        self.assertHas("claims more than")
+
     def test_tier_value(self):
         attr(self.app, "thoras.fidelity_tier")["value"]["intValue"] = "4"
         self.assertHas("fidelity_tier")
