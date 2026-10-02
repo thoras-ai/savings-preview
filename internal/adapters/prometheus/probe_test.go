@@ -182,3 +182,20 @@ func TestProbeReportsWhatRunWouldFailOn(t *testing.T) {
 		t.Fatal("want the kube-state-metrics error")
 	}
 }
+
+func TestProbeFlagsStoresWithoutUsableRequests(t *testing.T) {
+	for name, handle := range map[string]func(string, url.Values) (int, any){
+		"no requests": clusterStore(true, false, false),
+		"no phase":    clusterStore(true, true, true, PhaseProbe),
+	} {
+		f := &fakeStore{handle: handle}
+		rep, err := Probe(context.Background(), Options{Client: f.client(t), Days: 7, Step: time.Minute, Now: time.Unix(t0, 0)})
+		if err != nil || !rep.NoRequests {
+			t.Errorf("%s: err %v, NoRequests %v", name, err, rep != nil && rep.NoRequests)
+		}
+	}
+	f := &fakeStore{handle: clusterStore(true, true, true)}
+	if rep, err := Probe(context.Background(), Options{Client: f.client(t), Days: 7, Step: time.Minute, Now: time.Unix(t0, 0)}); err != nil || rep.NoRequests {
+		t.Errorf("with requests: err %v, NoRequests %v", err, rep.NoRequests)
+	}
+}

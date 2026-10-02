@@ -120,3 +120,15 @@ func TestPodMetricsWithoutMetricsServer(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 }
+
+func TestPodMetricsForbidden(t *testing.T) {
+	c := metricsClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"Forbidden","code":403,"message":"pods.metrics.k8s.io is forbidden"}`))
+	})
+	_, err := PodMetrics(context.Background(), c)
+	if err == nil || !strings.HasPrefix(err.Error(), "forbidden: the identity may not list pods.metrics.k8s.io") {
+		t.Fatalf("err %v", err)
+	}
+}

@@ -38,11 +38,14 @@ type Report struct {
 	// UsageFromPods is set when the store has no per-container usage and
 	// container usage was split from the pod cgroup series by requests.
 	UsageFromPods bool
-	Containers    int
-	Workloads     int
-	Nodes         int
-	OOMKills      int
-	Warnings      []string
+	// NoRequests is set when the store's requests cannot be used, so every
+	// container lacks them and no savings can be computed from the file.
+	NoRequests bool
+	Containers int
+	Workloads  int
+	Nodes      int
+	OOMKills   int
+	Warnings   []string
 }
 
 // ClusterError reports a store that holds more than one cluster.
@@ -215,6 +218,7 @@ func prepare(ctx context.Context, o Options) (*plan, *Report, error) {
 		rep.Warnings = append(rep.Warnings, fmt.Sprintf("the store holds about %s of history, less than the %d days asked for", spanText(o.Now.Sub(earliest)), o.Days))
 	}
 
+	rep.NoRequests = !hasRequests
 	return &plan{src: sources{requests: hasRequests, podUsage: rep.UsageFromPods, oom: hasRestarts}, kinds: kinds}, rep, nil
 }
 

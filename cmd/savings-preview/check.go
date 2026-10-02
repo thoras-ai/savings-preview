@@ -404,9 +404,13 @@ func canI(ctx context.Context, e checkEnv, mode string, a kube.Access, optional 
 }
 
 func checkDirect(ctx context.Context, o *runOptions, e checkEnv, now time.Time) storeCheck {
+	if o.cluster == "" && e.connErr != nil {
+		return storeCheck{Store: "store at " + prometheus.RedactURL(o.direct.url), FoundBy: "--url",
+			Error: "--cluster-name is required with --url when the kubeconfig cannot be read: " + e.connErr.Error()}
+	}
 	name, answer, probe, err := e.direct(ctx)
 	if err != nil {
-		return storeCheck{Store: prometheus.RedactURL(o.direct.url), FoundBy: "--url", Error: err.Error()}
+		return storeCheck{Store: "store at " + prometheus.RedactURL(o.direct.url), FoundBy: "--url", Error: err.Error()}
 	}
 	return checkStore(ctx, o, now, "--url", name, answer, probe)
 }
@@ -425,6 +429,11 @@ func checkStore(ctx context.Context, o *runOptions, now time.Time, foundBy, name
 	}
 	if err != nil {
 		s.Error = "cannot be used: " + err.Error()
+		return s
+	}
+	if rep.NoRequests {
+		s.Error = fmt.Sprintf("cannot be used: it has no container with all of %s, so no savings can be computed from it (%s)",
+			strings.Join(contract.RequiredContainerMetrics, ", "), strings.Join(rep.Warnings, "; "))
 		return s
 	}
 	s.Usable = true
@@ -460,7 +469,7 @@ func decide(r *checkReport, o *runOptions, usePoll bool) {
 		return
 	}
 
-	if r.Datadog == nil && o.source == "auto" {
+	if r.Datadog == nil && o.source == "auto" && o.target == nil {
 		add("Datadog", false, "no keys given", false)
 	}
 	if r.Datadog != nil && r.Datadog.Used {
@@ -481,7 +490,7 @@ func decide(r *checkReport, o *runOptions, usePoll bool) {
 				why = "--source datadog"
 			}
 			pick("datadog", "Datadog at "+d.Site, why, tier)
-			r.Source.Why += "; the tier assumes Datadog holds --days of history at --step, which only the run itself finds out"
+			r.Source.Why += "; only the run itself finds out whether Datadog holds --days of history at --step, which the tier assumes, and whether its series hold one cluster or --selector picks one (several clusters stop the run)"
 			finish(r)
 			return
 		}
@@ -679,9 +688,18 @@ func printCheck(w io.Writer, r *checkReport, color bool) {
 		for _, a := range r.Access {
 			width = max(width, len(a.Check))
 		}
+		// A connection problem fails every review the same way; say it once.
+		common := r.Access[0].Error
+		for _, a := range r.Access {
+			if a.Error != common {
+				common = ""
+			}
+		}
 		for _, a := range r.Access {
 			var verdict string
 			switch {
+			case common != "":
+				verdict = p.warn("unknown")
 			case a.Error != "":
 				verdict = p.warn("unknown: " + a.Error)
 			case a.Allowed:
@@ -692,6 +710,9 @@ func printCheck(w io.Writer, r *checkReport, color bool) {
 				verdict = p.bad("no")
 			}
 			fmt.Fprintf(w, "  %-11s %-*s  %s\n", a.Mode, width, a.Check, verdict)
+		}
+		if common != "" {
+			fmt.Fprintf(w, "  every check failed: %s\n", common)
 		}
 	}
 
@@ -704,7 +725,7 @@ func printCheck(w io.Writer, r *checkReport, color bool) {
 		case m.Answers:
 			fmt.Fprintln(w, p.warn(m.Error))
 		default:
-			fmt.Fprintln(w, p.bad("does not answer: ")+m.Error)
+			fmt.Fprintln(w, p.bad("cannot read: ")+m.Error)
 		}
 	}
 

@@ -26,7 +26,8 @@ type fakeCheck struct {
 	discErr    error
 	answerErr  map[string]error // by service
 	probeErr   map[string]error
-	history    time.Duration // held by every store; 0 is the full --days
+	history    time.Duration   // held by every store; 0 is the full --days
+	noRequests map[string]bool // stores whose requests cannot be used, by service
 	directErr  error
 	ddErr      error
 	reads      []string
@@ -66,7 +67,9 @@ func (f *fakeCheck) env() checkEnv {
 	}
 	e.probe = func(_ context.Context, c prometheus.Candidate) (*prometheus.Report, error) {
 		note("probe " + c.Service)
-		return f.report(), f.probeErr[c.Service]
+		rep := f.report()
+		rep.NoRequests = f.noRequests[c.Service]
+		return rep, f.probeErr[c.Service]
 	}
 	e.direct = func(context.Context) (string, func(context.Context) error, func(context.Context) (*prometheus.Report, error), error) {
 		note("direct")
@@ -315,5 +318,49 @@ func TestCheckFlags(t *testing.T) {
 	}
 	if code := runCheck([]string{"-h"}); code != 0 {
 		t.Errorf("-h: exit %d", code)
+	}
+}
+
+func TestCheckURLNeedsAClusterName(t *testing.T) {
+	r := runCheckWith(t, &fakeCheck{connErr: errors.New("no configuration")}, "--url", "https://mimir.example/prometheus")
+	if r.ExitCode != checkBlocked || !strings.Contains(r.Summary, "--cluster-name is required") {
+		t.Fatalf("got %d %q", r.ExitCode, r.Summary)
+	}
+	r = runCheckWith(t, &fakeCheck{connErr: errors.New("no configuration")}, "--url", "https://mimir.example/prometheus", "--cluster-name", "prod")
+	if r.ExitCode != checkReady {
+		t.Fatalf("with --cluster-name: %d %q", r.ExitCode, r.Summary)
+	}
+}
+
+func TestCheckStoreWithoutRequestsIsSkipped(t *testing.T) {
+	f := &fakeCheck{disc: found, metricPods: 1, noRequests: map[string]bool{"prometheus": true}}
+	r := runCheckWith(t, f)
+	if r.Stores[0].Usable || !strings.Contains(r.Stores[0].Error, "no container with all of") || r.Source.From != storeB.String() {
+		t.Fatalf("stores %+v, source %+v", r.Stores, r.Source)
+	}
+	r = runCheckWith(t, f, "--target", "monitoring/prometheus:9090")
+	if r.ExitCode != checkBlocked {
+		t.Fatalf("--target: %d %q", r.ExitCode, r.Summary)
+	}
+}
+
+func TestCheckOrderWithTargetLeavesDatadogOut(t *testing.T) {
+	r := runCheckWith(t, &fakeCheck{metricPods: 1}, "--target", "monitoring/prometheus:9090")
+	for _, s := range r.Order {
+		if s.Source == "Datadog" {
+			t.Errorf("order %+v", r.Order)
+		}
+	}
+}
+
+func TestCheckOutputSaysACommonErrorOnce(t *testing.T) {
+	r := runCheckWith(t, &fakeCheck{metricPods: 1})
+	for i := range r.Access {
+		r.Access[i].Error = "x509: certificate signed by unknown authority"
+	}
+	var b bytes.Buffer
+	printCheck(&b, r, false)
+	if n := strings.Count(b.String(), "x509"); n != 1 {
+		t.Errorf("error printed %d times:\n%s", n, b.String())
 	}
 }

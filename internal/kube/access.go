@@ -3,11 +3,13 @@ package kube
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	authenticationv1 "k8s.io/api/authentication/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -106,6 +108,9 @@ func PodMetrics(ctx context.Context, c rest.Interface) (int, error) {
 }
 
 func metricsError(err error) error {
+	if apierrors.IsForbidden(err) {
+		return errors.New("forbidden: the identity may not list pods.metrics.k8s.io")
+	}
 	msg := err.Error()
 	if strings.Contains(msg, "the server could not find the requested resource") {
 		return fmt.Errorf("metrics.k8s.io is not served; metrics-server is not installed (%w)", err)
