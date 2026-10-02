@@ -24,6 +24,7 @@ type Conn struct {
 	Dynamic     dynamic.Interface
 	ClusterName string
 	Context     string
+	User        string // the context's user entry in the kubeconfig
 }
 
 // Connect loads the kubeconfig. Empty path and context use the standard
@@ -43,9 +44,12 @@ func Connect(kubeconfig, kubeContext string) (*Conn, error) {
 	if ctxName == "" {
 		ctxName = raw.CurrentContext
 	}
-	cluster := ctxName
-	if c, ok := raw.Contexts[ctxName]; ok && c.Cluster != "" {
-		cluster = c.Cluster
+	cluster, user := ctxName, ""
+	if c, ok := raw.Contexts[ctxName]; ok {
+		if c.Cluster != "" {
+			cluster = c.Cluster
+		}
+		user = c.AuthInfo
 	}
 	cfg, err := cc.ClientConfig()
 	if err != nil {
@@ -60,7 +64,7 @@ func Connect(kubeconfig, kubeContext string) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Conn{Config: cfg, Clientset: cs, Dynamic: dc, ClusterName: cluster, Context: ctxName}, nil
+	return &Conn{Config: cfg, Clientset: cs, Dynamic: dc, ClusterName: cluster, Context: ctxName, User: user}, nil
 }
 
 // ServiceProxy reaches a service through

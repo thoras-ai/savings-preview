@@ -48,9 +48,10 @@ type runOptions struct {
 	now                          time.Time // end of the history pulled; zero is now
 }
 
-func runFlags(args []string) (*runOptions, error) {
-	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	o := &runOptions{}
+// addRunFlags registers run's flags on fs. finish checks them after fs is
+// parsed.
+func addRunFlags(fs *flag.FlagSet) (o *runOptions, finish func() error) {
+	o = &runOptions{}
 	fs.StringVar(&o.kubeconfig, "kubeconfig", "", "path to the kubeconfig (default: KUBECONFIG or ~/.kube/config)")
 	fs.StringVar(&o.context, "context", "", "kubeconfig context (default: the current context)")
 	fs.StringVar(&o.cluster, "cluster-name", "", "cluster name recorded in the file (default: the kubeconfig cluster name, or for Datadog the cluster tag of the series)")
@@ -69,6 +70,17 @@ func runFlags(args []string) (*runOptions, error) {
 	fs.DurationVar(&o.keepRaw, "keep-raw", 48*time.Hour, "when polling, keep readings at --interval for this long, then roll them up to --rollup (0: never roll up)")
 	fs.DurationVar(&o.rollup, "rollup", 5*time.Minute, "when polling, step of rolled-up readings, which keep the mean and the peak")
 	fs.BoolVar(&o.noOpen, "no-open", false, "print the report URL instead of opening a browser")
+	return o, func() error {
+		if fs.NArg() > 0 {
+			return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+		}
+		return o.check(*target)
+	}
+}
+
+func runFlags(args []string) (*runOptions, error) {
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	o, finish := addRunFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `usage: savings-preview [run] [flags]
 
@@ -88,61 +100,67 @@ disk. Everything is read-only; nothing is uploaded.
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
-	if fs.NArg() > 0 {
-		return nil, fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	if err := finish(); err != nil {
+		return nil, err
 	}
+	return o, nil
+}
+
+// check validates the parsed flags and derives the options that follow from
+// them. target is the value of --target.
+func (o *runOptions) check(target string) error {
 	switch o.source {
 	case "auto", "prometheus", "datadog", "poll":
 	default:
-		return nil, fmt.Errorf("--source must be auto, prometheus, datadog or poll, not %q", o.source)
+		return fmt.Errorf("--source must be auto, prometheus, datadog or poll, not %q", o.source)
 	}
-	if err := o.direct.check(target); err != nil {
-		return nil, err
+	if err := o.direct.check(&target); err != nil {
+		return err
 	}
-	named := o.direct.url != "" || *target != ""
+	named := o.direct.url != "" || target != ""
 	if named && (o.source == "datadog" || o.source == "poll") {
-		return nil, fmt.Errorf("--url and --target name a Prometheus-compatible store; they do not apply with --source %s", o.source)
+		return fmt.Errorf("--url and --target name a Prometheus-compatible store; they do not apply with --source %s", o.source)
 	}
 	o.useDatadog = o.source == "datadog" || (o.source == "auto" && !named && o.datadog.KeysGiven())
 	if o.useDatadog {
 		filters, err := datadog.ParseSelector(o.selector)
 		if err != nil {
-			return nil, fmt.Errorf("--selector: %w", err)
+			return fmt.Errorf("--selector: %w", err)
 		}
 		o.ddFilters = filters
 		if o.step < time.Minute || o.step%time.Minute != 0 {
-			return nil, errors.New("--step must be a whole number of minutes with Datadog")
+			return errors.New("--step must be a whole number of minutes with Datadog")
 		}
 	} else {
 		m, err := prometheus.ParseSelector(o.selector)
 		if err != nil {
-			return nil, fmt.Errorf("--selector: %w", err)
+			return fmt.Errorf("--selector: %w", err)
 		}
 		o.promSelector = m
 	}
-	if *target != "" {
-		c, err := parseTarget(*target)
+	if target != "" {
+		c, err := parseTarget(target)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		o.target = &c
 	}
 	if o.days < 1 {
-		return nil, errors.New("--days must be at least 1")
+		return errors.New("--days must be at least 1")
 	}
 	if o.step < time.Second || o.step%time.Second != 0 {
-		return nil, errors.New("--step must be a whole number of seconds")
+		return errors.New("--step must be a whole number of seconds")
 	}
 	if o.interval < polling.MinInterval || o.interval%time.Second != 0 {
-		return nil, fmt.Errorf("--interval must be a whole number of seconds and at least %s", polling.MinInterval)
+		return fmt.Errorf("--interval must be a whole number of seconds and at least %s", polling.MinInterval)
 	}
 	if o.rollup <= 0 || o.rollup%time.Second != 0 {
-		return nil, errors.New("--rollup must be a positive whole number of seconds")
+		return errors.New("--rollup must be a positive whole number of seconds")
 	}
 	if o.duration < 0 || o.keepRaw < 0 || o.writeEvery <= 0 {
-		return nil, errors.New("--duration and --keep-raw must not be negative, and --write-every must be positive")
+		return errors.New("--duration and --keep-raw must not be negative, and --write-every must be positive")
 	}
-	return o, nil
+	return nil
 }
 
 func runRun(args []string) error {
