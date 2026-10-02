@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/thoras-ai/savings-preview/internal/adapters/datadog"
 	"github.com/thoras-ai/savings-preview/internal/adapters/polling"
 )
 
@@ -15,6 +16,7 @@ Sources:
   prometheus   Prometheus-compatible store, reached through the Kubernetes API server
                or by URL (Mimir, Grafana Cloud, Amazon Managed Prometheus)
   poll         Requests, nodes and metrics-server usage read at an interval (alias: snapshot)
+  datadog      Datadog metrics query API
 
 Run "savings-preview <source> -h" for the flags of a source.
 `
@@ -30,6 +32,8 @@ func main() {
 		err = runPrometheus(os.Args[2:])
 	case "poll", "snapshot":
 		err = polling.Main(os.Args[1], os.Args[2:])
+	case "datadog":
+		err = datadog.Main(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown source %q\n\n%s", os.Args[1], usage)
 		os.Exit(2)

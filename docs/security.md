@@ -1,6 +1,6 @@
 # Security
 
-Savings Preview is a command-line program that runs on your machine with a kubeconfig you choose. It installs nothing in the cluster, changes nothing in it, and sends nothing anywhere except requests to your Kubernetes API server (or to a metrics store URL you pass with `--url`), apart from any credential plugin your kubeconfig runs, such as `aws eks get-token`. A kubeconfig for the ServiceAccount in `deploy/rbac/` holds a token and runs no plugin. Everything it produces stays in local files.
+Savings Preview is a command-line program that runs on your machine with a kubeconfig you choose. It installs nothing in the cluster, changes nothing in it, and sends nothing anywhere except requests to your Kubernetes API server (or to a metrics store URL you pass with `--url`, or to the Datadog API with `savings-preview datadog`), apart from any credential plugin your kubeconfig runs, such as `aws eks get-token`. A kubeconfig for the ServiceAccount in `deploy/rbac/` holds a token and runs no plugin. Everything it produces stays in local files.
 
 ## What it reads
 
@@ -44,13 +44,17 @@ Polling has no namespaced variant: it reads every namespace in one list call per
 
 A `list` on pods returns whole pod objects: container images, commands and arguments, environment variable values written into the spec, labels and annotations (which can include `kubectl.kubernetes.io/last-applied-configuration`). The program keeps only the fields named above and drops the rest in memory. It never reads Secrets, ConfigMaps, logs or exec into containers, and the roles in `deploy/rbac/` do not allow it to.
 
+### `savings-preview datadog`
+
+Reads usage history from the Datadog metrics query API and needs no Kubernetes access. It sends an API key and an application key, read from files or environment variables, to the Datadog site you choose, and calls only `GET /api/v2/validate_keys` and `POST /api/v2/query/timeseries`. An application key scoped to `timeseries_query` is enough; [datadog-adapter.md](datadog-adapter.md#keys) shows how to create one. The metric queries are in `internal/adapters/datadog/metrics.go`. The keys are not printed or logged.
+
 ## What it writes
 
 Nothing in the cluster. None of the roles in `deploy/rbac/` grants a write verb (`create`, `update`, `patch`, `delete`) on any resource, and none grants `get` or `watch` on pods, Secrets or ConfigMaps.
 
 On your machine it writes:
 
-- the output file, `savings-preview.otlp.json` by default (`--out` for `prometheus`, `-o` for `poll`);
+- the output file, `savings-preview.otlp.json` by default (`--out` for `prometheus` and `datadog`, `-o` for `poll`);
 - for `poll`, a `FILE.readings/` directory holding the readings taken so far, so a stopped run can continue.
 
 ## What the output contains
@@ -63,7 +67,7 @@ It contains no Secrets, environment variables, logs, images, annotations, labels
 
 ## Where the data goes
 
-Nowhere, unless you send it. The program makes no network requests other than to the API server, or to the `--url` store. The report page (`scripts/build_report.py`) is one offline HTML file that reads the output file in the browser and makes no network requests. Sharing the output file with Thoras is a separate step that you choose to take.
+Nowhere, unless you send it. The program makes no network requests other than to the API server, the `--url` store, or the Datadog API. The report page (`scripts/build_report.py`) is one offline HTML file that reads the output file in the browser and makes no network requests. Sharing the output file with Thoras is a separate step that you choose to take.
 
 ## How to check this
 
