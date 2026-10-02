@@ -539,13 +539,16 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 	n := len(grid)
 
 	// Sums in the order of required: cpu use, mem use, cpu request, mem request.
-	// Zero-filled like Float64Array(n), so NaN spreads in from any container.
+	// Zero-filled like Float64Array(n), so NaN spreads in from any running container.
 	scale := [4]float64{1, gib, 1, gib}
 	sums := [4][]float64{make([]float64, n), make([]float64, n), make([]float64, n), make([]float64, n)}
 	pkCPU, pkMem := make([]float64, n), make([]float64, n)
 	// Means are weighted by the step of the span each grid point is in, so a
 	// rolled-up point counts for its whole step.
 	weight := make([]float64, n)
+	// Containers with both usage values at each point. One without them while
+	// others have them is not running then, and adds no usage and no request.
+	running := make([]int, n)
 	for _, c := range usable {
 		at := func(name string) []float64 { return resample(c.series[name], grid, c.step, c.spans, c.held[name]) }
 		var v [4][]float64
@@ -567,6 +570,10 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 				w = 1
 			}
 			weight[i] = math.Max(weight[i], w)
+			if !isFinite(v[0][i]) || !isFinite(v[1][i]) {
+				continue
+			}
+			running[i]++
 			for k := range sums {
 				sums[k][i] += v[k][i] / scale[k] * replicas[i]
 			}
@@ -582,7 +589,7 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 	}
 	anyValid := false
 	for i := range n {
-		if isFinite(sums[0][i]) && isFinite(sums[1][i]) && isFinite(sums[2][i]) && isFinite(sums[3][i]) {
+		if running[i] > 0 && isFinite(sums[0][i]) && isFinite(sums[1][i]) && isFinite(sums[2][i]) && isFinite(sums[3][i]) {
 			anyValid = true
 		} else {
 			for k := range sums {

@@ -499,6 +499,27 @@ const out = process.argv.slice(4).map(f => {
 process.stdout.write(JSON.stringify(out));
 `
 
+// A container without both usage values at a step is not running then and
+// adds no request, so the check container's request counts at one step of
+// 192 instead of the workload counting only at that step.
+func TestIntermittentContainers(t *testing.T) {
+	b, err := os.ReadFile("../../fixtures/intermittent.otlp.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Analyze(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Totals.Counted != 5 {
+		t.Errorf("counted %d, want 5", got.Totals.Counted)
+	}
+	want := 3 + 1 + (0.45*191+0.55)/192 + 0.1 + 0.05
+	if math.Abs(got.Totals.RequestedCores-want) > 1e-9 {
+		t.Errorf("requested cores %v, want %v", got.Totals.RequestedCores, want)
+	}
+}
+
 func TestParityWithModelJS(t *testing.T) {
 	nodeBin, err := exec.LookPath("node")
 	if err != nil {
@@ -516,8 +537,12 @@ func TestParityWithModelJS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	intermittent, err := filepath.Abs("../../fixtures/intermittent.otlp.json")
+	if err != nil {
+		t.Fatal(err)
+	}
 	dir := t.TempDir()
-	files := []string{fixture}
+	files := []string{fixture, intermittent}
 	for name, doc := range map[string]map[string]any{"partial": partialDoc(), "nodes": nodesDoc(), "snapshot": snapshotDoc(), "spans": spansDoc(), "held": heldDoc()} {
 		b, err := json.Marshal(doc)
 		if err != nil {

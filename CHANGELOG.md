@@ -2,6 +2,17 @@
 
 Each release's section here is its release notes on GitHub. `scripts/release_notes.py` reads the section for a tag, and the release workflow fails when there is none.
 
+## Unreleased
+
+### Fixed
+
+- The spend chart on page one no longer goes blank when one container of a workload runs only some of the time, such as an init container, a periodic check or a sidecar that exits. A container with no CPU or memory usage at a step is taken as not running there and adds no usage and no request; before, the whole workload had no value at that step, and the chart left out every bucket where any workload had none. A workload now has no value only where none of its containers has usage.
+- In the chart, a workload with no value in a bucket inside its span takes its nearest value. The bucket is left empty only when the workloads filled this way make up more than 5% of its spend. Empty buckets at the start and end are dropped, so a store with a shorter memory history than CPU history no longer leaves the first hours blank.
+
+### Changed figures
+
+- Totals change for clusters with such containers, in the report and in `summary.json`. A workload with an intermittent container was averaged over only the steps where every container had usage, often one or none, and is now averaged over every step where any container has usage. A workload that had no such step was left out and is now counted. Requests of a container count only at steps where it has usage. Fields and their meaning are unchanged, and files without intermittent containers give the same totals as before.
+
 ## v0.2.0
 
 ### Breaking changes

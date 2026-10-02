@@ -60,6 +60,7 @@ It prints the identity the kubeconfig gives, the result of `kubectl auth can-i` 
 
 - `docs/contract.md`: the OTel file every adapter writes and the report reads.
 - `fixtures/savings-preview.otlp.json`: a synthetic file that follows the contract. Regenerate it with `python3 scripts/gen_fixture.py`.
+- `fixtures/intermittent.otlp.json`: two synthetic days at 15-minute steps with containers that run only part of the time (an init container, a check that runs now and then) and workloads whose memory series start six hours after their CPU series. Regenerate it with `python3 scripts/gen_intermittent_fixture.py`.
 - `fixtures/minikube-poll.otlp.json`: one minute of `savings-preview poll` readings from a local minikube cluster, with the cluster, node, namespace and workload names replaced (`kube-system`, `cert-manager`, `coredns` and `metrics-server` kept).
 - `scripts/gen_demo`: writes `fixtures/demo-cluster.compact.otlp.json`, a 60-workload cluster for demos, listed on the published page as Demo cluster. The file is about 20 MB, so it is generated rather than committed: run `go run ./scripts/gen_demo` (or `make demo`) before building the site. The output is the same on every run. `docs/demo.md` is a five-minute walk through the report with it.
 - `scripts/validate_contract.py FILE`: checks a file against the contract.
