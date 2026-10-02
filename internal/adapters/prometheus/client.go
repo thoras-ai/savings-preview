@@ -49,6 +49,13 @@ type Client struct {
 	// more than one metric, or none. Joins between metrics are then made on
 	// the client.
 	OneMetricPerQuery bool
+	// MaxSeries is the most series the store returns for one query. A
+	// result that reaches it is taken as truncated and fails with a
+	// TruncatedError. Zero means no limit.
+	MaxSeries int
+	// ClusterLabels are labels that tell clusters apart in this store, in
+	// addition to ClusterLabels.
+	ClusterLabels []string
 
 	// sleep waits out the backoff between attempts; tests replace it.
 	sleep func(context.Context, time.Duration) error
@@ -59,6 +66,21 @@ type APIError struct {
 	Status    int
 	ErrorType string
 	Message   string
+}
+
+// TruncatedError reports a query whose result reached the store's series
+// limit, so that series may be missing from it.
+type TruncatedError struct{ Limit int }
+
+func (e *TruncatedError) Error() string {
+	return fmt.Sprintf("the result reached the store's limit of %d series per query, so it may be incomplete", e.Limit)
+}
+
+func (c *Client) checkSeries(ss []Series) ([]Series, error) {
+	if c.MaxSeries > 0 && len(ss) >= c.MaxSeries {
+		return nil, &TruncatedError{Limit: c.MaxSeries}
+	}
+	return ss, nil
 }
 
 func (e *APIError) Error() string {
@@ -197,7 +219,11 @@ func (c *Client) Query(ctx context.Context, q string, at time.Time) ([]Series, e
 	if err != nil {
 		return nil, err
 	}
-	return decode(raw)
+	ss, err := decode(raw)
+	if err != nil {
+		return nil, err
+	}
+	return c.checkSeries(ss)
 }
 
 // QueryRange runs one range query. The caller keeps (end-start)/step under the
@@ -213,7 +239,11 @@ func (c *Client) QueryRange(ctx context.Context, q string, start, end time.Time,
 	if err != nil {
 		return nil, err
 	}
-	return decode(raw)
+	ss, err := decode(raw)
+	if err != nil {
+		return nil, err
+	}
+	return c.checkSeries(ss)
 }
 
 // MaxPointsPerSeries is the hard cap Prometheus applies to one range query.

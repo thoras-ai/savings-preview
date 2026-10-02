@@ -58,6 +58,13 @@ func TestResolveBackend(t *testing.T) {
 		{url: "http://localhost:9090", name: BackendAzure, want: Backend{Name: BackendAzure,
 			Base: "http://localhost:9090", Audience: AzureAudience, MaxRange: AzureMaxRange, OneMetricPerQuery: true}},
 		{url: "https://ws-1.eastus.prometheus.monitor.azure.com/subscriptions/x", err: "not an Azure Monitor workspace query endpoint"},
+		{url: "https://monitoring.us-east-1.amazonaws.com", want: cloudWatch("https://monitoring.us-east-1.amazonaws.com", "us-east-1")},
+		{url: "https://monitoring.eu-west-1.amazonaws.com/api/v1/query_range", want: cloudWatch("https://monitoring.eu-west-1.amazonaws.com", "eu-west-1")},
+		{url: "https://vpce-0abc-1def.monitoring.us-west-2.vpce.amazonaws.com/", want: cloudWatch("https://vpce-0abc-1def.monitoring.us-west-2.vpce.amazonaws.com", "us-west-2")},
+		{url: "http://localhost:9090", name: BackendCloudWatch, want: cloudWatch("http://localhost:9090", "")},
+		{url: "https://monitoring.us-east-1.amazonaws.com/workspaces/ws-1", err: "not a CloudWatch PromQL endpoint"},
+		{url: "https://monitoring.googleapis.com/v1/projects/p-1/location/global/prometheus", want: Backend{Name: BackendGMP,
+			Base: "https://monitoring.googleapis.com/v1/projects/p-1/location/global/prometheus", Project: "p-1"}},
 		{url: "prom.example:9090", err: "not an http or https URL"},
 		{url: "http://prom.example", name: "cortex", err: `unknown backend "cortex"`},
 	} {
@@ -73,6 +80,22 @@ func TestResolveBackend(t *testing.T) {
 		}
 		if err != nil || got != c.want {
 			t.Errorf("%s %q: got %+v, %v; want %+v", c.url, c.name, got, err, c.want)
+		}
+	}
+}
+
+func cloudWatch(base, region string) Backend {
+	return Backend{Name: BackendCloudWatch, Base: base, Region: region, MaxRange: CloudWatchMaxRange,
+		MaxSeries: CloudWatchMaxSeries}
+}
+
+func TestCloudWatchURL(t *testing.T) {
+	if got, err := CloudWatchURL("ap-southeast-2"); err != nil || got != "https://monitoring.ap-southeast-2.amazonaws.com" {
+		t.Errorf("got %q, %v", got, err)
+	}
+	for _, bad := range []string{"", "us-east", "monitoring.us-east-1", "us-east-1/x", "US-EAST-1"} {
+		if _, err := CloudWatchURL(bad); err == nil {
+			t.Errorf("%q: want an error", bad)
 		}
 	}
 }

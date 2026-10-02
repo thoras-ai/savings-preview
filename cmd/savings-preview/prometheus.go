@@ -97,9 +97,10 @@ func runPrometheus(args []string) error {
 		store.MaxRange = direct.maxRange
 	}
 
-	client := &prometheus.Client{G: getter, Selector: matchers, MaxRange: store.MaxRange, OneMetricPerQuery: store.OneMetricPerQuery}
+	client := store.NewClient(getter, matchers)
 	f, rep, err := prometheus.Run(ctx, prometheus.Options{Client: client, Cluster: clusterName, Days: *days, Step: *step,
-		Concurrency: *concurrency, Log: logf, AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud, GKE: direct.gkeMode(store)})
+		Concurrency: *concurrency, Log: logf, AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud, GKE: direct.gkeMode(store),
+		CloudWatch: cloudWatchRegion(store)})
 	if err != nil {
 		if direct.url != "" {
 			return directHint(err, store)
@@ -214,7 +215,7 @@ func addDirectFlags(fs *flag.FlagSet) *directFlags {
 	fs.StringVar(&d.tokenFile, "bearer-token-file", "", "file holding a bearer token for --url (or set "+envBearer+")")
 	fs.StringVar(&d.basicFile, "basic-auth-file", "", "file holding user:password for --url (or set "+envBasic+")")
 	fs.StringVar(&d.headerFile, "header-file", "", "file of 'Name: value' lines, one header each, sent with --url (or set "+envHeaders+")")
-	fs.StringVar(&d.awsRegion, "aws-region", "", "AWS region of an Amazon Managed Prometheus workspace (default: from the URL)")
+	fs.StringVar(&d.awsRegion, "aws-region", "", "AWS region of an Amazon Managed Prometheus workspace or of CloudWatch (default: from the URL); with --backend cloudwatch and no --url, the region's CloudWatch PromQL endpoint")
 	fs.StringVar(&d.project, "project", "", "Google Cloud project to read from Google Managed Prometheus, in place of --url; implies --backend gmp")
 	fs.StringVar(&d.googleCreds, "google-credentials-file", "", "service account key for Google Managed Prometheus (default: Google Application Default Credentials)")
 	fs.StringVar(&d.gkeMetrics, "gke-metrics", "", "metrics to read from Google Managed Prometheus: "+strings.Join(prometheus.GKEModes, ", ")+
@@ -259,6 +260,16 @@ func (d *directFlags) check(target *string) error {
 	if d.url == "" && d.backend == prometheus.BackendGMP {
 		return errors.New("--backend gmp needs --project or --url")
 	}
+	if d.url == "" && d.backend == prometheus.BackendCloudWatch {
+		if d.awsRegion == "" {
+			return errors.New("--backend cloudwatch needs --aws-region or --url")
+		}
+		u, err := prometheus.CloudWatchURL(d.awsRegion)
+		if err != nil {
+			return fmt.Errorf("--aws-region: %w", err)
+		}
+		d.url = u
+	}
 	if d.url == "" && (d.backend != "" || d.tenant != "" || d.headerFile != "" || d.awsRegion != "" || d.googleCreds != "" ||
 		d.azureTenant != "" || d.azureClientID != "" || d.azureSecretFile != "") {
 		return errors.New("--backend, --tenant, --header-file, --aws-region, --google-credentials-file and the --azure flags apply only with --url")
@@ -279,8 +290,8 @@ func (d *directFlags) open(ctx context.Context) (prometheus.Getter, prometheus.B
 		return nil, store, err
 	}
 	if d.awsRegion != "" {
-		if store.Name != prometheus.BackendAMP {
-			return nil, store, fmt.Errorf("--aws-region applies to Amazon Managed Prometheus, not to %s", store.Name)
+		if store.Name != prometheus.BackendAMP && store.Name != prometheus.BackendCloudWatch {
+			return nil, store, fmt.Errorf("--aws-region applies to Amazon Managed Prometheus and CloudWatch, not to %s", store.Name)
 		}
 		store.Region = d.awsRegion
 	}
@@ -316,6 +327,14 @@ func hasAuthorization(chain prometheus.Chain) bool {
 		}
 	}
 	return false
+}
+
+// cloudWatchRegion is the region of a CloudWatch store, empty for any other.
+func cloudWatchRegion(store prometheus.Backend) string {
+	if store.Name != prometheus.BackendCloudWatch {
+		return ""
+	}
+	return store.Region
 }
 
 // newAzure builds Entra ID authentication; tests replace it.
@@ -378,7 +397,7 @@ func directAuth(ctx context.Context, store prometheus.Backend, files credentialF
 		chain = append(chain, hs...)
 	}
 	if tenant != "" {
-		if store.Name == prometheus.BackendAMP || store.Name == prometheus.BackendGrafanaCloud || store.Name == prometheus.BackendGMP || store.Name == prometheus.BackendAzure {
+		if store.Name != prometheus.BackendPrometheus && store.Name != prometheus.BackendMimir {
 			return nil, fmt.Errorf("--tenant applies to Mimir, not to %s", store.Name)
 		}
 		chain = append(chain, prometheus.Header{Name: prometheus.TenantHeader, Value: tenant})
@@ -393,17 +412,22 @@ func directAuth(ctx context.Context, store prometheus.Backend, files credentialF
 		}
 	}
 	switch store.Name {
-	case prometheus.BackendAMP:
+	case prometheus.BackendAMP, prometheus.BackendCloudWatch:
+		product, service := "Amazon Managed Prometheus", prometheus.SigV4AMP
+		if store.Name == prometheus.BackendCloudWatch {
+			product, service = "CloudWatch", prometheus.SigV4CloudWatch
+		}
 		if authz != nil {
-			return nil, errors.New("Amazon Managed Prometheus uses AWS credentials (SigV4); remove the bearer token or basic auth")
+			return nil, fmt.Errorf("%s uses AWS credentials (SigV4); remove the bearer token or basic auth", product)
 		}
 		if store.Region == "" {
-			return nil, errors.New("--aws-region is required when the region is not in the workspace URL")
+			return nil, fmt.Errorf("--aws-region is required when the region is not in the %s URL", product)
 		}
 		sig, err := prometheus.NewSigV4(ctx, store.Region)
 		if err != nil {
 			return nil, err
 		}
+		sig.Service = service
 		// Signing comes last so that it covers the headers added before it.
 		return append(chain, sig), nil
 	case prometheus.BackendGMP:
@@ -484,6 +508,8 @@ func directHint(err error, store prometheus.Backend) error {
 		return fmt.Errorf("%w (pass the store's limit as --max-query-range)", err)
 	case ae.Status == http.StatusNotFound && store.Name == prometheus.BackendGMP:
 		return fmt.Errorf("%w (check the project ID, and that the Cloud Monitoring API is enabled in the project)", err)
+	case ae.Status == http.StatusNotFound && store.Name == prometheus.BackendCloudWatch:
+		return fmt.Errorf("%w (CloudWatch answers PromQL at https://monitoring.REGION.amazonaws.com, with no path, in the regions its documentation lists)", err)
 	case ae.Status == http.StatusNotFound:
 		return fmt.Errorf("%w (check the path in the URL: Mimir serves the query API under /prometheus, Grafana Cloud under /api/prom, Amazon Managed Prometheus under /workspaces/WORKSPACE_ID)", err)
 	case ae.Status == http.StatusUnauthorized && strings.Contains(strings.ToLower(ae.Message), "org id"):
@@ -494,6 +520,8 @@ func directHint(err error, store prometheus.Backend) error {
 			return fmt.Errorf("%w (Grafana Cloud wants the stack's Prometheus instance ID as user and a token with the metrics:read scope)", err)
 		case prometheus.BackendAMP:
 			return fmt.Errorf("%w (the AWS identity needs aps:QueryMetrics on the workspace; see docs/prometheus-adapter.md)", err)
+		case prometheus.BackendCloudWatch:
+			return fmt.Errorf("%w (the AWS identity needs cloudwatch:GetMetricData and cloudwatch:ListMetrics; see docs/prometheus-adapter.md)", err)
 		case prometheus.BackendGMP:
 			return fmt.Errorf("%w (the Google identity needs the Monitoring Viewer role, roles/monitoring.viewer, on project %s; see docs/prometheus-adapter.md)", err, store.Project)
 		case prometheus.BackendAzure:

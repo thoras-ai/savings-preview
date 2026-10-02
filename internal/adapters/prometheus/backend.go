@@ -16,22 +16,35 @@ const (
 	BackendAMP          = "amp"
 	BackendGMP          = "gmp"
 	BackendAzure        = "azure"
+	BackendCloudWatch   = "cloudwatch"
 )
 
 // Backends lists the names ResolveBackend accepts.
-var Backends = []string{BackendPrometheus, BackendMimir, BackendGrafanaCloud, BackendAMP, BackendGMP, BackendAzure}
+var Backends = []string{BackendPrometheus, BackendMimir, BackendGrafanaCloud, BackendAMP, BackendGMP, BackendAzure, BackendCloudWatch}
 
 // Backend is a store reached directly by URL, with its query limits.
 type Backend struct {
 	Name     string
 	Base     string        // base URL of the Prometheus query API
-	Region   string        // AWS region, for Amazon Managed Prometheus
+	Region   string        // AWS region, for Amazon Managed Prometheus and CloudWatch
 	Project  string        // Google Cloud project, for Google Managed Prometheus
 	Audience string        // Entra ID token audience, for Azure Monitor managed Prometheus
 	MaxRange time.Duration // longest time range of one query; zero for none
 	// OneMetricPerQuery is set for stores that reject a query reading more
 	// than one metric, as Azure Monitor managed Prometheus does.
 	OneMetricPerQuery bool
+	// MaxSeries is the most series the store returns for one query; it
+	// truncates the rest without failing. Zero for no limit.
+	MaxSeries int
+}
+
+// NewClient returns a client for the store with its query limits.
+func (b Backend) NewClient(g Getter, selector string) *Client {
+	c := &Client{G: g, Selector: selector, MaxRange: b.MaxRange, OneMetricPerQuery: b.OneMetricPerQuery, MaxSeries: b.MaxSeries}
+	if b.Name == BackendCloudWatch {
+		c.ClusterLabels = CloudWatchClusterLabels
+	}
+	return c
 }
 
 // Query limits of the managed stores.
@@ -39,6 +52,21 @@ const (
 	GrafanaCloudMaxRange = 32 * 24 * time.Hour
 	AMPMaxRange          = 95 * 24 * time.Hour
 	AzureMaxRange        = 32 * 24 * time.Hour
+	// CloudWatch counts range selectors and the lookback in the range.
+	CloudWatchMaxRange  = 7 * 24 * time.Hour
+	CloudWatchMaxSeries = 500
+)
+
+// CloudWatchClusterLabels tell clusters apart in CloudWatch: the cluster name
+// OpenTelemetry Container Insights sets as a resource attribute, and the
+// account that sent the metrics, which differs for metrics shared from
+// other accounts.
+var CloudWatchClusterLabels = []string{"@resource.k8s.cluster.name", "@aws.account"}
+
+// SigV4 service names.
+const (
+	SigV4AMP        = "aps"
+	SigV4CloudWatch = "monitoring"
 )
 
 // Azure Monitor workspaces answer PromQL at a host under one of these
@@ -59,7 +87,20 @@ func azureDomain(host string) string {
 	return ""
 }
 
-var ampHost = regexp.MustCompile(`(?:^|\.)aps-workspaces\.([a-z0-9-]+)\.(?:vpce\.)?amazonaws\.com(?:\.cn)?$`)
+var (
+	ampHost        = regexp.MustCompile(`(?:^|\.)aps-workspaces\.([a-z0-9-]+)\.(?:vpce\.)?amazonaws\.com(?:\.cn)?$`)
+	cloudWatchHost = regexp.MustCompile(`(?:^|\.)monitoring\.([a-z0-9-]+)\.(?:vpce\.)?amazonaws\.com$`)
+)
+
+// CloudWatchURL is the PromQL endpoint of CloudWatch in an AWS region.
+func CloudWatchURL(region string) (string, error) {
+	if !awsRegion.MatchString(region) {
+		return "", fmt.Errorf("%q is not an AWS region", region)
+	}
+	return "https://monitoring." + region + ".amazonaws.com", nil
+}
+
+var awsRegion = regexp.MustCompile(`^[a-z]{2}(?:-[a-z]+)+-[0-9]$`)
 
 // GMPHost serves the PromQL API of Google Cloud Monitoring, which answers for
 // Google Managed Prometheus and for Cloud Monitoring metrics such as GKE
@@ -82,8 +123,8 @@ func GMPURL(project string) (string, error) {
 // ResolveBackend works out the backend for a store URL and normalizes the
 // URL to the base of its query API. name is empty to detect the backend from
 // the host: Amazon Managed Prometheus workspaces, Grafana Cloud stacks, the
-// Google Cloud Monitoring PromQL API and Azure Monitor workspaces are
-// recognized, a tenant implies Mimir,
+// Google Cloud Monitoring PromQL API, Azure Monitor workspaces and the
+// CloudWatch PromQL endpoint are recognized, a tenant implies Mimir,
 // and anything else is a plain Prometheus-compatible store.
 func ResolveBackend(rawURL, name string, tenant bool) (Backend, error) {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
@@ -100,10 +141,13 @@ func ResolveBackend(rawURL, name string, tenant bool) (Backend, error) {
 
 	b := Backend{Name: name}
 	m := ampHost.FindStringSubmatch(host)
+	cw := cloudWatchHost.FindStringSubmatch(host)
 	if b.Name == "" {
 		switch {
 		case m != nil:
 			b.Name = BackendAMP
+		case cw != nil:
+			b.Name = BackendCloudWatch
 		case strings.HasSuffix(host, ".grafana.net"):
 			b.Name = BackendGrafanaCloud
 		case host == GMPHost:
@@ -155,6 +199,15 @@ func ResolveBackend(rawURL, name string, tenant bool) (Backend, error) {
 		}
 		b.MaxRange = AzureMaxRange
 		b.OneMetricPerQuery = true
+	case BackendCloudWatch:
+		if cw != nil {
+			b.Region = cw[1]
+		}
+		if path != "" {
+			return Backend{}, fmt.Errorf("%s is not a CloudWatch PromQL endpoint; want https://monitoring.REGION.amazonaws.com", RedactURL(rawURL))
+		}
+		b.MaxRange = CloudWatchMaxRange
+		b.MaxSeries = CloudWatchMaxSeries
 	default:
 		return Backend{}, fmt.Errorf("unknown backend %q; want one of %s", name, strings.Join(Backends, ", "))
 	}
