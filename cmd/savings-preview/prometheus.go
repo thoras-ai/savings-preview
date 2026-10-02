@@ -508,6 +508,8 @@ func directHint(err error, store prometheus.Backend) error {
 		return fmt.Errorf("%w (pass the store's limit as --max-query-range)", err)
 	case ae.Status == http.StatusNotFound && store.Name == prometheus.BackendGMP:
 		return fmt.Errorf("%w (check the project ID, and that the Cloud Monitoring API is enabled in the project)", err)
+	case ae.Status == http.StatusUnprocessableEntity && store.Name == prometheus.BackendCloudWatch:
+		return fmt.Errorf("%w (CloudWatch caps the series and samples a query may scan per day of its range; try a coarser --step such as 5m, or read part of the cluster with --selector)", err)
 	case ae.Status == http.StatusNotFound && store.Name == prometheus.BackendCloudWatch:
 		return fmt.Errorf("%w (CloudWatch answers PromQL at https://monitoring.REGION.amazonaws.com, with no path, in the regions its documentation lists)", err)
 	case ae.Status == http.StatusNotFound:

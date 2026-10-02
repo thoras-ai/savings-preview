@@ -77,6 +77,12 @@ func parseMatcher(s string) (matcher, rest string, err error) {
 			return "", "", fmt.Errorf("%q is not a label matcher (want name=\"value\")", s)
 		}
 		name = strings.TrimSpace(s[:i])
+		// A bare name that is not a classic one must look like an
+		// OpenTelemetry attribute, so that a typo such as k8s-cluster still
+		// fails here rather than at the store.
+		if !labelName.MatchString(name) && !strings.HasPrefix(name, "@") && !strings.Contains(name, ".") {
+			return "", "", fmt.Errorf("%q is not a label name", name)
+		}
 	}
 	if !labelName.MatchString(name) && !otelLabelName.MatchString(name) {
 		return "", "", fmt.Errorf("%q is not a label name", name)

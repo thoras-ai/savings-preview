@@ -32,7 +32,7 @@ func TestParseSelector(t *testing.T) {
 			t.Errorf("%q: got %q, %v; want %q", c.in, got, err, c.want)
 		}
 	}
-	for _, bad := range []string{`cluster`, `1x="a"`, `__name__="up"`, `cluster="a`, `cluster=~"("`, `a="b" c="d"`, `cluster<"a"`, `cluster=a"b`, `"@a.b`, `"a b"="c"`, `"@a.b"`, `"__name__"="up"`} {
+	for _, bad := range []string{`cluster`, `1x="a"`, `__name__="up"`, `cluster="a`, `cluster=~"("`, `a="b" c="d"`, `cluster<"a"`, `cluster=a"b`, `"@a.b`, `"a b"="c"`, `"@a.b"`, `"__name__"="up"`, `k8s-cluster=prod`, `a/b=c`} {
 		if got, err := ParseSelector(bad); err == nil {
 			t.Errorf("%q: want an error, got %q", bad, got)
 		}

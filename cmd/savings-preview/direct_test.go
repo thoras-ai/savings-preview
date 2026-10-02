@@ -433,6 +433,10 @@ func TestDirectHintForCloudWatch(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "cloudwatch:GetMetricData and cloudwatch:ListMetrics") {
 		t.Errorf("403: %v", err)
 	}
+	err = directHint(&prometheus.APIError{Status: 422, Message: "too many samples"}, store)
+	if err == nil || !strings.Contains(err.Error(), "--step") {
+		t.Errorf("422: %v", err)
+	}
 	err = directHint(&prometheus.APIError{Status: 404, Message: "not found"}, store)
 	if err == nil || !strings.Contains(err.Error(), "monitoring.REGION.amazonaws.com") {
 		t.Errorf("404: %v", err)

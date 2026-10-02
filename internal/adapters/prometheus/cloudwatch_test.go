@@ -370,4 +370,24 @@ func TestClientTruncation(t *testing.T) {
 	if _, err := c.Query(context.Background(), "up{}", time.Time{}); !errors.As(err, &te) {
 		t.Fatalf("at the limit: %v", err)
 	}
+	if !strings.Contains(te.Error(), "--selector") {
+		t.Errorf("the error gives no next step: %v", te)
+	}
+	// A truncation warning counts even under the limit.
+	f.handle = func(string, url.Values) (int, any) {
+		b := groups(sets[:1]...)
+		b["warnings"] = []string{"Query result truncated: exceeded the maximum of 500 series"}
+		return 200, b
+	}
+	if _, err := c.Query(context.Background(), "up{}", time.Time{}); !errors.As(err, &te) {
+		t.Fatalf("truncation warning: %v", err)
+	}
+	f.handle = func(string, url.Values) (int, any) {
+		b := groups(sets[:1]...)
+		b["warnings"] = []string{"some other warning"}
+		return 200, b
+	}
+	if _, err := c.Query(context.Background(), "up{}", time.Time{}); err != nil {
+		t.Fatalf("other warning: %v", err)
+	}
 }
