@@ -36,7 +36,7 @@
   };
   var REQUIRED = [M.cpuUse, M.memUse, M.cpuReq, M.memReq];
   var REPLICA_METRICS = { deployment: 'k8s.deployment.pod.desired', statefulset: 'k8s.statefulset.pod.desired' };
-  var FIELDS = ['reqCpu', 'reqMem', 'useCpu', 'useMem', 'peakCpu', 'peakMem', 'tgtCpu', 'tgtMem', 'cur', 'opt'];
+  var FIELDS = ['reqCpu', 'reqMem', 'useCpu', 'useMem', 'peakCpu', 'peakMem', 'tgtCpu', 'tgtMem', 'cur', 'opt', 'useCost'];
 
   function attrMap(resource) {
     var out = {};
@@ -356,6 +356,7 @@
       s.tgtMem[k] = pm[k] * h;
       s.cur[k] = Math.max(s.reqCpu[k] * rates.perCore, s.reqMem[k] * rates.perGiB);
       s.opt[k] = Math.max(Math.min(s.reqCpu[k], s.tgtCpu[k]) * rates.perCore, Math.min(s.reqMem[k], s.tgtMem[k]) * rates.perGiB);
+      s.useCost[k] = Math.max(s.useCpu[k] * rates.perCore, s.useMem[k] * rates.perGiB);
       p.wasteCpu[k] = Math.max(0, s.reqCpu[k] - s.tgtCpu[k]);
       p.wasteMem[k] = Math.max(0, s.reqMem[k] - s.tgtMem[k]);
     }

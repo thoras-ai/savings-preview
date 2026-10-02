@@ -25,19 +25,20 @@ Open the published page and choose **Demo cluster** under "Or try a sample", or 
     python3 scripts/build_report.py --site dist
     python3 -m http.server -d dist
 
-Set the theme to Light if the room has a projector. Open the report once beforehand so the file is cached; it is about 20 MB.
+The page opens in the light theme, which suits a projector. Open the report once beforehand so the file is cached; it is about 20 MB.
 
 The figures below are at the default settings. They hold as long as the generator does not change.
 
-## 1. Summary (1 minute)
+## 1. Page one (1 minute)
 
-Show: the four tiles, the confidence pill, "What this means", and the spend chart.
+Show: the headline, today against Thoras, the gap chart and the three workloads.
 
-- "This is a 60-workload production cluster. The CLI read 14 days of usage from the Prometheus it already runs. Nothing was installed in the cluster, and nothing left the laptop."
-- "It spends about $73,000 a year on what its workloads request. About $41,000 of that, 56%, is requested above what the workloads used plus headroom."
-- "That is about 103 of 149 requested cores and 210 of 465 GiB."
-- Point at the confidence pill: "Good confidence: two weeks at 5-minute resolution. With 1-minute data it would be high."
-- Point at the spend chart: the gap between current spend and "without waste" is widest at night and at weekends, when traffic drops and the requests do not.
+- "This is a 60-workload production cluster. The CLI read 14 days of usage from the Prometheus it already runs, and the figures were computed on the laptop. Nothing was installed, and nothing was uploaded."
+- Read the headline: "Thoras would cut this cluster's compute spend by $41,053 a year, 56%."
+- Point at the two cards: "Today it pays $72,778 a year for 149 cores and 465 GiB of requests at 36% utilization. Right-sized, it is $31,725 for 46 cores and 255 GiB at 89%."
+- Point at the gap chart: the hatched waste between requested today and with Thoras is widest at night and at weekends, when traffic drops and the requests do not.
+- Point at the three workloads: "`storefront` runs all day and saves the most of the always-on services. `nightly-etl` runs for a few hours and holds its request all day. `postgres-orders` is already right-sized, and the page says so instead of inventing savings."
+- Type 5 into Clusters like this one, then open Details for engineers for the rest.
 
 ## 2. Where the money is (1 minute)
 
@@ -50,7 +51,7 @@ Show: the map, the namespace ranking and the top 10.
 
 ## 3. A workload drill-down (1 minute 30)
 
-Select `storefront` in the top 10.
+Select `storefront` in the three workloads on page one, or in the top 10.
 
 - "Requested, usage and target over two weeks. The replicas follow traffic, so total requests move with them, but each pod still asks for far more than it uses."
 - "What Thoras would set: the per-pod request it would have averaged, next to the single peak-safe value a person would have to pick to be safe at the busiest hour."
@@ -75,5 +76,5 @@ Open Assumptions.
 
 Select Print summary in the header.
 
-- "One letter-size page for the budget owner: the headline figures, the confidence, spend over the window, the top workloads and how the figure is computed, under the settings on screen."
+- "Page one on a letter-size sheet for the budget owner, under the settings on screen. Copy summary on page one gives the same figures in four lines for chat or email."
 - Close by pointing at Data and method: "Every number traces back to the file and the formula on this page. To run it on your cluster, it is one command with your existing kubeconfig."

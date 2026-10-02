@@ -11,18 +11,19 @@
 
   function $(id) { return document.getElementById(id); }
 
+  // The page opens in the light theme until the reader picks another.
   // Storage can be missing or blocked (private windows, pages opened from disk).
   function storedTheme() {
     try {
       var v = localStorage.getItem(THEME_KEY);
-      return v === 'light' || v === 'dark' ? v : 'auto';
-    } catch (e) { return 'auto'; }
+      return v === 'auto' || v === 'dark' ? v : 'light';
+    } catch (e) { return 'light'; }
   }
 
   function setTheme(choice) {
     page.theme = choice;
     try {
-      if (choice === 'auto') localStorage.removeItem(THEME_KEY);
+      if (choice === 'light') localStorage.removeItem(THEME_KEY);
       else localStorage.setItem(THEME_KEY, choice);
     } catch (e) { /* the choice lasts until the page closes */ }
     applyTheme();
@@ -49,10 +50,10 @@
     $('loading').hidden = which !== 'loading';
     $('start').hidden = which !== 'start';
     $('report').hidden = which !== 'report';
-    $('secbar').hidden = which !== 'report';
     $('open-another').hidden = which !== 'report';
     $('copy-link').hidden = which !== 'report';
     $('print-summary').hidden = which !== 'report';
+    $('book-demo').hidden = which !== 'report';
     // Printing shows the summary layout only while a report is open.
     document.body.classList.toggle('has-print', which === 'report');
     if (which !== 'report') $('context').textContent = '';
@@ -87,8 +88,7 @@
 
   function context() {
     return {
-      data: page.data, result: page.result, state: store.get(), changed: null, set: store.set, go: go,
-      approx: ui.confidenceLevel(page.result.fidelity) === 'provisional'
+      data: page.data, result: page.result, state: store.get(), changed: null, set: store.set, go: go
     };
   }
 
@@ -105,17 +105,22 @@
     page.timing.render = performance.now() - t0;
   }
 
+  // The summary is page one. The other sections sit in one collapsed
+  // disclosure under it, with their own section bar.
   function buildLayout() {
-    $('secbar').querySelector('ol').innerHTML = sections.map(function (s) {
-      return '<li><a href="#section=' + s.id + '" data-section="' + s.id + '"><span class="step">' + s.number + '</span>' + ui.esc(s.title) + '</a></li>';
-    }).join('');
-    $('report').innerHTML = sections.map(function (s) {
-      // The summary opens with the cluster name, so its title is for screen readers only.
+    var rest = sections.slice(1);
+    function section(s) {
+      // The summary opens with its headline, so its title is for screen readers only.
       var head = s.id === 'summary' ? '<h2 class="visually-hidden">' + ui.esc(s.title) + '</h2>' :
         '<header class="section-head"><span class="step">' + s.number + '</span><h2>' + ui.esc(s.title) + '</h2></header>';
       return '<section id="section-' + s.id + '" class="section' + (s.placeholder ? ' section-placeholder' : '') + '" data-section="' + s.id + '">' +
         head + '<div class="section-body"></div></section>';
-    }).join('');
+    }
+    $('report').innerHTML = section(sections[0]) +
+      '<details id="details" class="details"><summary>Details for engineers</summary>' +
+      '<nav id="secbar" class="secbar" aria-label="Report sections"><ol>' + rest.map(function (s) {
+        return '<li><a href="#section=' + s.id + '" data-section="' + s.id + '"><span class="step">' + s.number + '</span>' + ui.esc(s.title) + '</a></li>';
+      }).join('') + '</ol></nav>' + rest.map(section).join('') + '</details>';
   }
 
   function markActive(id) {
@@ -130,6 +135,7 @@
   function go(id, instant) {
     var el = $('section-' + id);
     if (!el) return;
+    if (id !== sections[0].id) $('details').open = true;
     scrolling = id;
     store.set({ section: id });
     markActive(id);
@@ -150,6 +156,7 @@
   // The section in view is the last one whose top has passed under the bar,
   // or the last section once the page is scrolled to the end.
   function sectionInView() {
+    if (!$('details').open) return sections[0].id;
     var bar = $('secbar').getBoundingClientRect().bottom, id = sections[0].id;
     sections.forEach(function (s) {
       if ($('section-' + s.id).getBoundingClientRect().top <= bar + 16) id = s.id;
@@ -182,7 +189,7 @@
     page.timing = { prepare: performance.now() - t0 };
     recompute();
     show('report');
-    $('context').textContent = (data.cluster || 'Unnamed cluster') + ' · ' + data.fidelity.label;
+    $('context').textContent = data.cluster || 'Unnamed cluster';
     renderSections(null);
     var id = store.get().section;
     markActive(id);
@@ -262,14 +269,24 @@
       clearTimeout(timer);
       timer = setTimeout(function () {
         if (!page.result || $('report').hidden) return;
-        var ctx = context();
-        sections.forEach(function (s) { if (s.resize) s.resize($('section-' + s.id).querySelector('.section-body'), ctx); });
+        resizeSections();
       }, 120);
+    });
+    // Charts drawn while the details were closed had no width to fit.
+    $('details').addEventListener('toggle', function () {
+      if (!page.result) return;
+      if ($('details').open) resizeSections();
+      else if (store.get().section !== sections[0].id) { store.set({ section: sections[0].id }); markActive(sections[0].id); }
     });
     if (window.matchMedia) {
       var mq = window.matchMedia('(prefers-color-scheme: dark)');
       if (mq.addEventListener) mq.addEventListener('change', applyTheme);
     }
+  }
+
+  function resizeSections() {
+    var ctx = context();
+    sections.forEach(function (s) { if (s.resize) s.resize($('section-' + s.id).querySelector('.section-body'), ctx); });
   }
 
   // The link carries the settings in its hash. The clipboard API needs a
