@@ -1,0 +1,35 @@
+# Access for `savings-preview prometheus --list`: find the metrics store
+# without any service proxy access. Use it before prometheus-namespaced.yaml
+# when the store's service and port are not known yet.
+# Create the namespace first: kubectl create namespace savings-preview
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: savings-preview
+  namespace: savings-preview
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: savings-preview-discovery
+rules:
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [list]
+  # Optional: remove this rule if the Prometheus Operator is not installed.
+  - apiGroups: [monitoring.coreos.com]
+    resources: [prometheuses, prometheusagents]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: savings-preview-discovery
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: savings-preview-discovery
+subjects:
+  - kind: ServiceAccount
+    name: savings-preview
+    namespace: savings-preview

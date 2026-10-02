@@ -1,0 +1,35 @@
+# Read-only access for `savings-preview poll`.
+# Create the namespace first: kubectl create namespace savings-preview
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: savings-preview
+  namespace: savings-preview
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: savings-preview-poll
+rules:
+  - apiGroups: [""]
+    resources: [pods, nodes]
+    verbs: [list]
+  - apiGroups: [apps]
+    resources: [replicasets, deployments, statefulsets]
+    verbs: [list]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: savings-preview-poll
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: savings-preview-poll
+subjects:
+  - kind: ServiceAccount
+    name: savings-preview
+    namespace: savings-preview
