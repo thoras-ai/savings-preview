@@ -14,16 +14,18 @@ const (
 	BackendMimir        = "mimir"
 	BackendGrafanaCloud = "grafana-cloud"
 	BackendAMP          = "amp"
+	BackendGMP          = "gmp"
 )
 
 // Backends lists the names ResolveBackend accepts.
-var Backends = []string{BackendPrometheus, BackendMimir, BackendGrafanaCloud, BackendAMP}
+var Backends = []string{BackendPrometheus, BackendMimir, BackendGrafanaCloud, BackendAMP, BackendGMP}
 
 // Backend is a store reached directly by URL, with its query limits.
 type Backend struct {
 	Name     string
 	Base     string        // base URL of the Prometheus query API
 	Region   string        // AWS region, for Amazon Managed Prometheus
+	Project  string        // Google Cloud project, for Google Managed Prometheus
 	MaxRange time.Duration // longest time range of one query; zero for none
 }
 
@@ -35,11 +37,29 @@ const (
 
 var ampHost = regexp.MustCompile(`(?:^|\.)aps-workspaces\.([a-z0-9-]+)\.(?:vpce\.)?amazonaws\.com(?:\.cn)?$`)
 
+// GMPHost serves the PromQL API of Google Cloud Monitoring, which answers for
+// Google Managed Prometheus and for Cloud Monitoring metrics such as GKE
+// system metrics.
+const GMPHost = "monitoring.googleapis.com"
+
+var (
+	gmpPath   = regexp.MustCompile(`^/v1/projects/([^/]+)/location/global/prometheus$`)
+	projectID = regexp.MustCompile(`^[a-z0-9][a-z0-9.:-]*[a-z0-9]$`)
+)
+
+// GMPURL is the base of the PromQL API for a Google Cloud project.
+func GMPURL(project string) (string, error) {
+	if !projectID.MatchString(project) {
+		return "", fmt.Errorf("%q is not a Google Cloud project ID", project)
+	}
+	return "https://" + GMPHost + "/v1/projects/" + project + "/location/global/prometheus", nil
+}
+
 // ResolveBackend works out the backend for a store URL and normalizes the
 // URL to the base of its query API. name is empty to detect the backend from
-// the host: Amazon Managed Prometheus workspaces and Grafana Cloud stacks are
-// recognized, a tenant implies Mimir, and anything else is a plain
-// Prometheus-compatible store.
+// the host: Amazon Managed Prometheus workspaces, Grafana Cloud stacks and the
+// Google Cloud Monitoring PromQL API are recognized, a tenant implies Mimir,
+// and anything else is a plain Prometheus-compatible store.
 func ResolveBackend(rawURL, name string, tenant bool) (Backend, error) {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -61,6 +81,8 @@ func ResolveBackend(rawURL, name string, tenant bool) (Backend, error) {
 			b.Name = BackendAMP
 		case strings.HasSuffix(host, ".grafana.net"):
 			b.Name = BackendGrafanaCloud
+		case host == GMPHost:
+			b.Name = BackendGMP
 		case tenant:
 			b.Name = BackendMimir
 		default:
@@ -90,6 +112,12 @@ func ResolveBackend(rawURL, name string, tenant bool) (Backend, error) {
 			return Backend{}, fmt.Errorf("%s is not an Amazon Managed Prometheus workspace URL; want https://aps-workspaces.REGION.amazonaws.com/workspaces/WORKSPACE_ID", RedactURL(rawURL))
 		}
 		b.MaxRange = AMPMaxRange
+	case BackendGMP:
+		m := gmpPath.FindStringSubmatch(path)
+		if m == nil || !projectID.MatchString(m[1]) {
+			return Backend{}, fmt.Errorf("%s is not a Google Managed Prometheus URL; want https://%s/v1/projects/PROJECT_ID/location/global/prometheus, or pass --project", RedactURL(rawURL), GMPHost)
+		}
+		b.Project = m[1]
 	default:
 		return Backend{}, fmt.Errorf("unknown backend %q; want one of %s", name, strings.Join(Backends, ", "))
 	}

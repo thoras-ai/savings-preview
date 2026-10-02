@@ -28,6 +28,9 @@ type Options struct {
 	// because a series without a container label may be the sum of a pod's
 	// containers rather than the pod cgroup.
 	AdaptiveMetrics bool
+	// GKE is set for Google Managed Prometheus to one of GKEModes: which
+	// metrics to read from the project.
+	GKE string
 }
 
 // Report describes what a pull found and what it could not get.
@@ -38,6 +41,8 @@ type Report struct {
 	// UsageFromPods is set when the store has no per-container usage and
 	// container usage was split from the pod cgroup series by requests.
 	UsageFromPods bool
+	// GKESystemMetrics is set when the data came from GKE system metrics.
+	GKESystemMetrics bool
 	// NoRequests is set when the store's requests cannot be used, so every
 	// container lacks them and no savings can be computed from the file.
 	NoRequests bool
@@ -87,6 +92,10 @@ type pulled struct {
 	oom                                            map[cKey][]contract.Point
 	replicas                                       map[wKey][]contract.Point
 	nodeCPU, nodeMem                               map[string][]contract.Point
+	// gke is set when the series are GKE system metrics. Node attributes
+	// then come from the node series' labels, in gkeNodes.
+	gke      bool
+	gkeNodes map[string]*contract.Node
 }
 
 // Run pulls the history from the store and assembles the contract file.
@@ -96,6 +105,10 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 	if err != nil {
 		return nil, rep, err
 	}
+	if pl.gke != nil {
+		return pullGKE(ctx, o, pl.gke, rep)
+	}
+	o.Client = pl.client
 	p, err := pull(ctx, o, rep.Start, pl.src, pl.kinds)
 	if err != nil {
 		return nil, rep, err
@@ -132,6 +145,11 @@ func (o *Options) defaults() {
 type plan struct {
 	src   sources
 	kinds []string
+	// client is the client the pull uses: o.Client, or for Managed
+	// Prometheus a copy that maps the cluster label.
+	client *Client
+	// gke is set when the pull reads GKE system metrics instead.
+	gke *gkePlan
 }
 
 func prepare(ctx context.Context, o Options) (*plan, *Report, error) {
@@ -140,6 +158,22 @@ func prepare(ctx context.Context, o Options) (*plan, *Report, error) {
 
 	if err := c.Check(ctx); err != nil {
 		return nil, rep, err
+	}
+	if o.GKE != "" {
+		mode, err := gkeMode(ctx, c, o.GKE, o.Now)
+		if err != nil {
+			return nil, rep, err
+		}
+		if mode == GKESystem {
+			return prepareGKE(ctx, o, rep)
+		}
+		c = gkeClient(c, "cluster")
+		o.Client = c
+		if ok, err := c.present(ctx, ExportedNamespaceProbe, o.Now); err != nil {
+			return nil, rep, fmt.Errorf("probe kube-state-metrics: %w", err)
+		} else if ok {
+			return nil, rep, fmt.Errorf("kube_pod_owner has an exported_namespace label: Managed Prometheus replaced the namespace of the pods with the namespace of kube-state-metrics, so pods cannot be mapped to workloads. Scrape kube-state-metrics with a ClusterPodMonitoring, which keeps the namespace label, or read GKE system metrics with --gke-metrics system")
+		}
 	}
 	maxBack := time.Duration(o.Days) * 24 * time.Hour
 	if err := oneCluster(ctx, c, o.Now, maxBack); err != nil {
@@ -217,9 +251,14 @@ func prepare(ctx context.Context, o Options) (*plan, *Report, error) {
 	if !full {
 		rep.Warnings = append(rep.Warnings, fmt.Sprintf("the store holds about %s of history, less than the %d days asked for", spanText(o.Now.Sub(earliest)), o.Days))
 	}
+	if o.GKE != "" {
+		if w := downsampledWarning(o.Now.Sub(earliest), o.Step); w != "" {
+			rep.Warnings = append(rep.Warnings, w)
+		}
+	}
 
 	rep.NoRequests = !hasRequests
-	return &plan{src: sources{requests: hasRequests, podUsage: rep.UsageFromPods, oom: hasRestarts}, kinds: kinds}, rep, nil
+	return &plan{src: sources{requests: hasRequests, podUsage: rep.UsageFromPods, oom: hasRestarts}, kinds: kinds, client: c}, rep, nil
 }
 
 func spanText(d time.Duration) string {
@@ -230,9 +269,10 @@ func spanText(d time.Duration) string {
 }
 
 type job struct {
-	name  string
-	query string
-	into  func([]Series)
+	client *Client // o.Client when nil
+	name   string
+	query  string
+	into   func([]Series)
 }
 
 // sources says which series the store can provide.
@@ -243,14 +283,7 @@ type sources struct {
 }
 
 func pull(ctx context.Context, o Options, start time.Time, src sources, kinds []string) (*pulled, error) {
-	p := &pulled{
-		cpuUse: map[cKey][]contract.Point{}, memUse: map[cKey][]contract.Point{}, oom: map[cKey][]contract.Point{},
-		cpuReq: map[cKey][]contract.Point{}, memReq: map[cKey][]contract.Point{},
-		cpuLim: map[cKey][]contract.Point{}, memLim: map[cKey][]contract.Point{},
-		replicas: map[wKey][]contract.Point{},
-		nodeCPU:  map[string][]contract.Point{}, nodeMem: map[string][]contract.Point{},
-	}
-	var mu sync.Mutex
+	p := newPulled()
 	var jobs []job
 	add := func(name, q string, into func([]Series)) {
 		jobs = append(jobs, job{name: name, query: q, into: into})
@@ -296,7 +329,26 @@ func pull(ctx context.Context, o Options, start time.Time, src sources, kinds []
 	}
 	add("node cpu", NodeAllocatable("cpu"), nodes(p.nodeCPU))
 	add("node memory", NodeAllocatable("memory"), nodes(p.nodeMem))
+	if err := runJobs(ctx, o, start, jobs); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
 
+func newPulled() *pulled {
+	return &pulled{
+		cpuUse: map[cKey][]contract.Point{}, memUse: map[cKey][]contract.Point{}, oom: map[cKey][]contract.Point{},
+		cpuReq: map[cKey][]contract.Point{}, memReq: map[cKey][]contract.Point{},
+		cpuLim: map[cKey][]contract.Point{}, memLim: map[cKey][]contract.Point{},
+		replicas: map[wKey][]contract.Point{},
+		nodeCPU:  map[string][]contract.Point{}, nodeMem: map[string][]contract.Point{},
+	}
+}
+
+// runJobs runs the range queries o.Concurrency at a time. Each job's into
+// runs under one lock, so jobs may write to shared maps.
+func runJobs(ctx context.Context, o Options, start time.Time, jobs []job) error {
+	var mu sync.Mutex
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	sem := make(chan struct{}, o.Concurrency)
@@ -310,7 +362,11 @@ func pull(ctx context.Context, o Options, start time.Time, src sources, kinds []
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			t0 := time.Now()
-			ss, err := o.Client.QueryRangeChunked(ctx, j.query, start, o.Now, o.Step, 24*time.Hour)
+			c := j.client
+			if c == nil {
+				c = o.Client
+			}
+			ss, err := c.QueryRangeChunked(ctx, j.query, start, o.Now, o.Step, 24*time.Hour)
 			if err != nil {
 				errs <- fmt.Errorf("%s: %w", j.name, err)
 				cancel()
@@ -325,10 +381,7 @@ func pull(ctx context.Context, o Options, start time.Time, src sources, kinds []
 	wg.Wait()
 	close(errs)
 	// The first error is the cause; the rest are cancellations that followed it.
-	if err := <-errs; err != nil {
-		return nil, err
-	}
-	return p, nil
+	return <-errs
 }
 
 func toPoints(in []Point) []contract.Point {
@@ -345,7 +398,11 @@ func toPoints(in []Point) []contract.Point {
 
 func assemble(ctx context.Context, o Options, p *pulled, requests bool, rep *Report) (*contract.File, error) {
 	step := int(o.Step / time.Second)
-	base := contract.Common{Cluster: o.Cluster, Source: "prometheus", StepSeconds: step}
+	source := "prometheus"
+	if p.gke {
+		source = "gke"
+	}
+	base := contract.Common{Cluster: o.Cluster, Source: source, StepSeconds: step}
 
 	// A container is reported when it has usage. Requests the store does not
 	// carry for a container with usage are zero requests, but only at times
@@ -438,9 +495,16 @@ func assemble(ctx context.Context, o Options, p *pulled, requests bool, rep *Rep
 	f.Resources = append(f.Resources, nodes...)
 	rep.Nodes = len(nodes)
 	if len(p.nodeCPU) == 0 && len(p.nodeMem) == 0 {
-		rep.Warnings = append(rep.Warnings, "no node allocatable series (kube_node_status_allocatable): node resources are left out and workloads are priced with the default node")
+		metric := "kube_node_status_allocatable"
+		if p.gke {
+			metric = gkeNodeCPU
+		}
+		rep.Warnings = append(rep.Warnings, fmt.Sprintf("no node allocatable series (%s): node resources are left out and workloads are priced with the default node", metric))
 	}
 	if rep.Containers == 0 {
+		if p.gke {
+			return nil, fmt.Errorf("no workload containers found: GKE system metrics exist but none belong to a Deployment or StatefulSet")
+		}
 		return nil, fmt.Errorf("no workload containers found: usage series exist but none map to a Deployment or StatefulSet through kube-state-metrics owner metrics")
 	}
 	return f, nil
@@ -509,6 +573,14 @@ func firstLabel(m map[string]string, keys ...string) string {
 }
 
 func nodeResources(ctx context.Context, o Options, p *pulled, base contract.Common) ([]contract.Resource, error) {
+	if p.gke {
+		return nodesFrom(o, p, base, func(n string) *contract.Node {
+			if a := p.gkeNodes[n]; a != nil {
+				return a
+			}
+			return nodeAttrs(n, nil, nil)
+		}), nil
+	}
 	window := time.Duration(o.Days) * 24 * time.Hour
 	info, err := o.Client.queryWindow(ctx, func(w time.Duration) string { q, _ := NodeInfoAt(w); return q }, o.Now, window)
 	if err != nil {
@@ -526,6 +598,11 @@ func nodeResources(ctx context.Context, o Options, p *pulled, base contract.Comm
 	for _, s := range labels {
 		labelsBy[s.Labels["node"]] = s.Labels
 	}
+	return nodesFrom(o, p, base, func(n string) *contract.Node { return nodeAttrs(n, infoBy[n], labelsBy[n]) }), nil
+}
+
+// nodesFrom makes a node resource for every node with an allocatable series.
+func nodesFrom(o Options, p *pulled, base contract.Common, attrs func(name string) *contract.Node) []contract.Resource {
 	names := map[string]bool{}
 	for n := range p.nodeCPU {
 		names[n] = true
@@ -535,7 +612,7 @@ func nodeResources(ctx context.Context, o Options, p *pulled, base contract.Comm
 	}
 	var out []contract.Resource
 	for n := range names {
-		r := contract.Resource{Common: base, Node: nodeAttrs(n, infoBy[n], labelsBy[n])}
+		r := contract.Resource{Common: base, Node: attrs(n)}
 		for _, m := range []struct {
 			name string
 			pts  []contract.Point
@@ -550,7 +627,7 @@ func nodeResources(ctx context.Context, o Options, p *pulled, base contract.Comm
 		out = append(out, r)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Node.Name < out[j].Node.Name })
-	return out, nil
+	return out
 }
 
 func nodeAttrs(name string, info, labels map[string]string) *contract.Node {
