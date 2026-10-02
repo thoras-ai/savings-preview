@@ -5,9 +5,12 @@ package kube
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
-	"strconv"
+	"strings"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -62,13 +65,29 @@ func Connect(kubeconfig, kubeContext string) (*Conn, error) {
 
 // ServiceProxy reaches a service through
 // /api/v1/namespaces/{ns}/services/{scheme:name:port}/proxy/{prefix}/{path}.
+// It uses the plain HTTP response, so a store's JSON error body reaches the
+// caller instead of being replaced by a generic Kubernetes error.
 type ServiceProxy struct {
-	Client    rest.Interface
+	HC        *http.Client
+	Base      string // API server URL, including any path prefix
 	Namespace string
 	Name      string
 	Port      string // port number or port name
 	Scheme    string // "http" or "https"
 	Prefix    string // path prefix inside the service, for example "/select/0/prometheus"
+}
+
+// Proxy returns a ServiceProxy that uses the connection's credentials.
+func (c *Conn) Proxy(namespace, name, port, scheme, prefix string) (*ServiceProxy, error) {
+	hc, err := rest.HTTPClientFor(c.Config)
+	if err != nil {
+		return nil, err
+	}
+	base, _, err := rest.DefaultServerURL(c.Config.Host, c.Config.APIPath, schema.GroupVersion{}, rest.IsConfigTransportTLS(*c.Config))
+	if err != nil {
+		return nil, err
+	}
+	return &ServiceProxy{HC: hc, Base: base.String(), Namespace: namespace, Name: name, Port: port, Scheme: scheme, Prefix: prefix}, nil
 }
 
 func (s *ServiceProxy) resourceName() string {
@@ -79,29 +98,22 @@ func (s *ServiceProxy) resourceName() string {
 	return n
 }
 
-// Get implements prom.Getter.
+// Get implements the store client's Getter.
 func (s *ServiceProxy) Get(ctx context.Context, path string, params url.Values) ([]byte, int, error) {
-	req := s.Client.Get().
-		Namespace(s.Namespace).
-		Resource("services").
-		Name(s.resourceName()).
-		SubResource("proxy").
-		Suffix(s.Prefix + path)
-	for k, vs := range params {
-		for _, v := range vs {
-			req = req.Param(k, v)
-		}
+	u := strings.TrimRight(s.Base, "/") + "/api/v1/namespaces/" + url.PathEscape(s.Namespace) +
+		"/services/" + url.PathEscape(s.resourceName()) + "/proxy" + s.Prefix + path
+	if len(params) > 0 {
+		u += "?" + params.Encode()
 	}
-	var status int
-	res := req.Do(ctx)
-	res.StatusCode(&status)
-	body, err := res.Raw()
-	if err != nil && status != 0 {
-		// Raw returns the response body alongside an error for non-2xx statuses.
-		return body, status, nil
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, 0, err
 	}
-	return body, status, err
+	resp, err := s.HC.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256<<20))
+	return body, resp.StatusCode, err
 }
-
-// PortString formats a numeric port.
-func PortString(p int32) string { return strconv.Itoa(int(p)) }

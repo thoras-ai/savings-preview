@@ -22,6 +22,8 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "prometheus":
+		err = runPrometheus(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown source %q\n\n%s", os.Args[1], usage)
 		os.Exit(2)
