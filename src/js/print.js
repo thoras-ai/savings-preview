@@ -62,7 +62,9 @@
   // now is the print date; tests pass a fixed one.
   function html(ctx, now) {
     var r = ctx.result, st = ctx.state, fig = summary.figures(r);
-    return '<div class="print-top"><strong>Thoras Savings Preview</strong><span>' + esc((r.cluster || 'Unnamed cluster') + ' · printed ' + today(now || new Date())) + '</span></div>' +
+    var top = '<div class="print-top"><strong>Thoras Savings Preview</strong><span>' + esc((r.cluster || 'Unnamed cluster') + ' · printed ' + today(now || new Date())) + '</span></div>';
+    if (!r.totals.counted) return top + '<h1>' + esc(summary.EMPTY) + '</h1>';
+    return top +
       '<div><h1>' + esc(summary.headline(fig)) + '</h1>' +
       '<p>Thoras forecasts what each workload will use and keeps its CPU and memory requests at that forecast plus a safety buffer, raising or lowering them as demand moves.</p>' +
       '<p class="print-muted">' + esc(summary.provenance(r, st)) + '</p></div>' +
@@ -74,6 +76,7 @@
   function render(host, ctx) {
     host.innerHTML = html(ctx);
     var chart = host.querySelector('.print-chart');
+    if (!chart) return;
     if (ctx.result.series) SP.chart.render(chart, ctx.result.series, 'gap', { title: 'Requested today against Thoras', fromZero: true, height: 220, patternId: 'print-hatch', className: 'chart-gap' });
     else chart.innerHTML = '<p class="empty">No workload has complete data, so there is nothing to chart.</p>';
   }

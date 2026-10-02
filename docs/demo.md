@@ -25,7 +25,7 @@ Open the published page and choose **Demo cluster** under "Or try a sample", or 
     python3 scripts/build_report.py --site dist
     python3 -m http.server -d dist
 
-Set the theme to Light if the room has a projector. Open the report once beforehand so the file is cached; it is about 20 MB.
+The page opens in the light theme, which suits a projector. Open the report once beforehand so the file is cached; it is about 20 MB.
 
 The figures below are at the default settings. They hold as long as the generator does not change.
 

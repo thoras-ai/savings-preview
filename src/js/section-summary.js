@@ -56,8 +56,8 @@
 
   function polled(f) { return f.source.split(', ').indexOf('live polling') >= 0; }
 
-  // Under a fortnight of store data or a short poll, the figure covers less
-  // than a full month of demand.
+  // Under a week of data, or a single reading, the figure misses part of a
+  // full week of demand.
   function thin(r, st) { return r.fidelity.snapshot || windowSeconds(r, st) < FULL_WEEK; }
 
   function provenance(r, st) {
@@ -254,7 +254,12 @@
 
   // The product sizes requests to a usage forecast. This page has no
   // forecast, so its target is the rolling peak, as the method line says.
+  var EMPTY = 'No data in the selected time range or namespaces.';
+
   function markup(data, r, st) {
+    if (!r.totals.counted) {
+      return '<div class="sum-head"><h1>' + EMPTY + '</h1><p class="sum-from">Change them under Assumptions in Details for engineers.</p></div>';
+    }
     var fig = figures(r);
     return '<div class="sum-head"><h1>' + esc(headline(fig)) + '</h1>' +
       '<p class="sum-what">Thoras forecasts what each workload will use and keeps its CPU and memory requests at that forecast plus a safety buffer, raising or lowering them as demand moves.</p>' +
@@ -321,7 +326,7 @@
   }
 
   var api = {
-    coverage: coverage, provenance: provenance, thin: thin, figures: figures, utilization: utilization, pick: pick, activeShare: activeShare,
+    EMPTY: EMPTY, coverage: coverage, provenance: provenance, thin: thin, figures: figures, utilization: utilization, pick: pick, activeShare: activeShare,
     oomKilled: oomKilled, engineers: engineers, headline: headline, method: method, summaryText: summaryText, markup: markup, day: day
   };
   if (node) module.exports = api;

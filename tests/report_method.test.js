@@ -75,7 +75,8 @@ test('data and method follows the levers', () => {
   assert.ok(outside.includes('No data in the time range set under Assumptions. The file covers Sep 16, 12:00 AM to Sep 30, 12:00 AM UTC, 14 days.'));
   assert.ok(!/-\d+ seconds/.test(outside));
   const outsidePrint = text(SP.print.html(context(data, { range: [1, 2] }), PRINTED));
-  assert.ok(outsidePrint.includes('compute spend by $0 a year'), outsidePrint);
+  assert.ok(outsidePrint.includes('No data in the selected time range or namespaces.'), outsidePrint);
+  assert.ok(!outsidePrint.includes('1970'), outsidePrint);
 });
 
 test('a polled file names its tier in data and method and prints exact figures', () => {

@@ -128,6 +128,16 @@ test('page one follows the levers and the fleet size', () => {
   assert.strictEqual(summary.engineers(5000, 200000), 'about 6 engineer-days');
 });
 
+test('a range or namespaces with no data shows one plain line', () => {
+  const data = prepare('savings-preview.otlp.json');
+  for (const patch of [{ range: [1, 2] }, { namespaces: ['nowhere'] }]) {
+    const { r, st } = run(data, patch);
+    const out = text(summary.markup(data, r, st));
+    assert.ok(out.includes('No data in the selected time range or namespaces.'), out);
+    assert.ok(!/1970|0 seconds|\$0 a year|–/.test(out), out);
+  }
+});
+
 test('the cluster count lives in the link and leaves the figures alone', () => {
   const st = state.parse('#clusters=5');
   assert.strictEqual(st.clusters, 5);
