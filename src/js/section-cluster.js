@@ -103,6 +103,7 @@
   // approx rounds the figure to two significant figures and marks it with ~.
   function amount(v, approx) {
     if (!isFinite(v)) return '–';
+    if (v > 0 && v < 0.005) return '<0.01';
     var x = approx ? ui.rough(v) : v;
     return (approx ? '~' : '') + ui.num(x, Math.abs(x) < 1 ? 2 : 1);
   }

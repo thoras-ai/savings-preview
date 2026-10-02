@@ -218,3 +218,9 @@ test('node equivalents round down, so they never read above the whole nodes', ()
   assert.match(html, /38 whole nodes/);
   assert.match(html, /free 62\.3 nodes and memory waste 38\.9;/);
 });
+
+test('an amount too small for two decimals is not shown as zero', () => {
+  const data = model.prepare(doc({ workloads: [{ cpu: 0.001, mem: 0.003, cpuReq: 0.5, memReq: 1 }], nodes: [{ type: 'm5.xlarge', cores: 4, gib: 16 }] }));
+  const html = cluster.markup(figures(data).s, false);
+  assert.match(html, /&lt;0\.01 cores · &lt;0\.01 GiB/);
+});
