@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
+const { budget } = require('./budget');
 
 // The section scripts run against the page's globals, so load them the way
 // the page does, with a registry that keeps what they register.
@@ -163,7 +164,7 @@ test('data and method and the printed summary render 1,000 workloads within the 
   for (let i = 0; i < 5; i++) { html = method(ctx); printed = SP.print.html(ctx, PRINTED); }
   const each = (performance.now() - t0) / 5;
   // A lever change has 200 ms for every section; these two get a small share of it.
-  assert.ok(each < 50, each.toFixed(1) + ' ms');
+  assert.ok(each < budget(50), each.toFixed(1) + ' ms');
   const out = text(html);
   assert.ok(out.includes('1-minute samples, kept as 15-minute peaks and means'));
   assert.ok(out.includes('Show 32 more'), 'the 20 workloads and 20 spot nodes past the first 8 fold away');

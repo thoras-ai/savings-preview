@@ -231,7 +231,7 @@ func newCheckEnv(o *runOptions) checkEnv {
 		cl := &prometheus.Client{G: g, Selector: o.promSelector, MaxRange: store.MaxRange, Retries: 1}
 		probe := func(ctx context.Context) (*prometheus.Report, error) {
 			rep, err := prometheus.Probe(ctx, prometheus.Options{Client: cl, Days: o.days, Step: o.step,
-				AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud})
+				AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud, GKE: o.direct.gkeMode(store)})
 			return rep, directHint(err, store)
 		}
 		return storeName(store), func(ctx context.Context) error { return directHint(cl.Check(ctx), store) }, probe, nil

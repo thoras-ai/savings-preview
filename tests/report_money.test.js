@@ -6,6 +6,7 @@ const path = require('node:path');
 const model = require('../src/js/model.js');
 const money = require('../src/js/section-money.js');
 const state = require('../src/js/state.js');
+const { budget } = require('./budget');
 
 const VIEW = { level: null, metric: 'savings', ns: null, allNs: false };
 
@@ -143,7 +144,7 @@ test('the section for 1,000 workloads builds well inside the 200 ms budget for a
   const runs = 20;
   for (let i = 0; i < runs; i++) money.html(r, state.DEFAULTS, views[i % views.length], false, 1100);
   const ms = Number(process.hrtime.bigint() - t0) / 1e6 / runs;
-  assert.ok(ms < 20, `${ms.toFixed(2)} ms per build`);
+  assert.ok(ms < budget(20), `${ms.toFixed(2)} ms per build`);
 });
 
 test('provisional figures are rounded and marked', () => {

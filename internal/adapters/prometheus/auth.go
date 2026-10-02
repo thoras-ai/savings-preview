@@ -6,11 +6,14 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
 
 // Auth adds credentials to requests for a store. Managed backends plug in here.
@@ -133,6 +136,56 @@ func (s *SigV4) Wrap(hc *http.Client) (*http.Client, error) {
 			return fmt.Errorf("AWS credentials: %w", err)
 		}
 		return signer.SignHTTP(r.Context(), creds, r, emptyPayloadHash, service, s.Region, now())
+	}), nil
+}
+
+// GoogleScope is the OAuth scope for reading Cloud Monitoring data, which
+// covers the PromQL API.
+const GoogleScope = "https://www.googleapis.com/auth/monitoring.read"
+
+// Google sends an OAuth2 access token from a Google credential, as Google
+// Managed Prometheus and the Cloud Monitoring PromQL API require.
+type Google struct {
+	Source oauth2.TokenSource
+}
+
+// NewGoogle loads a Google credential. With a file, it must be a service
+// account key. Without one, Application Default Credentials apply:
+// GOOGLE_APPLICATION_CREDENTIALS (a service account key or a workload identity
+// federation configuration), the gcloud user login, then the metadata server,
+// which is how workload identity on GKE and the VM service account are reached.
+func NewGoogle(ctx context.Context, credentialsFile string) (*Google, error) {
+	if credentialsFile != "" {
+		b, err := os.ReadFile(credentialsFile)
+		if err != nil {
+			return nil, err
+		}
+		creds, err := google.CredentialsFromJSONWithType(ctx, b, google.ServiceAccount, GoogleScope)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", credentialsFile, err)
+		}
+		return &Google{Source: oauth2.ReuseTokenSource(nil, creds.TokenSource)}, nil
+	}
+	creds, err := google.FindDefaultCredentials(ctx, GoogleScope)
+	if err != nil {
+		return nil, fmt.Errorf("find Google Application Default Credentials: %w", err)
+	}
+	// HTTPGetter wraps its client on every request, so the token is cached
+	// here and refreshed only when it expires.
+	return &Google{Source: oauth2.ReuseTokenSource(nil, creds.TokenSource)}, nil
+}
+
+func (g *Google) Wrap(hc *http.Client) (*http.Client, error) {
+	if g.Source == nil {
+		return nil, fmt.Errorf("Google: no token source")
+	}
+	return withRequest(hc, func(r *http.Request) error {
+		tok, err := g.Source.Token()
+		if err != nil {
+			return fmt.Errorf("Google credentials: %w", err)
+		}
+		tok.SetAuthHeader(r)
+		return nil
 	}), nil
 }
 

@@ -272,6 +272,9 @@ func fromPrometheus(from string, f *contract.File, rep *prometheus.Report) *pull
 	if rep.UsageFromPods {
 		p.notes = append(p.notes, "the store has no per-container usage series, so container usage is the pod's usage split between its containers by their requests")
 	}
+	if rep.GKESystemMetrics {
+		p.notes = append(p.notes, "usage, requests and node sizes are GKE system metrics; memory usage is their non-evictable memory")
+	}
 	return p
 }
 
@@ -408,7 +411,7 @@ func pullDirect(ctx context.Context, o *runOptions, cluster string, w io.Writer)
 	fmt.Fprintf(w, "pulling %s of history from the %s\n", days(o.days), name)
 	cl := &prometheus.Client{G: g, Selector: o.promSelector, MaxRange: store.MaxRange}
 	f, rep, err := prometheus.Run(ctx, prometheus.Options{Client: cl, Cluster: cluster, Days: o.days, Step: o.step, Concurrency: 2,
-		Log: func(string, ...any) {}, AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud})
+		Log: func(string, ...any) {}, AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud, GKE: o.direct.gkeMode(store)})
 	if err != nil {
 		return nil, directHint(err, store)
 	}
@@ -511,7 +514,11 @@ func printAccess(w io.Writer, o *runOptions) {
 	switch {
 	case o.source == "poll" || o.source == "datadog":
 	case o.direct.url != "":
-		fmt.Fprintf(w, "  - query the store at %s directly (read-only queries)\n", prometheus.RedactURL(o.direct.url))
+		if b, err := prometheus.ResolveBackend(o.direct.url, o.direct.backend, o.direct.tenant != ""); err == nil && b.Name == prometheus.BackendGMP {
+			fmt.Fprintf(w, "  - query Google Cloud Monitoring in project %s with your Google credentials (read-only queries)\n", b.Project)
+		} else {
+			fmt.Fprintf(w, "  - query the store at %s directly (read-only queries)\n", prometheus.RedactURL(o.direct.url))
+		}
 	default:
 		if o.target == nil {
 			fmt.Fprintln(w, next+"list Services, and Prometheus Operator resources if installed, to find a metrics store")

@@ -44,7 +44,18 @@ func TestRunFlagsSources(t *testing.T) {
 		len(o.ddFilters) != 1 || o.ddFilters[0] != "kube_cluster_name:prod" {
 		t.Fatalf("--source datadog: %+v, %v", o, err)
 	}
+	// --project names Google Managed Prometheus, like a URL.
+	if o, err = runFlags([]string{"--project", "shop-prod", "--gke-metrics", "system"}); err != nil ||
+		o.direct.url != "https://monitoring.googleapis.com/v1/projects/shop-prod/location/global/prometheus" || o.direct.backend != prometheus.BackendGMP {
+		t.Fatalf("--project: %+v, %v", o, err)
+	}
+	var access strings.Builder
+	printAccess(&access, o)
+	if !strings.Contains(access.String(), "Google Cloud Monitoring in project shop-prod") {
+		t.Errorf("access: %s", access.String())
+	}
 	for _, bad := range [][]string{
+		{"--project", "shop-prod", "--source", "poll"},
 		{"--tenant", "t"},
 		{"--backend", "mimir"},
 		{"--url", "http://a.example", "--target", "http://b.example"},

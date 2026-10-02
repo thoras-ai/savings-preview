@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"time"
 
@@ -98,7 +99,7 @@ func runPrometheus(args []string) error {
 
 	client := &prometheus.Client{G: getter, Selector: matchers, MaxRange: store.MaxRange}
 	f, rep, err := prometheus.Run(ctx, prometheus.Options{Client: client, Cluster: clusterName, Days: *days, Step: *step,
-		Concurrency: *concurrency, Log: logf, AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud})
+		Concurrency: *concurrency, Log: logf, AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud, GKE: direct.gkeMode(store)})
 	if err != nil {
 		if direct.url != "" {
 			return directHint(err, store)
@@ -112,6 +113,9 @@ func runPrometheus(args []string) error {
 		rep.Containers, rep.Workloads, rep.Nodes, rep.Start.UTC().Format(time.RFC3339), rep.End.UTC().Format(time.RFC3339))
 	if rep.OOMKills > 0 {
 		fmt.Fprintf(os.Stderr, "%d out-of-memory kills\n", rep.OOMKills)
+	}
+	if rep.GKESystemMetrics {
+		fmt.Fprintln(os.Stderr, "read GKE system metrics")
 	}
 	if rep.UsageFromPods {
 		fmt.Fprintln(os.Stderr, "note: the store has no per-container usage series (the container runtime does not label cAdvisor metrics), "+
@@ -197,6 +201,7 @@ func parseTarget(s string) (prometheus.Candidate, error) {
 type directFlags struct {
 	url, backend, tenant                        string
 	tokenFile, basicFile, headerFile, awsRegion string
+	project, googleCreds, gkeMetrics            string
 	maxRange                                    time.Duration
 }
 
@@ -209,6 +214,10 @@ func addDirectFlags(fs *flag.FlagSet) *directFlags {
 	fs.StringVar(&d.basicFile, "basic-auth-file", "", "file holding user:password for --url (or set "+envBasic+")")
 	fs.StringVar(&d.headerFile, "header-file", "", "file of 'Name: value' lines, one header each, sent with --url (or set "+envHeaders+")")
 	fs.StringVar(&d.awsRegion, "aws-region", "", "AWS region of an Amazon Managed Prometheus workspace (default: from the URL)")
+	fs.StringVar(&d.project, "project", "", "Google Cloud project to read from Google Managed Prometheus, in place of --url; implies --backend gmp")
+	fs.StringVar(&d.googleCreds, "google-credentials-file", "", "service account key for Google Managed Prometheus (default: Google Application Default Credentials)")
+	fs.StringVar(&d.gkeMetrics, "gke-metrics", "", "metrics to read from Google Managed Prometheus: "+strings.Join(prometheus.GKEModes, ", ")+
+		" (default: auto, which reads cAdvisor and kube-state-metrics series when the project has both, else GKE system metrics)")
 	fs.DurationVar(&d.maxRange, "max-query-range", 0, "longest time range the store accepts in one query (default: the backend's limit, if any)")
 	return d
 }
@@ -222,8 +231,35 @@ func (d *directFlags) check(target *string) error {
 		}
 		d.url, *target = *target, ""
 	}
-	if d.url == "" && (d.backend != "" || d.tenant != "" || d.headerFile != "" || d.awsRegion != "") {
-		return errors.New("--backend, --tenant, --header-file and --aws-region apply only with --url")
+	if d.project != "" {
+		if d.backend != "" && d.backend != prometheus.BackendGMP {
+			return fmt.Errorf("--project applies to Google Managed Prometheus, not to %s", d.backend)
+		}
+		if d.url != "" {
+			b, err := prometheus.ResolveBackend(d.url, prometheus.BackendGMP, false)
+			if err != nil {
+				return err
+			}
+			if b.Project != d.project {
+				return fmt.Errorf("--project %s does not match the project in --url (%s)", d.project, b.Project)
+			}
+		} else {
+			u, err := prometheus.GMPURL(d.project)
+			if err != nil {
+				return fmt.Errorf("--project: %w", err)
+			}
+			d.url = u
+		}
+		d.backend = prometheus.BackendGMP
+	}
+	if d.url == "" && d.backend == prometheus.BackendGMP {
+		return errors.New("--backend gmp needs --project or --url")
+	}
+	if d.url == "" && (d.backend != "" || d.tenant != "" || d.headerFile != "" || d.awsRegion != "" || d.googleCreds != "") {
+		return errors.New("--backend, --tenant, --header-file, --aws-region and --google-credentials-file apply only with --url")
+	}
+	if d.gkeMetrics != "" && !slices.Contains(prometheus.GKEModes, d.gkeMetrics) {
+		return fmt.Errorf("--gke-metrics must be one of %s, not %q", strings.Join(prometheus.GKEModes, ", "), d.gkeMetrics)
 	}
 	if d.maxRange < 0 {
 		return errors.New("--max-query-range must not be negative")
@@ -243,7 +279,10 @@ func (d *directFlags) open(ctx context.Context) (prometheus.Getter, prometheus.B
 		}
 		store.Region = d.awsRegion
 	}
-	auth, err := directAuth(ctx, store, credentialFiles{token: d.tokenFile, basic: d.basicFile, headers: d.headerFile}, d.tenant)
+	if (d.googleCreds != "" || d.gkeMetrics != "") && store.Name != prometheus.BackendGMP {
+		return nil, store, fmt.Errorf("--google-credentials-file and --gke-metrics apply to Google Managed Prometheus, not to %s", store.Name)
+	}
+	auth, err := directAuth(ctx, store, credentialFiles{token: d.tokenFile, basic: d.basicFile, headers: d.headerFile, google: d.googleCreds}, d.tenant)
 	if err != nil {
 		return nil, store, err
 	}
@@ -261,6 +300,32 @@ func storeName(store prometheus.Backend) string {
 	return fmt.Sprintf("%s store at %s", store.Name, prometheus.RedactURL(store.Base))
 }
 
+func hasAuthorization(chain prometheus.Chain) bool {
+	for _, a := range chain {
+		if h, ok := a.(prometheus.Header); ok && strings.EqualFold(h.Name, "Authorization") {
+			return true
+		}
+	}
+	return false
+}
+
+// newGoogle loads Google credentials; tests replace it.
+var newGoogle = func(ctx context.Context, file string) (prometheus.Auth, error) {
+	return prometheus.NewGoogle(ctx, file)
+}
+
+// gkeMode is the --gke-metrics value for a store, empty when it is not Google
+// Managed Prometheus.
+func (d *directFlags) gkeMode(store prometheus.Backend) string {
+	switch {
+	case store.Name != prometheus.BackendGMP:
+		return ""
+	case d.gkeMetrics == "":
+		return prometheus.GKEAuto
+	}
+	return d.gkeMetrics
+}
+
 // Environment variables that hold credentials for --url, as an alternative to
 // the files.
 const (
@@ -269,7 +334,7 @@ const (
 	envHeaders = "SAVINGS_PREVIEW_HEADERS"
 )
 
-type credentialFiles struct{ token, basic, headers string }
+type credentialFiles struct{ token, basic, headers, google string }
 
 // directAuth builds the authentication for a store reached by URL.
 // Credentials come from files or environment variables, never from flags, so
@@ -289,7 +354,7 @@ func directAuth(ctx context.Context, store prometheus.Backend, files credentialF
 		chain = append(chain, hs...)
 	}
 	if tenant != "" {
-		if store.Name == prometheus.BackendAMP || store.Name == prometheus.BackendGrafanaCloud {
+		if store.Name == prometheus.BackendAMP || store.Name == prometheus.BackendGrafanaCloud || store.Name == prometheus.BackendGMP {
 			return nil, fmt.Errorf("--tenant applies to Mimir, not to %s", store.Name)
 		}
 		chain = append(chain, prometheus.Header{Name: prometheus.TenantHeader, Value: tenant})
@@ -317,6 +382,23 @@ func directAuth(ctx context.Context, store prometheus.Backend, files credentialF
 		}
 		// Signing comes last so that it covers the headers added before it.
 		return append(chain, sig), nil
+	case prometheus.BackendGMP:
+		// A token given directly, such as one from gcloud auth
+		// print-access-token, is used as is, as before this backend existed.
+		if authz != nil || hasAuthorization(chain) {
+			if files.google != "" {
+				return nil, errors.New("use only one of --google-credentials-file and a bearer token, basic auth or Authorization header")
+			}
+			break
+		}
+		g, err := newGoogle(ctx, files.google)
+		if err != nil {
+			return nil, err
+		}
+		if len(chain) == 0 {
+			return g, nil
+		}
+		return append(chain, g), nil
 	case prometheus.BackendGrafanaCloud:
 		if authz == nil {
 			return nil, fmt.Errorf("Grafana Cloud needs basic auth: the instance ID as user and an access policy token with the metrics:read scope as password, in --basic-auth-file or %s", envBasic)
@@ -343,6 +425,8 @@ func directHint(err error, store prometheus.Backend) error {
 	switch {
 	case strings.Contains(ae.Message, "err-mimir-max-query-length"):
 		return fmt.Errorf("%w (pass the store's limit as --max-query-range)", err)
+	case ae.Status == http.StatusNotFound && store.Name == prometheus.BackendGMP:
+		return fmt.Errorf("%w (check the project ID, and that the Cloud Monitoring API is enabled in the project)", err)
 	case ae.Status == http.StatusNotFound:
 		return fmt.Errorf("%w (check the path in the URL: Mimir serves the query API under /prometheus, Grafana Cloud under /api/prom, Amazon Managed Prometheus under /workspaces/WORKSPACE_ID)", err)
 	case ae.Status == http.StatusUnauthorized && strings.Contains(strings.ToLower(ae.Message), "org id"):
@@ -353,6 +437,8 @@ func directHint(err error, store prometheus.Backend) error {
 			return fmt.Errorf("%w (Grafana Cloud wants the stack's Prometheus instance ID as user and a token with the metrics:read scope)", err)
 		case prometheus.BackendAMP:
 			return fmt.Errorf("%w (the AWS identity needs aps:QueryMetrics on the workspace; see docs/prometheus-adapter.md)", err)
+		case prometheus.BackendGMP:
+			return fmt.Errorf("%w (the Google identity needs the Monitoring Viewer role, roles/monitoring.viewer, on project %s; see docs/prometheus-adapter.md)", err, store.Project)
 		}
 		return fmt.Errorf("%w (pass the store's credentials with --basic-auth-file, --bearer-token-file or --header-file, or %s, %s or %s)", err, envBasic, envBearer, envHeaders)
 	}

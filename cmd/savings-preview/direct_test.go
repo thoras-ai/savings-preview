@@ -163,3 +163,102 @@ func TestDirectHintForGateway(t *testing.T) {
 		t.Errorf("got %v", err)
 	}
 }
+
+func TestDirectFlagsGMP(t *testing.T) {
+	const base = "https://monitoring.googleapis.com/v1/projects/shop-prod/location/global/prometheus"
+	d := &directFlags{project: "shop-prod"}
+	target := ""
+	if err := d.check(&target); err != nil || d.url != base || d.backend != prometheus.BackendGMP {
+		t.Errorf("--project: %+v, %v", d, err)
+	}
+	d = &directFlags{project: "shop-prod", url: base + "/api/v1/query"}
+	if err := d.check(&target); err != nil || d.backend != prometheus.BackendGMP {
+		t.Errorf("--project with a matching --url: %+v, %v", d, err)
+	}
+	for _, c := range []struct {
+		d   directFlags
+		err string
+	}{
+		{directFlags{project: "other", url: base}, "does not match"},
+		{directFlags{project: "shop-prod", backend: prometheus.BackendAMP}, "--project applies to Google Managed Prometheus"},
+		{directFlags{project: "Shop Prod"}, "not a Google Cloud project ID"},
+		{directFlags{backend: prometheus.BackendGMP}, "needs --project or --url"},
+		{directFlags{googleCreds: "key.json"}, "apply only with --url"},
+		{directFlags{project: "shop-prod", gkeMetrics: "kube"}, "--gke-metrics must be one of"},
+	} {
+		if err := c.d.check(&target); err == nil || !strings.Contains(err.Error(), c.err) {
+			t.Errorf("%+v: got %v, want %q", c.d, err, c.err)
+		}
+	}
+	d = &directFlags{url: "http://prom.example", gkeMetrics: prometheus.GKESystem}
+	if err := d.check(&target); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := d.open(context.Background()); err == nil || !strings.Contains(err.Error(), "apply to Google Managed Prometheus") {
+		t.Errorf("--gke-metrics with another store: %v", err)
+	}
+	if got := (&directFlags{}).gkeMode(prometheus.Backend{Name: prometheus.BackendGMP}); got != prometheus.GKEAuto {
+		t.Errorf("default mode %q", got)
+	}
+	if got := (&directFlags{gkeMetrics: prometheus.GKESystem}).gkeMode(prometheus.Backend{Name: prometheus.BackendMimir}); got != "" {
+		t.Errorf("mode for Mimir %q", got)
+	}
+}
+
+func TestDirectAuthGMP(t *testing.T) {
+	t.Setenv(envBearer, "")
+	t.Setenv(envBasic, "")
+	t.Setenv(envHeaders, "")
+	var gotFile string
+	stub := prometheus.Bearer{Token: "stub"}
+	old := newGoogle
+	newGoogle = func(_ context.Context, file string) (prometheus.Auth, error) { gotFile = file; return stub, nil }
+	t.Cleanup(func() { newGoogle = old })
+
+	b := backend(t, "https://monitoring.googleapis.com/v1/projects/shop-prod/location/global/prometheus", "", false)
+	got, err := directAuth(context.Background(), b, credentialFiles{google: "key.json"}, "")
+	if err != nil || got != stub || gotFile != "key.json" {
+		t.Errorf("got %#v, %v, file %q", got, err, gotFile)
+	}
+	t.Setenv(envHeaders, "X-Goog-User-Project: billing-proj")
+	got, err = directAuth(context.Background(), b, credentialFiles{}, "")
+	want := prometheus.Chain{prometheus.Header{Name: "X-Goog-User-Project", Value: "billing-proj"}, stub}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("headers: %#v, %v", got, err)
+	}
+	t.Setenv(envHeaders, "")
+
+	// A token given directly, as from gcloud auth print-access-token, is
+	// used without loading Google credentials.
+	gotFile = "unset"
+	t.Setenv(envBearer, "ya29.from-gcloud")
+	got, err = directAuth(context.Background(), b, credentialFiles{}, "")
+	if err != nil || got != (prometheus.Bearer{Token: "ya29.from-gcloud"}) || gotFile != "unset" {
+		t.Errorf("bearer with GMP: %#v, %v, file %q", got, err, gotFile)
+	}
+	if _, err := directAuth(context.Background(), b, credentialFiles{google: "key.json"}, ""); err == nil || !strings.Contains(err.Error(), "only one of --google-credentials-file") {
+		t.Errorf("bearer and key file: %v", err)
+	}
+	t.Setenv(envBearer, "")
+	t.Setenv(envHeaders, "authorization: Bearer ya29.header")
+	got, err = directAuth(context.Background(), b, credentialFiles{}, "")
+	if err != nil || got != (prometheus.Header{Name: "authorization", Value: "Bearer ya29.header"}) || gotFile != "unset" {
+		t.Errorf("Authorization header with GMP: %#v, %v, file %q", got, err, gotFile)
+	}
+	t.Setenv(envHeaders, "")
+	if _, err := directAuth(context.Background(), b, credentialFiles{}, "team-a"); err == nil || !strings.Contains(err.Error(), "--tenant") {
+		t.Errorf("tenant with GMP: %v", err)
+	}
+}
+
+func TestDirectHintForGMP(t *testing.T) {
+	store := prometheus.Backend{Name: prometheus.BackendGMP, Project: "shop-prod"}
+	err := directHint(&prometheus.APIError{Status: 403, Message: "Permission monitoring.timeSeries.list denied"}, store)
+	if err == nil || !strings.Contains(err.Error(), "roles/monitoring.viewer") || !strings.Contains(err.Error(), "shop-prod") {
+		t.Errorf("403: %v", err)
+	}
+	err = directHint(&prometheus.APIError{Status: 404, Message: "not found"}, store)
+	if err == nil || !strings.Contains(err.Error(), "Cloud Monitoring API") {
+		t.Errorf("404: %v", err)
+	}
+}
