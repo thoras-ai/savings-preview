@@ -201,7 +201,7 @@ func Run(ctx context.Context, opts Options, rd Reader, clk Clock, logw io.Writer
 		if sum.Records == 0 {
 			return fmt.Errorf("%s has no readings yet", dir)
 		}
-		report(log, opts.Output, sum, m, opts.KeepRaw)
+		report(log, opts.Output, sum, m, m.keepRaw())
 		return nil
 	}
 
@@ -231,7 +231,8 @@ func Run(ctx context.Context, opts Options, rd Reader, clk Clock, logw io.Writer
 
 	start := clk.Now()
 	rollup := rollupStepFor(step, int(opts.Rollup/time.Second))
-	st, err := OpenStore(dir, Meta{Cluster: opts.Cluster, Step: step, RollupStep: rollup, Origin: start.Unix()})
+	keepRaw := int64(opts.KeepRaw / time.Second)
+	st, err := OpenStore(dir, Meta{Cluster: opts.Cluster, Step: step, RollupStep: rollup, Origin: start.Unix(), KeepRaw: &keepRaw})
 	if err != nil {
 		return err
 	}

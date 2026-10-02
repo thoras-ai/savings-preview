@@ -43,6 +43,7 @@ main { max-width: 1200px; margin: 0 auto; padding: var(--primitive-space-24); }
 .fidelity { display: flex; flex-wrap: wrap; align-items: center; gap: var(--primitive-space-8); margin-top: var(--primitive-space-8); }
 .fidelity-label { font-weight: var(--primitive-weight-medium); }
 .fidelity-detail { color: var(--text-light); }
+.fidelity-note { flex-basis: 100%; color: var(--text-light); font-size: var(--primitive-text-sm); }
 .badge {
   border-radius: var(--primitive-radius-full); padding: 1px var(--primitive-space-8);
   font-size: var(--primitive-text-xs); font-weight: var(--primitive-weight-bold);
@@ -131,6 +132,7 @@ tr.selected { background: var(--surface-brand) !important; }
 [data-theme="dark"] tr.selected { background: var(--primitive-brand-900) !important; }
 .wl-name { font-weight: var(--primitive-weight-medium); }
 .wl-sub { color: var(--text-lighter); font-size: var(--primitive-text-xs); }
+.wl-note { color: var(--text-light); font-size: var(--primitive-text-xs); margin-top: var(--primitive-space-2); }
 tr.excluded { color: var(--text-light); }
 .muted { color: var(--text-light); }
 .chip { font-size: var(--primitive-text-xs); border-radius: var(--primitive-radius-4); padding: 0 var(--primitive-space-6); background: var(--surface-inset); border: 1px solid var(--border-light); color: var(--text-light); font-weight: var(--primitive-weight-normal); }

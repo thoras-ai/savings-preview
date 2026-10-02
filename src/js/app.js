@@ -79,7 +79,12 @@
     var tierText = { 1: 'Full history', 2: 'Reduced resolution', 3: 'Limited history' }[f.tier] || '';
     $('fidelity').innerHTML = '<span class="badge tier-' + f.tier + '">Tier ' + f.tier + '</span> ' +
       '<span class="fidelity-label">' + esc(f.label) + '</span>' +
-      '<span class="fidelity-detail">' + esc(tierText) + (f.source ? ' · ' + esc(f.source) : '') + '</span>';
+      '<span class="fidelity-detail">' + esc(tierText) + (f.source ? ' · ' + esc(f.source) : '') + '</span>' +
+      f.notes.map(function (n) { return '<span class="fidelity-note">' + esc(n) + '</span>'; }).join('');
+  }
+
+  function workloadNotes(w) {
+    return w.notes.map(function (n) { return '<div class="wl-note">' + esc(model.notes[n].workload) + '</div>'; }).join('');
   }
 
   function tile(label, value, sub) {
@@ -164,7 +169,7 @@
     var body = ok.map(function (w) {
       var label = esc(w.name) + (w.status === 'partial' ? ' <span class="chip" title="' + esc(w.reason) + '">Partial data</span>' : '');
       return '<tr class="' + (w.id === state.selected ? 'selected' : '') + '" data-id="' + esc(w.id) + '" tabindex="0" aria-label="Show chart for ' + esc(w.name) + '">' +
-        '<td><div class="wl-name">' + label + '</div><div class="wl-sub">' + esc(w.ns) + ' · ' + esc(w.kind) + '</div></td>' +
+        '<td><div class="wl-name">' + label + '</div><div class="wl-sub">' + esc(w.ns) + ' · ' + esc(w.kind) + '</div>' + workloadNotes(w) + '</td>' +
         '<td class="num">' + money(w.annualSpend) + '</td>' +
         '<td class="num strong">' + money(w.annualSavings) + '</td>' +
         '<td class="num"><span class="bar"><i style="width:' + Math.round(w.savingsPct / maxPct * 100) + '%"></i></span>' + Math.round(w.savingsPct * 100) + '%</td>' +

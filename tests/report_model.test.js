@@ -272,3 +272,38 @@ test('step spans: peaks come from the max series when present', () => {
   assert.ok(Math.abs(without.series.tgtCpu[5] - 0.22) < 1e-9, String(without.series.tgtCpu[5]));
   assert.ok(withPeak.wasteCores < without.wasteCores);
 });
+
+test('short spans are stated in minutes', () => {
+  assert.strictEqual(model.fidelityLabel(15, 120, false), '2 minutes at 15-second resolution');
+  assert.strictEqual(model.fidelityLabel(60, 60, false), '1 minute at 1-minute resolution');
+  assert.strictEqual(model.fidelityLabel(15, 45, false), '45 seconds at 15-second resolution');
+  assert.strictEqual(model.fidelityLabel(60, 3540, false), '59 minutes at 1-minute resolution');
+  assert.strictEqual(model.fidelityLabel(60, 3600, false), '1 hour at 1-minute resolution');
+  assert.strictEqual(model.fidelityLabel(60, 5400, false), '1.5 hours at 1-minute resolution');
+});
+
+test('a polled file names its source as live polling', () => {
+  const d = doc({ cpu: [1, 1, 1], mem: [1, 1, 1], step: 60 });
+  d.resourceMetrics.forEach(rm => rm.resource.attributes.forEach(a => {
+    if (a.key === 'thoras.source') a.value.stringValue = 'kubectl-snapshot';
+  }));
+  assert.strictEqual(model.analyze(d).fidelity.source, 'live polling');
+  assert.strictEqual(model.analyze(doc({ cpu: [1, 1, 1], mem: [1, 1, 1] })).fidelity.source, 'test');
+});
+
+test('fidelity notes are explained per workload and summed up once', () => {
+  const noted = (notes) => {
+    const d = doc({ cpu: [1, 1, 1], mem: [1, 1, 1] });
+    d.resourceMetrics[1].resource.attributes.push({ key: 'thoras.fidelity_notes', value: { arrayValue: { values: notes.map(n => ({ stringValue: n })) } } });
+    return model.analyze(d);
+  };
+  const r = noted(['usage_split_from_pod_by_requests', 'a_note_from_a_later_version']);
+  assert.deepStrictEqual(r.workloads[0].notes, ['usage_split_from_pod_by_requests']);
+  assert.deepStrictEqual(r.fidelity.notes, [
+    'Container usage in 1 workload is the pod total split between containers by their requests, because the source has no per-container usage.'
+  ]);
+  assert.strictEqual(model.notes[r.workloads[0].notes[0]].workload, 'Usage split from pod totals by requests');
+  const plain = model.analyze(doc({ cpu: [1, 1, 1], mem: [1, 1, 1] }));
+  assert.deepStrictEqual(plain.workloads[0].notes, []);
+  assert.deepStrictEqual(plain.fidelity.notes, []);
+});

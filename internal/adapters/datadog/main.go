@@ -27,9 +27,7 @@ const (
 func Main(args []string) error {
 	fs := flag.NewFlagSet("datadog", flag.ContinueOnError)
 	var (
-		site        = fs.String("site", "", "Datadog site: "+strings.Join(SiteNames(), ", ")+", a site domain such as datadoghq.eu, or an https:// URL (default: "+EnvSite+" or us1)")
-		apiKeyFile  = fs.String("api-key-file", "", "file holding the API key (or set "+EnvAPIKey+")")
-		appKeyFile  = fs.String("app-key-file", "", "file holding the application key (or set "+EnvAppKey+")")
+		access      = AddFlags(fs)
 		selector    = fs.String("selector", "", "tag filters added to every query, to read one cluster, e.g. 'kube_cluster_name:prod-us'")
 		cluster     = fs.String("cluster-name", "", "cluster name recorded in the file (default: the cluster tag of the selected series)")
 		out         = fs.String("out", "savings-preview.otlp.json", "output file")
@@ -71,24 +69,9 @@ files or environment variables, never from flags.
 	if err != nil {
 		return fmt.Errorf("--selector: %w", err)
 	}
-	siteName := *site
-	if siteName == "" {
-		siteName = os.Getenv(EnvSite)
-	}
-	base, err := ResolveSite(siteName)
+	c, err := access.Client()
 	if err != nil {
 		return err
-	}
-	apiKey, err := credential(*apiKeyFile, EnvAPIKey)
-	if err != nil {
-		return err
-	}
-	appKey, err := credential(*appKeyFile, EnvAppKey, EnvAppKeyAlt)
-	if err != nil {
-		return err
-	}
-	if apiKey == "" || appKey == "" {
-		return fmt.Errorf("Datadog needs an API key and an application key: pass --api-key-file and --app-key-file, or set %s and %s", EnvAPIKey, EnvAppKey)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -98,16 +81,14 @@ files or environment variables, never from flags.
 			fmt.Fprintf(os.Stderr, f+"\n", a...)
 		}
 	}
-	c := &Client{Base: base, APIKey: apiKey, AppKey: appKey, HTTP: &http.Client{Timeout: 5 * time.Minute},
-		Log: func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) }}
-	fmt.Fprintf(os.Stderr, "using Datadog API at %s\n", base)
+	fmt.Fprintf(os.Stderr, "using Datadog API at %s\n", c.Base)
 	o := Options{Client: c, Filters: filters, Cluster: *cluster, Days: *days, Step: *step, Concurrency: *concurrency, Log: logf}
 	if *list {
-		return hint(List(ctx, o, os.Stdout))
+		return Hint(List(ctx, o, os.Stdout))
 	}
 	f, rep, err := Run(ctx, o)
 	if err != nil {
-		return hint(err)
+		return Hint(err)
 	}
 	fh, err := os.Create(*out)
 	if err != nil {
@@ -120,11 +101,68 @@ files or environment variables, never from flags.
 	if err := fh.Close(); err != nil {
 		return err
 	}
-	printReport(os.Stderr, *out, rep)
+	PrintReport(os.Stderr, *out, rep)
 	return nil
 }
 
-func printReport(w io.Writer, out string, rep *Report) {
+// Flags are the flags that reach the Datadog API, shared with run.
+type Flags struct {
+	Site, APIKeyFile, AppKeyFile string
+}
+
+// AddFlags registers --site, --api-key-file and --app-key-file.
+func AddFlags(fs *flag.FlagSet) *Flags {
+	f := &Flags{}
+	fs.StringVar(&f.Site, "site", "", "Datadog site: "+strings.Join(SiteNames(), ", ")+", a site domain such as datadoghq.eu, or an https:// URL (default: "+EnvSite+" or us1)")
+	fs.StringVar(&f.APIKeyFile, "api-key-file", "", "file holding the Datadog API key (or set "+EnvAPIKey+")")
+	fs.StringVar(&f.AppKeyFile, "app-key-file", "", "file holding the Datadog application key (or set "+EnvAppKey+")")
+	return f
+}
+
+// KeysGiven reports whether both keys are given, as files or in the
+// environment. It does not read the files.
+func (f *Flags) KeysGiven() bool {
+	given := func(file string, envs ...string) bool {
+		if file != "" {
+			return true
+		}
+		for _, e := range envs {
+			if strings.TrimSpace(os.Getenv(e)) != "" {
+				return true
+			}
+		}
+		return false
+	}
+	return given(f.APIKeyFile, EnvAPIKey) && given(f.AppKeyFile, EnvAppKey, EnvAppKeyAlt)
+}
+
+// Client resolves the site and reads the keys.
+func (f *Flags) Client() (*Client, error) {
+	siteName := f.Site
+	if siteName == "" {
+		siteName = os.Getenv(EnvSite)
+	}
+	base, err := ResolveSite(siteName)
+	if err != nil {
+		return nil, err
+	}
+	apiKey, err := credential(f.APIKeyFile, EnvAPIKey)
+	if err != nil {
+		return nil, err
+	}
+	appKey, err := credential(f.AppKeyFile, EnvAppKey, EnvAppKeyAlt)
+	if err != nil {
+		return nil, err
+	}
+	if apiKey == "" || appKey == "" {
+		return nil, fmt.Errorf("Datadog needs an API key and an application key: pass --api-key-file and --app-key-file, or set %s and %s", EnvAPIKey, EnvAppKey)
+	}
+	return &Client{Base: base, APIKey: apiKey, AppKey: appKey, HTTP: &http.Client{Timeout: 5 * time.Minute},
+		Log: func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) }}, nil
+}
+
+// PrintReport prints what a pull wrote to out.
+func PrintReport(w io.Writer, out string, rep *Report) {
 	fmt.Fprintf(w, "wrote %s for cluster %s: %s in %s, %s; data from %s to %s\n", out, rep.Cluster,
 		plural(rep.Containers, "container"), plural(rep.Workloads, "workload"), plural(rep.Nodes, "node"),
 		rep.Start.UTC().Format(time.RFC3339), rep.End.UTC().Format(time.RFC3339))
@@ -134,8 +172,8 @@ func printReport(w io.Writer, out string, rep *Report) {
 	}
 }
 
-// hint adds the likely fix to an error from the API.
-func hint(err error) error {
+// Hint adds the likely fix to an error from the API.
+func Hint(err error) error {
 	if err == nil {
 		return nil
 	}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -453,6 +454,55 @@ func TestRollup(t *testing.T) {
 	}
 	if !strings.Contains(log.String(), "older than 1h0m kept at 5m0s") {
 		t.Errorf("progress does not mention the rollup:\n%s", log)
+	}
+}
+
+// An export says when the poll rolled readings up, not what its own
+// --keep-raw default would have done.
+func TestExportReportsThePollsRollupAge(t *testing.T) {
+	out, clk, log := setup(t)
+	o := opts(out)
+	o.Duration = 3*time.Hour - time.Minute
+	o.KeepRaw = time.Hour
+	if err := Run(context.Background(), o, &fakeReader{clock: clk, metrics: true}, clk, log); err != nil {
+		t.Fatal(err)
+	}
+	export := opts(out)
+	export.Export = true
+	log.Reset()
+	if err := Run(context.Background(), export, nil, clk, log); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(log.String(), "older than 1h0m kept at 5m0s") || strings.Contains(log.String(), "2d0h0m") {
+		t.Errorf("export:\n%s", log)
+	}
+
+	// Directories written before the age was recorded leave it out.
+	dir := ReadingsDir(out)
+	m, err := readMeta(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.KeepRaw = nil
+	if err := writeMeta(dir, m); err != nil {
+		t.Fatal(err)
+	}
+	log.Reset()
+	if err := Run(context.Background(), export, nil, clk, log); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(log.String(), "(older readings kept at 5m0s)") {
+		t.Errorf("export without the age:\n%s", log)
+	}
+
+	// A later poll with another --keep-raw records it.
+	o.Duration = time.Minute
+	o.KeepRaw = 2 * time.Hour
+	if err := Run(context.Background(), o, &fakeReader{clock: clk, metrics: true}, clk, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if m, err = readMeta(dir); err != nil || m.KeepRaw == nil || *m.KeepRaw != 7200 {
+		t.Fatalf("meta after a second poll: %+v, %v", m, err)
 	}
 }
 

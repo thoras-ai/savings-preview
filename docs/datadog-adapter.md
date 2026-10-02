@@ -58,13 +58,14 @@ DD_API_KEY=... DD_APP_KEY=... savings-preview datadog --site us1 [--selector kub
    ```
 
    `--list` prints the metric chosen for each input and one `cluster:` line per cluster. Pass the cluster to `--selector`. The pull writes `savings-preview.otlp.json`.
-6. **Open the report.** `savings-preview run` does not read Datadog yet, so build the page and serve it next to the file:
+6. **Open the report.** `savings-preview run` reads Datadog when both keys are set, and takes the same `--site`, `--api-key-file`, `--app-key-file` and `--selector`. It writes the file, checks it and opens the report:
 
    ```
-   python3 scripts/build_report.py dist
-   cp savings-preview.otlp.json dist/
-   python3 -m http.server -d dist
+   savings-preview run --site us1 --api-key-file $K/dd-api-key --app-key-file $K/dd-app-key \
+     --selector kube_cluster_name:CLUSTER
    ```
+
+   With the keys only in `DD_API_KEY` and `DD_APP_KEY`, `run` falls back to a store in the cluster, then to polling, when Datadog has no usable data. `--source datadog` makes such a failure an error instead.
 
 Before querying, the adapter checks both keys with `GET /api/v2/validate_keys`, which needs no scope. A 401 or 403 there means a key is wrong or belongs to an organization on another site. A 403 on a query means the application key lacks `timeseries_query`.
 

@@ -103,7 +103,7 @@ Instance type, region and capacity type come from node labels, so kube-state-met
 
 ## Stores outside the cluster
 
-`--url` (or a URL in `--target`) queries a store directly, without the API server. The kubeconfig is not used, so `--cluster-name` is required. The backend is detected from the host: `aps-workspaces.REGION.amazonaws.com` is Amazon Managed Prometheus, `*.grafana.net` is Grafana Cloud, a `--tenant` means Mimir, and anything else is a plain Prometheus-compatible store. `--backend` overrides the detection. The query or remote-write URL a console shows is accepted as well as the base URL.
+`--url` (or a URL in `--target`) queries a store directly, without the API server. The kubeconfig is not used, so `--cluster-name` is required. `savings-preview run` takes the same flags; it names the cluster after the kubeconfig's when it can read one, and a failing `--url` stops it rather than falling back to polling. The backend is detected from the host: `aps-workspaces.REGION.amazonaws.com` is Amazon Managed Prometheus, `*.grafana.net` is Grafana Cloud, a `--tenant` means Mimir, and anything else is a plain Prometheus-compatible store. `--backend` overrides the detection. The query or remote-write URL a console shows is accepted as well as the base URL.
 
 Credentials never come from flags. Bearer tokens, basic auth and extra headers are read from files or environment variables, and Amazon credentials from the standard AWS chain. They are not printed or logged; the store URL is printed without user info or query string.
 
