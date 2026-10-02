@@ -25,6 +25,8 @@ jobs:
             echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main"
             exit 1
           fi
+      - name: Check that CHANGELOG.md has a section for the tag
+        run: python3 scripts/release_notes.py "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           # go.mod names the minimum version; build and test with its latest patch release.
@@ -54,6 +56,7 @@ jobs:
           name: binaries
           path: dist/release/bin/
       - run: scripts/release.sh package "$GITHUB_REF_NAME"
+      - run: python3 scripts/release_notes.py "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > dist/release/notes.md
       # The release stays a draft until the Homebrew formula, which needs the
       # asset URLs, is attached, so a failure never leaves a partial release.
       - name: Create the GitHub release
@@ -63,7 +66,7 @@ jobs:
           prerelease=()
           if [[ $GITHUB_REF_NAME == *-* ]]; then prerelease=(--prerelease); fi
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
-            --verify-tag --title "$GITHUB_REF_NAME" --generate-notes "${prerelease[@]}" \
+            --verify-tag --title "$GITHUB_REF_NAME" --notes-file dist/release/notes.md "${prerelease[@]}" \
             dist/release/*.tar.gz dist/release/install.sh dist/release/checksums.txt
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
             --json tagName,assets > dist/release/release.json

@@ -145,7 +145,7 @@ A reader averaging a held series over time weights each point by the time until 
 
 ### Readers before 1.3.0
 
-Release v0.1.0 of savings-preview, its report page, its `report.html` and its validator are such readers. A compact file is structurally valid for an earlier reader, to which only the new attributes are unknown. Such a reader sees held series as points far apart, treats the time between them as gaps, and prices only the steps where a level changes, so it misprices the file. The validator before 1.3.0 also rejects the fidelity tier of a compact resource built from data finer than 300 seconds, since it judges the tier on the 900-second points. Readers must handle `thoras.held_metrics` and `thoras.source_step_seconds` to read compact files. The report page handles both from 1.3.0. Full files written by 1.3.0 adapters use neither attribute and read as before.
+Release v0.1.0 of savings-preview, its report page, its `report.html` and its validator are such readers. A compact file is structurally valid for an earlier reader, to which only the new attributes are unknown. Such a reader sees held series as points far apart, treats the time between them as gaps, and prices only the steps where a level changes, so it misprices the file. The validator before 1.3.0 also rejects the fidelity tier of a compact resource that claims tier 1 or 2 (data at 300 seconds or finer over 7 days or more), since it judges the tier on the 900-second points. Readers must handle `thoras.held_metrics` and `thoras.source_step_seconds` to read compact files. The report page handles both from 1.3.0. Full files written by 1.3.0 adapters use neither attribute and read as before.
 
 ## Missing data
 
