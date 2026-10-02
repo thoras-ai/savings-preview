@@ -98,7 +98,7 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 
 func spanText(d time.Duration) string {
 	if d < 48*time.Hour {
-		return fmt.Sprintf("%.0f hours", d.Hours())
+		return fmt.Sprintf("%.0f h", d.Hours())
 	}
 	return fmt.Sprintf("%.1f days", d.Hours()/24)
 }

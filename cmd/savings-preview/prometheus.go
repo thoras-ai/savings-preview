@@ -146,7 +146,7 @@ func chooseStore(ctx context.Context, conn *kube.Conn, target string, list bool)
 		}
 		return nil, errors.New("no Prometheus-compatible store found in the cluster; pass --target or --url")
 	}
-	var lastErr error
+	var lastErr, agentErr error
 	for i := range d.Candidates {
 		c := d.Candidates[i]
 		px, perr := conn.Proxy(c.Namespace, c.Service, c.Port, c.Scheme, c.Prefix)
@@ -158,15 +158,21 @@ func chooseStore(ctx context.Context, conn *kube.Conn, target string, list bool)
 		err := probe.Check(ctx)
 		if err == nil {
 			if len(d.Candidates) > 1 {
-				fmt.Fprintf(os.Stderr, "found %d stores, using the first; pass --target to choose another (--list shows all)\n", len(d.Candidates))
+				fmt.Fprintf(os.Stderr, "found %d stores; pass --target to choose another (--list shows all)\n", len(d.Candidates))
 			}
 			return &c, nil
 		}
+		failure := fmt.Errorf("%s: %w", c, err)
 		if errors.As(err, &agent) {
-			return nil, fmt.Errorf("%s: %w", c, err)
+			// Another candidate may still serve queries; report agent mode only if none does.
+			agentErr = failure
+		} else {
+			lastErr = failure
 		}
-		lastErr = fmt.Errorf("%s: %w", c, err)
-		fmt.Fprintf(os.Stderr, "skipping %s\n", lastErr)
+		fmt.Fprintf(os.Stderr, "skipping %s\n", failure)
+	}
+	if agentErr != nil {
+		return nil, agentErr
 	}
 	return nil, lastErr
 }
