@@ -58,12 +58,11 @@ Per-pod series are joined to the owning workload in PromQL. A pod belongs to a D
 | `k8s.deployment.pod.desired`, `k8s.statefulset.pod.desired` | `kube_deployment_spec_replicas`, `kube_statefulset_replicas` |
 | `k8s.node.cpu.allocatable`, `k8s.node.memory.allocatable` | `kube_node_status_allocatable` |
 | node attributes | `kube_node_info` and `kube_node_labels` |
-
-| `thoras.container.oom_kills` | increase of `kube_pod_container_status_restarts_total` over each step, for containers whose `kube_pod_container_status_last_terminated_reason` is `OOMKilled`, summed over pods |
+| `thoras.container.oom_kills` | difference of `kube_pod_container_status_restarts_total` from one step to the next, for containers whose `kube_pod_container_status_last_terminated_reason` is `OOMKilled`, summed over pods |
 
 Usage queries keep only series with `container!=""`, `container!="POD"` and `image!=""`. The `container=""` series is the pod total, so keeping it would count every pod twice. kube-state-metrics keeps exporting the requests of finished pods, which is why requests are limited to running pods.
 
-An out-of-memory kill counts when the container restarts and its last termination reason is `OOMKilled`. A kill of a child process that does not restart the container is not counted. Without `kube_pod_container_status_restarts_total` no kills are reported.
+An out-of-memory kill counts when the container restarts and its last termination reason is `OOMKilled`. A kill of a child process that does not restart the container is not counted, and neither is a restart in the first step of a container's restart series, which has no earlier value to compare with. Without `kube_pod_container_status_restarts_total` no kills are reported.
 
 ## Containers without usage labels
 
@@ -78,6 +77,8 @@ The choice is made for the whole store. When some nodes label container series a
 Thanos, Mimir, Amazon Managed Prometheus and Grafana Cloud often hold several clusters, told apart by a label. Before pulling, the adapter counts series by `cluster`, `cluster_name`, `cluster_id`, `k8s_cluster`, `k8s_cluster_name` and `kubernetes_cluster` in `kube_node_info` over the window, and in `kube_pod_owner` and `container_memory_working_set_bytes` now. When one of these metrics has more than one value of one label (series without the label count as a value of their own), the run stops, lists the values and suggests a `--selector`. It does the same when a selector still matches more than one value.
 
 `--selector` is added to every series selector in every query, so the label must be on the cAdvisor and kube-state-metrics series alike. `--selector 'cluster=""'` selects the series that have no cluster label.
+
+Earlier versions only looked at the `cluster` label on `kube_pod_owner`, and when it had several values they warned and averaged the clusters together. Runs against such a store now exit with status 1 and an error that starts with `the store holds N clusters` and names the label and its values. There is no compatible way to keep the old behavior: averaging workloads across clusters gives wrong usage and savings figures. To upgrade, add `--selector` with one of the listed values, or `--selector 'cluster=""'` for the series without the label. Running the previous build restores the warning.
 
 Instance type, region and capacity type come from node labels, so kube-state-metrics needs `--metric-labels-allowlist=nodes=[*]` (or the specific labels). Without them the node attributes are `unknown` and the report prices the cluster with its default node.
 
