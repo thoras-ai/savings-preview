@@ -65,7 +65,7 @@ It prints the identity the kubeconfig gives, the result of `kubectl auth can-i` 
 - `docs/security.md`: what the CLI reads and writes, where its output goes, and how to check. `deploy/rbac/` has read-only ServiceAccounts for each source.
 - `docs/prometheus-adapter.md`: the Prometheus adapter. Build it with `go build -o bin/savings-preview ./cmd/savings-preview`.
 - `CHANGELOG.md`: what changed in each release; each section is that release's notes. `docs/upgrading.md` has the upgrade steps.
-- `docs/releasing.md`: how a `v*` tag becomes a GitHub release with binaries, checksums, the install script and the Homebrew formula, and how to publish the formula to the tap.
+- `docs/releasing.md`: how a `v*` tag becomes a GitHub release with binaries, SBOMs, checksums, the install script and the Homebrew formula, and how to publish the formula to the tap.
 - `scripts/install.sh` and `packaging/homebrew/savings-preview.rb`: the install script and the Homebrew formula template that each release carries.
 - `docs/poll-adapter.md`: the poll adapter, for clusters with no usage history. It reads the cluster at an interval and keeps the readings on disk.
 - `docs/datadog-adapter.md`: the Datadog adapter. It reads the history from the Datadog metrics query API with an API key and an application key.
