@@ -28,6 +28,7 @@ func runPrometheus(args []string) error {
 		directURL   = fs.String("url", "", "query a store directly at this base URL instead of through the Kubernetes API server")
 		tokenFile   = fs.String("bearer-token-file", "", "file holding a bearer token for --url")
 		basicFile   = fs.String("basic-auth-file", "", "file holding user:password for --url")
+		selector    = fs.String("selector", "", `label matchers added to every query, to read one cluster from a store that holds several, e.g. 'cluster="prod-us"'`)
 		list        = fs.Bool("list", false, "print what discovery finds and exit")
 		concurrency = fs.Int("concurrency", 2, "queries in flight at once")
 		verbose     = fs.Bool("v", false, "log each query")
@@ -40,6 +41,10 @@ func runPrometheus(args []string) error {
 	}
 	if *step < time.Second || *step%time.Second != 0 {
 		return errors.New("--step must be a whole number of seconds")
+	}
+	matchers, err := prometheus.ParseSelector(*selector)
+	if err != nil {
+		return fmt.Errorf("--selector: %w", err)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -89,7 +94,7 @@ func runPrometheus(args []string) error {
 		fmt.Fprintf(os.Stderr, "using %s\n", cand)
 	}
 
-	client := &prometheus.Client{G: getter}
+	client := &prometheus.Client{G: getter, Selector: matchers}
 	f, rep, err := prometheus.Run(ctx, prometheus.Options{Client: client, Cluster: clusterName, Days: *days, Step: *step,
 		Concurrency: *concurrency, Log: logf})
 	if err != nil {
@@ -108,6 +113,14 @@ func runPrometheus(args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "wrote %s: %d containers in %d workloads, %d nodes; data from %s to %s\n", *out,
 		rep.Containers, rep.Workloads, rep.Nodes, rep.Start.UTC().Format(time.RFC3339), rep.End.UTC().Format(time.RFC3339))
+	if rep.OOMKills > 0 {
+		fmt.Fprintf(os.Stderr, "%d out-of-memory kills\n", rep.OOMKills)
+	}
+	if rep.UsageFromPods {
+		fmt.Fprintln(os.Stderr, "note: the store has no per-container usage series (the container runtime does not label cAdvisor metrics), "+
+			"so container usage is the pod's usage split between its containers by their requests; these containers carry the fidelity note "+
+			prometheus.UsageFromPodsNote)
+	}
 	for _, w := range rep.Warnings {
 		fmt.Fprintln(os.Stderr, "warning:", w)
 	}

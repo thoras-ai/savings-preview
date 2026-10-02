@@ -3,6 +3,7 @@ package prometheus
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/url"
 	"os"
 	"os/exec"
@@ -40,7 +41,7 @@ func clusterStore(withOwners, withRequests, requestsForContainers bool, drop ...
 					map[string]any{"metric": map[string]string{"node": "n1",
 						"label_node_kubernetes_io_instance_type": "m5.xlarge", "label_topology_kubernetes_io_region": "us-east-1",
 						"label_eks_amazonaws_com_capacityType": "SPOT"}, "value": []any{1.0, "1"}}}}}
-			case dropped(drop, query):
+			case dropped(drop, query), query == UnlabeledPods:
 				return 200, empty()
 			case query == OwnerProbe:
 				if !withOwners {
@@ -238,8 +239,14 @@ func TestNoContainerMetricsIsAClearError(t *testing.T) {
 		return 200, empty()
 	}}
 	_, _, err := runAgainst(t, f)
-	if err == nil || !strings.Contains(err.Error(), "no per-container usage metrics") {
+	if err == nil || !strings.Contains(err.Error(), "no container usage metrics") {
 		t.Errorf("unexpected error: %v", err)
+	}
+	c := f.client(t)
+	c.Selector = `cluster="b"`
+	_, _, err = Run(context.Background(), Options{Client: c, Cluster: "test", Days: 7, Step: 5 * time.Minute, Now: time.Unix(t0, 0)})
+	if err == nil || !strings.Contains(err.Error(), "match the selector") {
+		t.Errorf("unexpected error with a selector: %v", err)
 	}
 }
 
@@ -304,11 +311,206 @@ func TestMissingReplicaSetOwnerLeavesDeploymentsOutWithAWarning(t *testing.T) {
 	}
 }
 
-func TestMultipleClustersInOneStoreWarn(t *testing.T) {
+// groups answers an instant query with one series per label set.
+func groups(sets ...map[string]string) map[string]any {
+	var res []any
+	for _, l := range sets {
+		res = append(res, map[string]any{"metric": l, "value": []any{1.0, "1"}})
+	}
+	return map[string]any{"status": "success", "data": map[string]any{"resultType": "vector", "result": res}}
+}
+
+func TestMultipleClustersInOneStoreStop(t *testing.T) {
 	h := clusterStore(true, true, true)
 	f := &fakeStore{handle: func(path string, q url.Values) (int, any) {
-		if q.Get("query") == ClusterCount {
-			return 200, vector(3)
+		if strings.HasPrefix(q.Get("query"), "count by (cluster, ") && strings.Contains(q.Get("query"), "kube_pod_owner") {
+			return 200, groups(map[string]string{"cluster": "prod-us"}, map[string]string{"cluster": "prod-eu"}, map[string]string{"cluster": "dev"})
+		}
+		return h(path, q)
+	}}
+	_, _, err := runAgainst(t, f)
+	var ce *ClusterError
+	if !errors.As(err, &ce) {
+		t.Fatalf("want a ClusterError, got %v", err)
+	}
+	if ce.Label != "cluster" || strings.Join(ce.Values, ",") != "dev,prod-eu,prod-us" || ce.Selected {
+		t.Errorf("error: %+v", ce)
+	}
+	for _, want := range []string{"3 clusters", `"prod-eu"`, `--selector 'cluster="dev"'`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("message lacks %s: %v", want, err)
+		}
+	}
+	for _, q := range f.requests {
+		if q.Get("start") != "" {
+			t.Fatal("no history may be pulled from a store with several clusters")
+		}
+	}
+}
+
+func TestSeriesWithAndWithoutAClusterLabelCountAsTwoClusters(t *testing.T) {
+	h := clusterStore(true, true, true)
+	f := &fakeStore{handle: func(path string, q url.Values) (int, any) {
+		if strings.HasPrefix(q.Get("query"), "count by (cluster, ") && strings.Contains(q.Get("query"), "kube_node_info") {
+			return 200, groups(map[string]string{"k8s_cluster": "a"}, map[string]string{})
+		}
+		return h(path, q)
+	}}
+	_, _, err := runAgainst(t, f)
+	var ce *ClusterError
+	if !errors.As(err, &ce) || ce.Label != "k8s_cluster" || len(ce.Values) != 2 || ce.Values[0] != "" {
+		t.Fatalf("got %v", err)
+	}
+	if !strings.Contains(err.Error(), `--selector 'k8s_cluster="a"'`) {
+		t.Errorf("the suggestion must name a real value: %v", err)
+	}
+}
+
+func TestOneLabelPerMetricIsOneCluster(t *testing.T) {
+	// kube-state-metrics labeled, cAdvisor not: one cluster, not two.
+	h := clusterStore(true, true, true)
+	f := &fakeStore{handle: func(path string, q url.Values) (int, any) {
+		query := q.Get("query")
+		if strings.HasPrefix(query, "count by (cluster, ") {
+			if strings.Contains(query, "container_memory_working_set_bytes") {
+				return 200, groups(map[string]string{})
+			}
+			return 200, groups(map[string]string{"cluster": "prod"})
+		}
+		return h(path, q)
+	}}
+	if _, _, err := runAgainst(t, f); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSelectorIsAppliedToEveryQuery(t *testing.T) {
+	f := &fakeStore{handle: clusterStore(true, true, true)}
+	c := f.client(t)
+	c.Selector = `cluster="prod-us"`
+	file, _, err := Run(context.Background(), Options{Client: c, Cluster: "test", Days: 7, Step: 5 * time.Minute, Now: time.Unix(t0, 0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validate(t, file)
+	sent := 0
+	for _, q := range f.requests {
+		query := q.Get("query")
+		if query == "" || query == "vector(1)" || strings.Contains(query, "prometheus_tsdb_lowest_timestamp_seconds") {
+			continue
+		}
+		sent++
+		if n, m := strings.Count(query, "{"), strings.Count(query, `{cluster="prod-us"`); n == 0 || n != m {
+			t.Errorf("%d of %d selectors carry the matcher:\n%s", m, n, query)
+		}
+	}
+	if sent < 10 {
+		t.Errorf("only %d queries checked", sent)
+	}
+}
+
+func TestSelectorStillMatchingSeveralClustersStops(t *testing.T) {
+	h := clusterStore(true, true, true)
+	f := &fakeStore{handle: func(path string, q url.Values) (int, any) {
+		if strings.HasPrefix(q.Get("query"), "count by (cluster, ") {
+			return 200, groups(map[string]string{"cluster": "prod-us"}, map[string]string{"cluster": "prod-eu"})
+		}
+		return h(path, q)
+	}}
+	c := f.client(t)
+	c.Selector = `cluster=~"prod-.*"`
+	_, _, err := Run(context.Background(), Options{Client: c, Cluster: "test", Days: 7, Step: 5 * time.Minute, Now: time.Unix(t0, 0)})
+	var ce *ClusterError
+	if !errors.As(err, &ce) || !ce.Selected || !strings.Contains(err.Error(), "the selector matches 2 clusters") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+// podLevelStore answers like a store whose cAdvisor series have no container
+// labels, only the pod cgroup series.
+func podLevelStore(h func(string, url.Values) (int, any), withContainerInfo bool) func(string, url.Values) (int, any) {
+	return func(path string, q url.Values) (int, any) {
+		query := q.Get("query")
+		switch {
+		case query == UsageProbe:
+			return 200, empty()
+		case query == ContainerProbe && !withContainerInfo:
+			return 200, empty()
+		case path == "/api/v1/query_range" && strings.Contains(query, "container_") && strings.Contains(query, `container!=""`):
+			return 200, map[string]any{"status": "success", "data": map[string]any{"resultType": "matrix", "result": []any{}}}
+		}
+		return h(path, q)
+	}
+}
+
+func TestPodLevelFallback(t *testing.T) {
+	f := &fakeStore{handle: podLevelStore(clusterStore(true, true, true), true)}
+	file, rep, err := runAgainst(t, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validate(t, file)
+	if !rep.UsageFromPods || rep.Containers != 2 {
+		t.Fatalf("report: %+v", rep)
+	}
+	web := find(file, "shop", Deployment, "web", "app")
+	if web == nil || len(series(web, contract.CPUUsage)) == 0 || len(series(web, contract.MemoryWorkingSet)) == 0 {
+		t.Fatalf("usage must come from the pod series: %+v", web)
+	}
+	if len(web.Notes) != 1 || web.Notes[0] != UsageFromPodsNote {
+		t.Errorf("notes: %v", web.Notes)
+	}
+	if find(file, "shop", Deployment, "web", "").Notes != nil {
+		t.Error("the note belongs on container resources only")
+	}
+	usageQueries := map[string]bool{}
+	for _, q := range f.requests {
+		query := q.Get("query")
+		if q.Get("start") != "" && strings.Contains(query, "container_cpu_usage_seconds_total") {
+			usageQueries[query] = true
+			if !strings.Contains(query, podCgroup) || !strings.Contains(query, `kube_pod_container_resource_requests{resource="cpu"}`) {
+				t.Errorf("cpu usage must be split from the pod series by cpu requests:\n%s", query)
+			}
+		}
+		if q.Get("start") == "" && q.Get("time") != "" && strings.Contains(query, "container_memory_working_set_bytes") &&
+			!strings.Contains(query, "count by") && query != UsageProbe && query != PodUsageProbe {
+			t.Errorf("unexpected instant query: %s", query)
+		}
+	}
+	if len(usageQueries) != 2 {
+		t.Errorf("want one cpu usage query per workload kind, got %d", len(usageQueries))
+	}
+}
+
+func TestPodLevelFallbackNeedsContainerInfo(t *testing.T) {
+	f := &fakeStore{handle: podLevelStore(clusterStore(true, true, true), false)}
+	_, _, err := runAgainst(t, f)
+	if err == nil || !strings.Contains(err.Error(), "kube_pod_container_info") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestContainerLevelStoreDoesNotFallBack(t *testing.T) {
+	f := &fakeStore{handle: clusterStore(true, true, true)}
+	file, rep, err := runAgainst(t, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.UsageFromPods || find(file, "shop", Deployment, "web", "app").Notes != nil {
+		t.Error("a store with container labels must not be marked")
+	}
+	for _, q := range f.requests {
+		if strings.Contains(q.Get("query"), "kube_pod_container_info") && q.Get("start") != "" {
+			t.Error("no request split is needed")
+		}
+	}
+}
+
+func TestPodsWithoutContainerSeriesWarn(t *testing.T) {
+	h := clusterStore(true, true, true)
+	f := &fakeStore{handle: func(path string, q url.Values) (int, any) {
+		if q.Get("query") == UnlabeledPods {
+			return 200, vector(4)
 		}
 		return h(path, q)
 	}}
@@ -316,8 +518,64 @@ func TestMultipleClustersInOneStoreWarn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(warnings(rep), "3 clusters") {
+	if !strings.Contains(warnings(rep), "4 workload pods have pod-level usage but no per-container usage") {
 		t.Errorf("warnings: %s", warnings(rep))
+	}
+}
+
+func TestOOMKills(t *testing.T) {
+	h := clusterStore(true, true, true)
+	f := &fakeStore{handle: func(path string, q url.Values) (int, any) {
+		query := q.Get("query")
+		if path == "/api/v1/query_range" && strings.Contains(query, "kube_pod_container_status_restarts_total") {
+			if !strings.Contains(query, "kube_replicaset_owner") {
+				return 200, map[string]any{"status": "success", "data": map[string]any{"resultType": "matrix", "result": []any{}}}
+			}
+			kill := int64(t0) - 86400
+			s, e := atoi(q.Get("start")), atoi(q.Get("end"))
+			if kill < s || kill > e {
+				return 200, map[string]any{"status": "success", "data": map[string]any{"resultType": "matrix", "result": []any{}}}
+			}
+			return 200, matrix(map[string]string{"namespace": "shop", "workload": "web", "container": "app"}, kill, kill, 300, func(int64) float64 { return 2 })
+		}
+		return h(path, q)
+	}}
+	file, rep, err := runAgainst(t, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validate(t, file)
+	got := series(find(file, "shop", Deployment, "web", "app"), contract.OOMKills)
+	if len(got) != 1 || got[0].V != 2 || rep.OOMKills != 2 {
+		t.Errorf("oom kills: %v, report %d", got, rep.OOMKills)
+	}
+	if series(find(file, "shop", StatefulSet, "db", "app"), contract.OOMKills) != nil {
+		t.Error("no kills, no series")
+	}
+}
+
+func TestOOMKillsAreSkippedWithoutRestartMetrics(t *testing.T) {
+	f := &fakeStore{handle: clusterStore(true, true, true, RestartsProbe)}
+	if _, _, err := runAgainst(t, f); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range f.requests {
+		if strings.Contains(q.Get("query"), "restarts_total") && q.Get("start") != "" {
+			t.Error("no OOM query without restart metrics")
+		}
+	}
+}
+
+func TestOOMQueryCountsEachRestartOnce(t *testing.T) {
+	q := OOMKills(Deployment, 5*time.Minute)
+	for _, want := range []string{
+		`max by (namespace, pod, container) (kube_pod_container_status_restarts_total{}) - max by (namespace, pod, container) (kube_pod_container_status_restarts_total{} offset 300s) > 0`,
+		`kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}`,
+		"sum by (namespace, workload, container)",
+	} {
+		if !strings.Contains(q, want) {
+			t.Errorf("query lacks %s:\n%s", want, q)
+		}
 	}
 }
 

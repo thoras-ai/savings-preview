@@ -108,6 +108,13 @@ class RejectTest(unittest.TestCase):
             {"stringValue": "thoras.container.oom_kills"})
         self.assertHas("not a required metric")
 
+    def test_fidelity_notes(self):
+        self.app["resource"]["attributes"].append({"key": "thoras.fidelity_notes", "value": {
+            "arrayValue": {"values": [{"stringValue": "usage_split_from_pod_by_requests"}]}}})
+        self.assertEqual(vc.validate(self.doc), [])
+        attr(self.app, "thoras.fidelity_notes")["value"] = {"stringValue": "x"}
+        self.assertHas("thoras.fidelity_notes must be an array")
+
     def test_missing_attribute(self):
         self.app["resource"]["attributes"] = [
             a for a in self.app["resource"]["attributes"] if a["key"] != "k8s.namespace.name"]
