@@ -8,10 +8,12 @@
 package savings
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"slices"
 	"sort"
@@ -85,11 +87,9 @@ type Totals struct {
 
 // OTLP-JSON shape, as far as the totals need it. encoding/json matches the
 // field names to the camelCase keys without tags.
-type otlpDoc struct {
-	ResourceMetrics []struct {
-		Resource     struct{ Attributes []otlpAttr }
-		ScopeMetrics []struct{ Metrics []otlpMetric }
-	}
+type otlpResource struct {
+	Resource     struct{ Attributes []otlpAttr }
+	ScopeMetrics []struct{ Metrics []otlpMetric }
 }
 
 type otlpAttr struct {
@@ -137,19 +137,18 @@ type node struct {
 
 // Analyze computes the summary of an OTLP-JSON Savings Preview file.
 func Analyze(doc []byte) (*Summary, error) {
-	var d otlpDoc
-	if err := json.Unmarshal(doc, &d); err != nil {
-		return nil, err
-	}
-	if len(d.ResourceMetrics) == 0 {
-		return nil, errors.New("No resourceMetrics found. This is not a Savings Preview file.")
-	}
+	return AnalyzeReader(bytes.NewReader(doc))
+}
+
+// AnalyzeReader is Analyze for a file read from r. It decodes one resource at
+// a time and keeps only the numbers of each series.
+func AnalyzeReader(rd io.Reader) (*Summary, error) {
 	cluster := ""
 	var containers []*resource
 	var nodes []node
 	workloads := map[string]*resource{}
 	var notes []string
-	for _, rm := range d.ResourceMetrics {
+	n, err := eachResource(rd, func(rm *otlpResource) {
 		strs, nums := map[string]string{}, map[string]float64{}
 		// Array entries without a stringValue stay nil, the JS undefined.
 		lists := map[string][]*string{}
@@ -220,6 +219,12 @@ func Analyze(doc []byte) (*Summary, error) {
 				workloads[r.id] = r
 			}
 		}
+	})
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, errors.New("No resourceMetrics found. This is not a Savings Preview file.")
 	}
 	if len(containers) == 0 {
 		return nil, errors.New("The file has no container series, so there is nothing to analyze.")
@@ -278,6 +283,54 @@ func Analyze(doc []byte) (*Summary, error) {
 		s.StepSeconds, s.CompactStepSeconds = int(sourceStep), int(step)
 	}
 	return s, nil
+}
+
+// eachResource calls fn with each element of the resourceMetrics array of the
+// JSON object read from r, and returns how many there were.
+func eachResource(r io.Reader, fn func(*otlpResource)) (int, error) {
+	dec := json.NewDecoder(r)
+	if tok, err := dec.Token(); err != nil {
+		return 0, err
+	} else if tok != json.Delim('{') {
+		return 0, errors.New("No resourceMetrics found. This is not a Savings Preview file.")
+	}
+	n := 0
+	for dec.More() {
+		key, err := dec.Token()
+		if err != nil {
+			return n, err
+		}
+		if k, _ := key.(string); !strings.EqualFold(k, "resourceMetrics") {
+			var skip json.RawMessage
+			if err := dec.Decode(&skip); err != nil {
+				return n, err
+			}
+			continue
+		}
+		if tok, err := dec.Token(); err != nil {
+			return n, err
+		} else if tok != json.Delim('[') {
+			return n, errors.New("resourceMetrics is not an array")
+		}
+		for dec.More() {
+			var rm otlpResource
+			if err := dec.Decode(&rm); err != nil {
+				return n, err
+			}
+			fn(&rm)
+			n++
+		}
+		if _, err := dec.Token(); err != nil {
+			return n, err
+		}
+	}
+	if _, err := dec.Token(); err != nil {
+		return n, err
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return n, errors.New("extra data after the JSON value")
+	}
+	return n, nil
 }
 
 func readSeries(m otlpMetric) series {

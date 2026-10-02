@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -181,28 +182,18 @@ func must(b []byte, err error) []byte {
 	return b
 }
 
-func TestWriteBundle(t *testing.T) {
+// TestBuildReport writes the compact file, the summary and the zip from a
+// contract file, and checks that the data in report.html comes back out
+// unchanged with export.
+func TestBuildReport(t *testing.T) {
 	dir := t.TempDir()
 	out := copyFixture(t, dir)
-	compactPath := compactName(out)
-	if _, err := compactFile(out, compactPath); err != nil {
-		t.Fatal(err)
-	}
-	data := must(os.ReadFile(compactPath))
-	sum, err := savings.Analyze(data)
+	b, err := buildReport(out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	full, err := fullDataOf(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	zipPath, err := writeBundle(out, data, "<html><script></script></html>",
-		summaryFile{Summary: *sum, Version: "test", FullData: full})
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.OpenReader(zipPath)
+	data := must(os.ReadFile(b.compact))
+	zr, err := zip.OpenReader(b.zip)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,11 +206,8 @@ func TestWriteBundle(t *testing.T) {
 		files[f.Name], _ = io.ReadAll(rc)
 		rc.Close()
 	}
-	if strings.Join(names, " ") != "savings-preview.otlp.json summary.json report.html" {
+	if strings.Join(names, " ") != "summary.json report.html" {
 		t.Errorf("zip holds %v", names)
-	}
-	if !bytes.Equal(files["savings-preview.otlp.json"], data) {
-		t.Error("zip data differs from the compact file")
 	}
 	var s map[string]any
 	if err := json.Unmarshal(files["summary.json"], &s); err != nil {
@@ -229,7 +217,51 @@ func TestWriteBundle(t *testing.T) {
 	if fd["file"] != "savings-preview.otlp.json" || fd["bytes"] != float64(5689124) || s["step_seconds"] != float64(300) || s["compact_step_seconds"] != float64(900) {
 		t.Errorf("summary %s", files["summary.json"])
 	}
-	if !strings.Contains(zr.Comment, "The full-resolution file, savings-preview.otlp.json (5.7 MB), is not in the zip") || strings.Contains(zr.Comment, dir) {
+	if !strings.Contains(zr.Comment, "savings-preview export -o savings-preview.otlp.json report.html") ||
+		!strings.Contains(zr.Comment, "The full-resolution file, savings-preview.otlp.json (5.7 MB), is not in the zip") || strings.Contains(zr.Comment, dir) {
 		t.Errorf("comment %q", zr.Comment)
+	}
+
+	// The page carries the data once, and export takes it back out.
+	unzipped := filepath.Join(dir, "unzipped")
+	os.Mkdir(unzipped, 0o755)
+	page := filepath.Join(unzipped, "report.html")
+	if err := os.WriteFile(page, files["report.html"], 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runExport([]string{page}); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(must(os.ReadFile(filepath.Join(unzipped, "report.otlp.json"))), data) {
+		t.Error("data from report.html differs from the compact file")
+	}
+	// Compacting a page's compact data copies it as it is.
+	if err := runExport([]string{"--compact", page}); err != nil {
+		t.Fatal(err)
+	}
+	if errs := validate.Validate(must(os.ReadFile(filepath.Join(unzipped, "report.compact.otlp.json")))); len(errs) > 0 {
+		t.Error(errs)
+	}
+	totals, err := savings.Analyze(data)
+	if err != nil || totals.Totals != b.summary.Totals {
+		t.Errorf("totals %+v, summary %+v (%v)", totals.Totals, b.summary.Totals, err)
+	}
+}
+
+func TestPageData(t *testing.T) {
+	for page, want := range map[string]string{
+		`<html><script type="application/json" id="report-data">{"a":"\u003c/script>"}</script><script>x</script>`: `{"a":"\u003c/script>"}`,
+		`<<script type="application/json" id="report-data">{"b":"</scrip"}</script>`:                               `{"b":"</scrip"}`,
+		`<script type="application/json" id="report-data">{}<</script>`:                                            `{}<`,
+	} {
+		var out bytes.Buffer
+		if err := pageData(bufio.NewReader(strings.NewReader(page)), &out); err != nil || out.String() != want {
+			t.Errorf("%s: got %q (%v), want %q", page, out.String(), err, want)
+		}
+	}
+	for _, page := range []string{`<html></html>`, `<script type="application/json" id="report-data">{"a":1}`} {
+		if err := pageData(bufio.NewReader(strings.NewReader(page)), io.Discard); err == nil {
+			t.Errorf("%s: want an error", page)
+		}
 	}
 }

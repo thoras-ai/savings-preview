@@ -154,9 +154,22 @@ func TestReadme(t *testing.T) {
 }
 
 func TestNotOTLP(t *testing.T) {
-	for _, doc := range []string{`[]`, `{"resourceMetrics": []}`, `{}`, `not json`, `{"a": NaN}`, `{} {}`} {
-		if errs := Validate([]byte(doc)); len(errs) != 1 {
-			t.Errorf("Validate(%s) = %v, want one error", doc, errs)
+	shape := "top level must be an object with a resourceMetrics array"
+	for doc, want := range map[string]string{
+		`[]`:                              shape,
+		` 3`:                              shape,
+		`{}`:                              shape,
+		`{"resourceMetrics": 3}`:          shape,
+		`{"resourceMetrics": {"a": [1]}}`: shape,
+		`{"a": [1, {"b": 2}]}`:            shape,
+		`{"resourceMetrics": []}`:         "resourceMetrics is empty",
+		`not json`:                        "cannot read",
+		`{"a": NaN}`:                      "cannot read",
+		`{} {}`:                           "cannot read: extra data",
+		`{"resourceMetrics": [{}`:         "cannot read",
+	} {
+		if errs := Validate([]byte(doc)); len(errs) != 1 || !strings.HasPrefix(errs[0], want) {
+			t.Errorf("Validate(%s) = %v, want %q", doc, errs, want)
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -63,9 +64,9 @@ func runFlags(args []string) (*runOptions, error) {
 Reads usage history from a Prometheus-compatible store in the cluster, or polls
 metrics-server when there is none, writes the contract file, checks it, and
 opens the report on a local address. It also writes a compact copy of the
-file at 15-minute steps, which the report reads. A zip with the compact copy,
-a summary and a self-contained copy of the report is written next to the
-contract file; the full file stays on disk. Everything is read-only; nothing
+file at 15-minute steps, which the report reads. A zip with a summary and a
+self-contained copy of the report, which carries the compact copy, is written
+next to the contract file; the full file stays on disk. Everything is read-only; nothing
 is uploaded.
 
 `)
@@ -131,53 +132,80 @@ func runRun(args []string) error {
 		return err
 	}
 
-	// The report and the zip use a 15-minute copy, since the full file can
-	// be too large for a browser or an email.
-	compactPath := compactName(o.out)
-	start := time.Now()
-	st, err := compactFile(o.out, compactPath)
+	b, err := buildReport(o.out)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, compactReport(o.out, compactPath, st, time.Since(start)))
-	data, err := os.ReadFile(compactPath)
-	if err != nil {
-		return err
-	}
-	if errs := validate.Validate(data); len(errs) > 0 {
-		for _, e := range errs {
-			fmt.Fprintln(os.Stderr, "  "+e)
-		}
-		return fmt.Errorf("%s does not follow the contract (%d problems)", compactPath, len(errs))
-	}
-	fmt.Fprintf(os.Stderr, "%s passes the contract checks\n", compactPath)
-	full, err := fullDataOf(o.out)
-	if err != nil {
-		return err
-	}
-
-	sum, err := savings.Analyze(data)
-	if err != nil {
-		return fmt.Errorf("compute savings: %w", err)
-	}
-	page, err := savingspreview.ReportPage()
-	if err != nil {
-		return err
-	}
-	zipPath, err := writeBundle(o.out, data, page, summaryFile{Summary: *sum, Version: versionString(),
-		Generated: time.Now().UTC().Truncate(time.Second), FullData: full})
-	if err != nil {
-		return fmt.Errorf("write zip: %w", err)
-	}
+	sum := b.summary
 	fmt.Fprintf(os.Stderr, "\n%s: %s a year in requests, %s a year in savings (%d of %d workloads counted, tier %d, %s)\n",
 		sum.Cluster, money(sum.Totals.AnnualSpend), money(sum.Totals.AnnualSavings), sum.Totals.Counted, sum.Totals.Workloads,
 		sum.Tier, spanText(time.Duration(sum.SpanSeconds)*time.Second))
-	fmt.Fprintf(os.Stderr, "wrote %s with the compact file as %s, a summary and a copy of the report that opens without this tool\n", zipPath, report.DataName)
-	fmt.Fprintf(os.Stderr, "the full-resolution file stays at %s (%s); it is not in the zip\n", o.out, megabytes(full.Bytes))
+	fmt.Fprintf(os.Stderr, "wrote %s with a summary and report.html, a copy of the report that carries the compact file and opens without this tool\n", b.zip)
+	fmt.Fprintf(os.Stderr, "the full-resolution file stays at %s (%s); it is not in the zip\n", o.out, megabytes(b.full.Bytes))
 
 	// The first Ctrl-C may have ended polling; a fresh one stops the server.
 	stop()
-	return serve(page, data, !o.noOpen)
+	return serve(b.page, b.compact, !o.noOpen)
+}
+
+// builtReport is what buildReport wrote.
+type builtReport struct {
+	compact, zip, page string
+	summary            *savings.Summary
+	full               *fullData
+}
+
+// buildReport writes the compact copy of the contract file at out, checks it,
+// computes the totals and writes the zip. The report and the zip use the
+// compact copy, since the full file can be too large for a browser or an
+// email. Every step reads its file as a stream, so memory does not grow with
+// the size of the cluster or the length of the history.
+func buildReport(out string) (*builtReport, error) {
+	b := &builtReport{compact: compactName(out)}
+	start := time.Now()
+	st, err := compactFile(out, b.compact)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Fprintln(os.Stderr, compactReport(out, b.compact, st, time.Since(start)))
+	if errs := withFile(b.compact, validate.ValidateReader); len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Fprintln(os.Stderr, "  "+e)
+		}
+		return nil, fmt.Errorf("%s does not follow the contract (%d problems)", b.compact, len(errs))
+	}
+	fmt.Fprintf(os.Stderr, "%s passes the contract checks\n", b.compact)
+	if b.full, err = fullDataOf(out); err != nil {
+		return nil, err
+	}
+	f, err := os.Open(b.compact)
+	if err != nil {
+		return nil, err
+	}
+	b.summary, err = savings.AnalyzeReader(bufio.NewReader(f))
+	f.Close()
+	if err != nil {
+		return nil, fmt.Errorf("compute savings: %w", err)
+	}
+	if b.page, err = savingspreview.ReportPage(); err != nil {
+		return nil, err
+	}
+	b.zip, err = writeBundle(out, b.compact, b.page, summaryFile{Summary: *b.summary, Version: versionString(),
+		Generated: time.Now().UTC().Truncate(time.Second), FullData: b.full})
+	if err != nil {
+		return nil, fmt.Errorf("write zip: %w", err)
+	}
+	return b, nil
+}
+
+// withFile runs check on the file at path, or reports why it cannot be read.
+func withFile(path string, check func(io.Reader) []string) []string {
+	f, err := os.Open(path)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	defer f.Close()
+	return check(bufio.NewReader(f))
 }
 
 // collect writes the contract file to o.out.
@@ -425,35 +453,37 @@ func fullDataOf(path string) (*fullData, error) {
 	return &fullData{File: filepath.Base(path), Bytes: fi.Size()}, nil
 }
 
-// writeBundle writes the zip next to out with the compact contract file, the
-// summary and a copy of the report that carries the data. The contract file
-// keeps the name it had when the zip held the full file.
-func writeBundle(out string, data []byte, page string, sum summaryFile) (string, error) {
-	inline, err := report.Inline(page, data)
-	if err != nil {
-		return "", err
-	}
+// writeBundle writes the zip next to out with the summary and a copy of the
+// report that carries the compact contract file at dataPath. The data is in
+// the zip once, inside report.html; savings-preview export takes it back out.
+func writeBundle(out, dataPath, page string, sum summaryFile) (string, error) {
 	js, err := json.MarshalIndent(sum, "", "  ")
 	if err != nil {
 		return "", err
 	}
 	path := zipName(out)
-	comment := ""
+	comment := "report.html carries the data as a compact copy at 15-minute steps that keeps the peaks and means of usage; " +
+		"savings-preview export -o " + report.DataName + " report.html writes it out."
 	if sum.FullData != nil {
-		comment = fmt.Sprintf("%s in this zip is a compact copy at 15-minute steps that keeps the peaks and means of usage. "+
-			"The full-resolution file, %s (%s), is not in the zip; it stays next to the zip on the machine that wrote it.",
-			report.DataName, sum.FullData.File, megabytes(sum.FullData.Bytes))
+		comment += fmt.Sprintf(" The full-resolution file, %s (%s), is not in the zip; it stays next to the zip on the machine that wrote it.",
+			sum.FullData.File, megabytes(sum.FullData.Bytes))
 	}
 	return path, report.WriteZip(path, comment, []report.Entry{
-		{Name: report.DataName, Data: data},
 		{Name: "summary.json", Data: append(js, '\n')},
-		{Name: "report.html", Data: []byte(inline)},
+		{Name: "report.html", Write: func(w io.Writer) error {
+			f, err := os.Open(dataPath)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			return report.WriteInline(w, page, f)
+		}},
 	})
 }
 
 // serve shows the report on a loopback address until Ctrl-C.
-func serve(page string, data []byte, open bool) error {
-	s, err := report.Serve(page, data)
+func serve(page, dataPath string, open bool) error {
+	s, err := report.Serve(page, dataPath)
 	if err != nil {
 		return err
 	}

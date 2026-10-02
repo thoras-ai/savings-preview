@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/iotest"
 )
 
 const page = "<html><body><main></main>\n<script>var x = 1;</script>\n</body></html>"
@@ -26,7 +27,11 @@ func get(t *testing.T, url string) (int, string, string) {
 }
 
 func TestServe(t *testing.T) {
-	s, err := Serve(page, []byte(`{"resourceMetrics":[]}`))
+	data := filepath.Join(t.TempDir(), DataName)
+	if err := os.WriteFile(data, []byte(`{"resourceMetrics":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Serve(page, data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,36 +60,49 @@ func TestServe(t *testing.T) {
 	}
 }
 
+// inline runs WriteInline, reading the data a byte at a time when oneByte is
+// set, so multi-byte characters arrive split.
+func inline(t *testing.T, data string, oneByte bool) string {
+	t.Helper()
+	var r io.Reader = strings.NewReader(data)
+	if oneByte {
+		r = iotest.OneByteReader(r)
+	}
+	var out strings.Builder
+	if err := WriteInline(&out, page, r); err != nil {
+		t.Fatal(err)
+	}
+	return out.String()
+}
+
 func TestInlineEscapesData(t *testing.T) {
-	data := []byte("{\n \"name\": \"</script><b>&\"\n}")
-	out, err := Inline(page, data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Count(out, "</script>") != 2 {
-		t.Fatalf("data can close the script element:\n%s", out)
-	}
-	start := strings.Index(out, `id="report-data">`) + len(`id="report-data">`)
-	end := strings.Index(out[start:], "</script>")
-	var got map[string]string
-	if err := json.Unmarshal([]byte(out[start:start+end]), &got); err != nil {
-		t.Fatal(err)
-	}
-	if got["name"] != "</script><b>&" {
-		t.Fatalf("round trip: %q", got["name"])
-	}
-	if !strings.Contains(out, "</script>\n<script>var x") {
-		t.Fatal("data element must come before the page script")
-	}
-	if _, err := Inline(page, []byte("not json")); err == nil {
-		t.Fatal("want an error for invalid JSON")
+	data := "{\n \"name\": \"</script><b>&\u2028\u2029\u00e9\u20ac\"\n}"
+	for _, oneByte := range []bool{true, false} {
+		out := inline(t, data, oneByte)
+		if strings.Count(out, "</script>") != 2 || strings.Contains(out, "\u2028") {
+			t.Fatalf("data can close the script element or the line:\n%s", out)
+		}
+		start := strings.Index(out, `id="report-data">`) + len(`id="report-data">`)
+		end := strings.Index(out[start:], "</script>")
+		var got map[string]string
+		if err := json.Unmarshal([]byte(out[start:start+end]), &got); err != nil {
+			t.Fatal(err)
+		}
+		if got["name"] != "</script><b>&\u2028\u2029\u00e9\u20ac" {
+			t.Fatalf("round trip: %q", got["name"])
+		}
+		if !strings.Contains(out, "</script>\n<script>var x") {
+			t.Fatal("data element must come before the page script")
+		}
 	}
 }
 
 func TestWriteZip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "out.zip")
 	want := map[string]string{"a.json": "{}", "report.html": "<html></html>"}
-	if err := WriteZip(path, "where the rest is", []Entry{{"a.json", []byte("{}")}, {"report.html", []byte("<html></html>")}}); err != nil {
+	entries := []Entry{{Name: "a.json", Data: []byte("{}")},
+		{Name: "report.html", Write: func(w io.Writer) error { _, err := io.WriteString(w, "<html></html>"); return err }}}
+	if err := WriteZip(path, "where the rest is", entries); err != nil {
 		t.Fatal(err)
 	}
 	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o644 {
