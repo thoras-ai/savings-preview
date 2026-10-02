@@ -252,10 +252,10 @@
       '<button type="button" class="button button-quiet" data-copy-summary>Copy summary</button></div></div>';
   }
 
-  // The product sizes requests to a usage forecast. This page has no
-  // forecast, so its target is the rolling peak, as the method line says.
   var EMPTY = 'No data in the selected time range or namespaces.';
 
+  // The product sizes requests to a usage forecast. This page has no
+  // forecast, so its target is the rolling peak, as the method line says.
   function markup(data, r, st) {
     if (!r.totals.counted) {
       return '<div class="sum-head"><h1>' + EMPTY + '</h1><p class="sum-from">Change them under Assumptions in Details for engineers.</p></div>';
