@@ -39,6 +39,14 @@ NODE_METRICS = {
     "k8s.node.memory.allocatable": (UPDOWN, "By", "int", True),
 }
 
+# Metrics a resource may write only where they change (thoras.held_metrics).
+LEVEL_METRICS = (
+    "k8s.container.cpu.request.desired", "k8s.container.memory.request.desired",
+    "k8s.container.cpu.limit.desired", "k8s.container.memory.limit.desired",
+    "k8s.deployment.pod.desired", "k8s.statefulset.pod.desired",
+    "k8s.node.cpu.allocatable", "k8s.node.memory.allocatable",
+)
+
 COMMON_ATTRS = ("k8s.cluster.name", "thoras.source", "thoras.step_seconds", "thoras.fidelity_tier")
 CAPACITY_TYPES = ("on_demand", "spot", "unknown")
 
@@ -219,6 +227,15 @@ def validate(doc):
         spans = None
         if "thoras.step_spans" in attrs and step is not None:
             spans = _parse_spans(where, attrs["thoras.step_spans"], step, errors)
+        source_step = None
+        if "thoras.source_step_seconds" in attrs:
+            v = attrs["thoras.source_step_seconds"]
+            if not isinstance(v, int) or isinstance(v, bool) or v <= 0:
+                errors.append("%s: thoras.source_step_seconds must be a positive integer" % where)
+            elif step is not None and v > (max(st for _, _, st in spans) if spans else step):
+                errors.append("%s: thoras.source_step_seconds must not be coarser than the step of the points" % where)
+            else:
+                source_step = v
         if not isinstance(attrs.get("thoras.source", ""), str) or not attrs.get("thoras.source"):
             errors.append("%s: thoras.source must be a non-empty string" % where)
         if "k8s.cluster.name" in attrs:
@@ -266,6 +283,14 @@ def validate(doc):
         notes = attrs.get("thoras.fidelity_notes", [])
         if not isinstance(notes, list) or not all(isinstance(n, str) and n for n in notes):
             errors.append("%s: thoras.fidelity_notes must be an array of non-empty strings" % where)
+        held = attrs.get("thoras.held_metrics", [])
+        if not isinstance(held, list) or not all(isinstance(m, str) for m in held):
+            errors.append("%s: thoras.held_metrics must be an array of strings" % where)
+            held = []
+        for m in held:
+            if m not in specs or m not in LEVEL_METRICS:
+                errors.append("%s: thoras.held_metrics lists %s, which is not a request, limit, replica or allocatable metric here"
+                              % (where, m))
 
         scopes = rm.get("scopeMetrics") or []
         if not scopes:
@@ -301,14 +326,19 @@ def validate(doc):
                 errors.append("%s: required metric %s is absent and not listed in thoras.missing_metrics" % (where, name))
             if name in missing and name in present:
                 errors.append("%s: %s is listed in thoras.missing_metrics but present" % (where, name))
+            if name in held and name in LEVEL_METRICS and name not in present:
+                errors.append("%s: thoras.held_metrics lists %s, which is absent" % (where, name))
 
         if tier is not None and step is not None and first_last:
             coarse = max(st for _, _, st in spans) if spans else step
             span = max(l for _, l in first_last) - min(f for f, _ in first_last) + coarse
-            floor = _tier_floor(coarse, span)
+            # A compact file keeps the peaks of its source, so the tier
+            # follows the source step.
+            judged = source_step if source_step is not None else coarse
+            floor = _tier_floor(judged, span)
             if tier < floor:
                 errors.append("%s: fidelity tier %d claims more than step %ds over %.1f days supports (best is %d)"
-                              % (where, tier, coarse, span / DAY, floor))
+                              % (where, tier, judged, span / DAY, floor))
 
     if len(clusters) > 1:
         errors.append("file mixes clusters: %s" % sorted(clusters))

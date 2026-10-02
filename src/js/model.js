@@ -98,11 +98,16 @@
       });
       var kind = a['k8s.deployment.name'] ? 'deployment' : a['k8s.statefulset.name'] ? 'statefulset' : null;
       var spans = parseSpans(a['thoras.step_spans']);
+      var held = {};
+      (Array.isArray(a['thoras.held_metrics']) ? a['thoras.held_metrics'] : []).forEach(function (n) { held[n] = true; });
+      var coarseStep = spans ? Math.max.apply(null, spans.map(function (x) { return x.step; })) : (a['thoras.step_seconds'] || 0);
       var base = {
         attrs: a,
         step: a['thoras.step_seconds'] || 0,
         spans: spans,
-        coarseStep: spans ? Math.max.apply(null, spans.map(function (x) { return x.step; })) : (a['thoras.step_seconds'] || 0),
+        coarseStep: coarseStep,
+        sourceStep: a['thoras.source_step_seconds'] > 0 && a['thoras.source_step_seconds'] < coarseStep ? a['thoras.source_step_seconds'] : coarseStep,
+        held: held,
         tier: a['thoras.fidelity_tier'] || 3,
         source: a['thoras.source'] || '',
         listedMissing: a['thoras.missing_metrics'] || [],
@@ -111,8 +116,8 @@
       if (a['k8s.node.name']) {
         nodes.push(Object.assign(base, {
           name: a['k8s.node.name'], hostType: a['host.type'] || '', region: a['cloud.region'] || '', capacity: a['thoras.node.capacity_type'] || 'unknown',
-          cores: mean(series[M.cpuAlloc] ? series[M.cpuAlloc].v : []),
-          gib: mean(series[M.memAlloc] ? series[M.memAlloc].v : []) / GIB
+          cores: levelMean(base, M.cpuAlloc),
+          gib: levelMean(base, M.memAlloc) / GIB
         }));
       } else if (kind) {
         var name = a['k8s.' + kind + '.name'], ns = a['k8s.namespace.name'] || '';
@@ -150,9 +155,22 @@
     };
   }
 
+  // Mean of a level series over the time it covers. A held series weights each
+  // point by the time until the next one.
+  function levelMean(r, name) {
+    var s = r.series[name];
+    if (!s) return mean([]);
+    if (!r.held[name]) return mean(s.v);
+    var w = new Float64Array(s.t.length);
+    for (var i = 0; i < s.t.length; i++) w[i] = i + 1 < s.t.length ? s.t[i + 1] - s.t[i] : stepAt(r.spans, s.t[i], r.step);
+    return mean(s.v, w);
+  }
+
   // Latest point at or before each grid time, only while it is younger than the
-  // series step, or the step of the span the point is in.
-  function resample(s, grid, step, spans) {
+  // series step, or the step of the span the point is in. A held series has
+  // points only where its value changes, so every point but the last stays
+  // current until the next one.
+  function resample(s, grid, step, spans, held) {
     var out = new Float64Array(grid.length).fill(NaN);
     if (!s || !s.t.length) return out;
     var j = 0;
@@ -161,7 +179,7 @@
       while (j + 1 < s.t.length && s.t[j + 1] <= g) j++;
       var st = stepAt(spans, s.t[j], step);
       var span = st > 0 ? st : Infinity;
-      if (s.t[j] <= g && g - s.t[j] < span) out[i] = s.v[j];
+      if (s.t[j] <= g && (g - s.t[j] < span || (held && j + 1 < s.t.length))) out[i] = s.v[j];
     }
     return out;
   }
@@ -216,7 +234,8 @@
     var grid = unionTimes(lists);
     var step = 0;
     usable.forEach(function (c) { step = Math.max(step, c.coarseStep); });
-    var replicas = resample(rep, grid, info.workload.step, info.workload.spans);
+    var repName = REPLICA_METRICS[info.kind];
+    var replicas = resample(rep, grid, info.workload.step, info.workload.spans, !!info.workload.held[repName]);
     var n = grid.length;
     // Means are weighted by the step of the span each grid point is in, so a
     // rolled-up point counts for its whole step.
@@ -225,7 +244,7 @@
     FIELDS.forEach(function (f) { s[f] = new Float64Array(n); });
     var pkCpu = new Float64Array(n), pkMem = new Float64Array(n);
     usable.forEach(function (c, ci) {
-      var at = function (name) { return resample(c.series[name], grid, c.step, c.spans); };
+      var at = function (name) { return resample(c.series[name], grid, c.step, c.spans, !!c.held[name]); };
       var cu = at(M.cpuUse), mu = at(M.memUse), cr = at(M.cpuReq), mr = at(M.memReq);
       // Rolled-up points carry the peak of the readings they summarize.
       var pc = c.series[M.cpuPeak] ? at(M.cpuPeak) : cu, pm = c.series[M.memPeak] ? at(M.memPeak) : mu;
@@ -320,10 +339,11 @@
   }
 
   function fidelity(containers) {
-    var tier = 1, step = 0, t0 = Infinity, t1 = -Infinity, sources = [];
+    var tier = 1, step = 0, sourceStep = 0, t0 = Infinity, t1 = -Infinity, sources = [];
     containers.forEach(function (c) {
       tier = Math.max(tier, c.tier);
       step = Math.max(step, c.coarseStep);
+      sourceStep = Math.max(sourceStep, c.sourceStep);
       if (c.source && sources.indexOf(c.source) < 0) sources.push(c.source);
       [M.cpuUse, M.memUse].forEach(function (n) {
         var s = c.series[n];
@@ -332,9 +352,10 @@
     });
     var span = isFinite(t0) ? t1 - t0 : 0;
     var points = step > 0 ? span / step : 0;
+    if (!(sourceStep < step)) sourceStep = 0;
     return {
-      tier: tier, stepSeconds: step, spanSeconds: span, snapshot: points <= 1,
-      source: sources.join(', '), label: fidelityLabel(step, span, points <= 1)
+      tier: tier, stepSeconds: step, sourceStepSeconds: sourceStep, spanSeconds: span, snapshot: points <= 1,
+      source: sources.join(', '), label: fidelityLabel(step, span, points <= 1, sourceStep)
     };
   }
 
@@ -354,8 +375,12 @@
     return hours + (hours === 1 ? ' hour' : ' hours');
   }
 
-  function fidelityLabel(step, span, snapshot) {
+  // A compact file keeps the peaks of finer data, so it names both steps.
+  function fidelityLabel(step, span, snapshot, sourceStep) {
     if (snapshot) return 'Snapshot only';
+    if (sourceStep > 0 && sourceStep < step) {
+      return formatSpan(span) + ' at ' + formatStep(sourceStep) + ' resolution, kept as ' + formatStep(step) + ' peaks and means';
+    }
     return formatSpan(span) + ' at ' + formatStep(step) + ' resolution';
   }
 

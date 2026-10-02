@@ -27,7 +27,7 @@ Readings are stored in hourly segments in a compact binary format, with requests
 
 ## Output
 
-The contract file is rewritten after the first reading, every `--write-every`, and when the run stops. It is written in passes over the saved readings, one batch of resources at a time, so memory stays bounded whatever the length of the run. Its size is set by the contract: 14 days for 1,000 workload-containers is about 2.8 GB.
+The contract file is rewritten after the first reading, every `--write-every`, and when the run stops. It is written in passes over the saved readings, one batch of resources at a time, so memory stays bounded whatever the length of the run. Its size is set by the contract: 14 days for 1,000 workload-containers is about 2.8 GB. `savings-preview export --compact FILE.readings` writes the 15-minute compact file the report uses straight from the readings, and `run` writes it after polling.
 
 A resource whose readings include rolled-up steps lists them in `thoras.step_spans` and carries `thoras.container.cpu.usage.max` and `thoras.container.memory.working_set.max`. Each resource's fidelity tier follows its coarsest step and the time its points cover, leaving out gaps between runs. With the default `--keep-raw` of 48h a run can reach tier 2 after 7 days. Tier 1, 14 days at 1 minute, needs `--keep-raw 336h`.
 

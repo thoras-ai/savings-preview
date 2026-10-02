@@ -90,6 +90,41 @@ test('fidelity label states span and resolution', () => {
   assert.strictEqual(model.fidelityLabel(60, 7 * 86400, false), '7 days at 1-minute resolution');
 });
 
+test('a compact file names the resolution it was built from', () => {
+  assert.strictEqual(model.fidelityLabel(900, 14 * 86400, false, 60), '14 days at 1-minute resolution, kept as 15-minute peaks and means');
+  assert.strictEqual(model.fidelityLabel(900, 14 * 86400, false, 0), '14 days at 15-minute resolution');
+});
+
+test('held series stay current until their next point, and the last one for a step', () => {
+  const t = Float64Array.from([100, 400, 500]), v = Float64Array.from([1, 4, 5]);
+  const grid = [50, 100, 300, 399, 400, 450, 500, 599, 600];
+  const held = Array.from(model.resample({ t, v }, grid, 100, null, true));
+  assert.deepStrictEqual(held, [NaN, 1, 1, 1, 4, 4, 5, 5, NaN]);
+  const dense = Array.from(model.resample({ t, v }, grid, 100, null, false));
+  assert.deepStrictEqual(dense, [NaN, 1, NaN, NaN, 4, 4, 5, 5, NaN]);
+});
+
+test('a compact file with held requests prices like its dense form', () => {
+  const cpu = Array.from({ length: 40 }, (_, i) => 0.2 + (i % 7) / 20);
+  const mem = cpu.map(() => 1);
+  const dense = doc({ cpu, mem, step: 900, cpuReq: 1, memReq: 2, replicas: 3 });
+  const compact = JSON.parse(JSON.stringify(dense));
+  compact.resourceMetrics.forEach(rm => {
+    const levels = [];
+    rm.scopeMetrics[0].metrics.forEach(m => {
+      if (!/request|pod\.desired/.test(m.name)) return;
+      const pts = m.sum.dataPoints;
+      m.sum.dataPoints = [pts[0], pts[pts.length - 1]];
+      levels.push({ stringValue: m.name });
+    });
+    rm.resource.attributes.push(I('thoras.source_step_seconds', 60), { key: 'thoras.held_metrics', value: { arrayValue: { values: levels } } });
+  });
+  const a = model.analyze(dense), b = model.analyze(compact);
+  for (const k of ['spend', 'savings', 'cores', 'gib', 'reqCores', 'reqGiB']) assert.ok(Math.abs(a.totals[k] - b.totals[k]) < 1e-9, k);
+  assert.strictEqual(b.fidelity.sourceStepSeconds, 60);
+  assert.match(b.fidelity.label, /at 1-minute resolution, kept as 15-minute peaks/);
+});
+
 test('rolling max covers only the trailing window', () => {
   const t = [0, 300, 600, 900, 1200], v = [5, 1, 1, 1, 1];
   const out = Array.from(model.rollingMax(t, v, 900));

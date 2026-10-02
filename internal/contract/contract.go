@@ -14,7 +14,7 @@ import (
 const (
 	SchemaURL    = "https://opentelemetry.io/schemas/1.44.0"
 	ScopeName    = "thoras.savings_preview"
-	ScopeVersion = "1.2.0"
+	ScopeVersion = "1.3.0"
 	day          = 86400
 )
 
@@ -72,6 +72,10 @@ var specs = map[string]Spec{
 // SpecOf returns the spec of a contract metric.
 func SpecOf(name string) (Spec, bool) { s, ok := specs[name]; return s, ok }
 
+// LevelMetrics are the metrics a resource may list in thoras.held_metrics:
+// settings that change rarely, so a point where the value changes is enough.
+var LevelMetrics = []string{CPURequest, MemoryRequest, CPULimit, MemoryLimit, DeploymentPods, StatefulSetPods, NodeCPU, NodeMemory}
+
 // RequiredContainerMetrics are the series a container needs to be priced.
 var RequiredContainerMetrics = []string{CPUUsage, MemoryWorkingSet, CPURequest, MemoryRequest}
 
@@ -126,7 +130,13 @@ type Resource struct {
 	// StepSpans is set when the points use more than one step; StepSeconds is
 	// then the finest of them.
 	StepSpans []StepSpan
-	Metrics   []Series
+	// SourceStepSeconds is set on a compacted resource: the coarsest step of
+	// the data it was built from.
+	SourceStepSeconds int
+	// Held lists level metrics written only where their value changes
+	// (thoras.held_metrics).
+	Held    []string
+	Metrics []Series
 }
 
 // File is one cluster's data.
@@ -183,6 +193,12 @@ func (r *Resource) attrs() []attr {
 			spans[i] = fmt.Sprintf("%d/%d/%d", sp.Start, sp.End, sp.Step)
 		}
 		a = append(a, strs("thoras.step_spans", spans))
+	}
+	if r.SourceStepSeconds > 0 {
+		a = append(a, num("thoras.source_step_seconds", r.SourceStepSeconds))
+	}
+	if len(r.Held) > 0 {
+		a = append(a, strs("thoras.held_metrics", r.Held))
 	}
 	if r.Node != nil {
 		return append(a,

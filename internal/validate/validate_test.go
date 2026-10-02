@@ -376,6 +376,37 @@ func mutations() []mutation {
 			setSpans(app, fmt.Sprintf("%d/%d/300", first, mid), fmt.Sprintf("%d/%d/60", mid, last+60))
 			valueOf(app, "thoras.fidelity_tier")["intValue"] = "1"
 		}, "claims more than step 300s"},
+		{"source step sets the tier", func(t *testing.T, doc, app, worker obj) {
+			valueOf(app, "thoras.fidelity_tier")["intValue"] = "1"
+			addAttr(app, "thoras.source_step_seconds", obj{"intValue": "60"})
+		}, ""},
+		{"tier without source step", func(t *testing.T, doc, app, worker obj) {
+			valueOf(app, "thoras.fidelity_tier")["intValue"] = "1"
+		}, "claims more than step 300s"},
+		{"source step coarser than the points", func(t *testing.T, doc, app, worker obj) {
+			addAttr(app, "thoras.source_step_seconds", obj{"intValue": "600"})
+		}, "thoras.source_step_seconds must not be coarser than the step of the points"},
+		{"source step not positive", func(t *testing.T, doc, app, worker obj) {
+			addAttr(app, "thoras.source_step_seconds", obj{"intValue": "0"})
+		}, "thoras.source_step_seconds must be a positive integer"},
+		{"source step a string", func(t *testing.T, doc, app, worker obj) {
+			addAttr(app, "thoras.source_step_seconds", obj{"stringValue": "60"})
+		}, "thoras.source_step_seconds must be a positive integer"},
+		{"held requests", func(t *testing.T, doc, app, worker obj) {
+			addAttr(app, "thoras.held_metrics", stringArray("k8s.container.cpu.request.desired", "k8s.container.memory.request.desired"))
+		}, ""},
+		{"held usage", func(t *testing.T, doc, app, worker obj) {
+			addAttr(app, "thoras.held_metrics", stringArray("container.cpu.usage"))
+		}, "thoras.held_metrics lists container.cpu.usage, which is not a request, limit, replica or allocatable metric here"},
+		{"held replicas on a container", func(t *testing.T, doc, app, worker obj) {
+			addAttr(app, "thoras.held_metrics", stringArray("k8s.deployment.pod.desired"))
+		}, "which is not a request, limit, replica or allocatable metric here"},
+		{"held absent", func(t *testing.T, doc, app, worker obj) {
+			addAttr(worker, "thoras.held_metrics", stringArray("k8s.container.cpu.limit.desired"))
+		}, "thoras.held_metrics lists k8s.container.cpu.limit.desired, which is absent"},
+		{"held not an array", func(t *testing.T, doc, app, worker obj) {
+			addAttr(app, "thoras.held_metrics", obj{"stringValue": "k8s.container.cpu.request.desired"})
+		}, "thoras.held_metrics must be an array of strings"},
 		{"nodes are optional", func(t *testing.T, doc, app, worker obj) {
 			var kept []any
 			for _, r := range resources(doc) {

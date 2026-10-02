@@ -60,7 +60,8 @@ On your machine it writes:
 
 - the output file, `savings-preview.otlp.json` by default (`--out` for `prometheus`, `datadog` and `run`, `-o` for `poll` and `run`);
 - for `poll`, and for `run` when it polls, a `FILE.readings/` directory holding the readings taken so far, so a stopped run can continue;
-- for `run`, a zip next to the output file (`savings-preview.zip` by default) holding the output file, `summary.json` (cluster name, time span, fidelity tier and the savings totals) and `report.html`, the report page with the output file inside it.
+- for `run` and `export --compact`, a compact copy of the output file next to it (`savings-preview.compact.otlp.json` by default): the same resources at 15-minute steps;
+- for `run`, a zip next to the output file (`savings-preview.zip` by default) holding the compact file, `summary.json` (cluster name, time span, fidelity tier, the savings totals, and the file name and size of the full output file) and `report.html`, the report page with the compact file inside it.
 
 ## What the output contains
 
@@ -72,7 +73,7 @@ It contains no Secrets, environment variables, logs, images, annotations, labels
 
 ## Where the data goes
 
-Nowhere, unless you send it. The program makes no network requests other than to the API server, the `--url` store, or the Datadog API. The report page (`scripts/build_report.py`, also built into the binary) is one offline HTML file that reads the output file in the browser and makes no network requests. `run` serves the page and the output file on 127.0.0.1 on a random port until you press Ctrl-C; the server answers only requests addressed to that address, so it cannot be reached from other machines or read by a web page under another name. Sharing the output file or the zip with Thoras is a separate step that you choose to take.
+Nowhere, unless you send it. The program makes no network requests other than to the API server, the `--url` store, or the Datadog API. The report page (`scripts/build_report.py`, also built into the binary) is one offline HTML file that reads the output file in the browser and makes no network requests. `run` serves the page and the compact file on 127.0.0.1 on a random port until you press Ctrl-C; the server answers only requests addressed to that address, so it cannot be reached from other machines or read by a web page under another name. Sharing the output file or the zip with Thoras is a separate step that you choose to take.
 
 ## How to check this
 

@@ -58,6 +58,13 @@ var (
 		{"k8s.node.cpu.allocatable", updown, "{cpu}", false, true},
 		{"k8s.node.memory.allocatable", updown, "By", true, true},
 	}
+	// Metrics a resource may write only where they change (thoras.held_metrics).
+	levelMetrics = []string{
+		"k8s.container.cpu.request.desired", "k8s.container.memory.request.desired",
+		"k8s.container.cpu.limit.desired", "k8s.container.memory.limit.desired",
+		"k8s.deployment.pod.desired", "k8s.statefulset.pod.desired",
+		"k8s.node.cpu.allocatable", "k8s.node.memory.allocatable",
+	}
 	commonAttrs = []string{"k8s.cluster.name", "thoras.source", "thoras.step_seconds", "thoras.fidelity_tier"}
 	nodeAttrs   = []string{"host.type", "cloud.provider", "cloud.region", "thoras.node.capacity_type"}
 )
@@ -134,6 +141,22 @@ func validate(doc any) []string {
 		if raw, ok := at["thoras.step_spans"]; ok && stepOK {
 			spans = parseSpans(where, raw, step, add)
 		}
+		var sourceStep int64
+		if v, ok := at["thoras.source_step_seconds"]; ok {
+			n, isInt := v.(int64)
+			coarse := step
+			for _, s := range spans {
+				coarse = max(coarse, s.step)
+			}
+			switch {
+			case !isInt || n <= 0:
+				add("%s: thoras.source_step_seconds must be a positive integer", where)
+			case stepOK && n > coarse:
+				add("%s: thoras.source_step_seconds must not be coarser than the step of the points", where)
+			default:
+				sourceStep = n
+			}
+		}
 		if str(at, "thoras.source") == "" {
 			add("%s: thoras.source must be a non-empty string", where)
 		}
@@ -209,6 +232,18 @@ func validate(doc any) []string {
 				add("%s: thoras.fidelity_notes must be an array of non-empty strings", where)
 			}
 		}
+		var held []string
+		if hv, ok := at["thoras.held_metrics"]; ok {
+			var good bool
+			if held, good = stringList(hv); !good {
+				add("%s: thoras.held_metrics must be an array of strings", where)
+			}
+		}
+		for _, m := range held {
+			if _, ok := lookup(specs, m); !ok || !slices.Contains(levelMetrics, m) {
+				add("%s: thoras.held_metrics lists %s, which is not a request, limit, replica or allocatable metric here", where, m)
+			}
+		}
 
 		scopes := asList(rm["scopeMetrics"])
 		if len(scopes) == 0 {
@@ -267,6 +302,9 @@ func validate(doc any) []string {
 			if listed && present[sp.name] {
 				add("%s: %s is listed in thoras.missing_metrics but present", where, sp.name)
 			}
+			if slices.Contains(held, sp.name) && slices.Contains(levelMetrics, sp.name) && !present[sp.name] {
+				add("%s: thoras.held_metrics lists %s, which is absent", where, sp.name)
+			}
 		}
 
 		if tierOK && stepOK && spanned {
@@ -277,9 +315,15 @@ func validate(doc any) []string {
 				coarse = max(coarse, s.step)
 			}
 			span := hi - lo + coarse
-			if floor := tierFloor(coarse, span); tier < floor {
+			// A compact file keeps the peaks of its source, so the tier
+			// follows the source step.
+			judged := coarse
+			if sourceStep > 0 {
+				judged = sourceStep
+			}
+			if floor := tierFloor(judged, span); tier < floor {
 				add("%s: fidelity tier %d claims more than step %ds over %.1f days supports (best is %d)",
-					where, tier, coarse, float64(span)/day, floor)
+					where, tier, judged, float64(span)/day, floor)
 			}
 		}
 	}

@@ -84,7 +84,7 @@ func TestInlineEscapesData(t *testing.T) {
 func TestWriteZip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "out.zip")
 	want := map[string]string{"a.json": "{}", "report.html": "<html></html>"}
-	if err := WriteZip(path, []Entry{{"a.json", []byte("{}")}, {"report.html", []byte("<html></html>")}}); err != nil {
+	if err := WriteZip(path, "where the rest is", []Entry{{"a.json", []byte("{}")}, {"report.html", []byte("<html></html>")}}); err != nil {
 		t.Fatal(err)
 	}
 	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o644 {
@@ -95,6 +95,9 @@ func TestWriteZip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer zr.Close()
+	if zr.Comment != "where the rest is" {
+		t.Errorf("comment %q", zr.Comment)
+	}
 	if len(zr.File) != len(want) {
 		t.Fatalf("%d files, want %d", len(zr.File), len(want))
 	}

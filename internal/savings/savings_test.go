@@ -44,10 +44,18 @@ func TestResample(t *testing.T) {
 	nan := math.NaN()
 	s := series{t: []float64{100, 200, 400}, v: []float64{1, 2, 4}}
 	grid := []float64{50, 100, 150, 250, 300, 350, 400, 500}
-	sameSlice(t, resample(s, grid, 100, nil), []float64{nan, 1, 1, 2, nan, nan, 4, nan})
+	sameSlice(t, resample(s, grid, 100, nil, false), []float64{nan, 1, 1, 2, nan, nan, 4, nan})
 	// Without a step a point stays current until the next one.
-	sameSlice(t, resample(s, grid, 0, nil), []float64{nan, 1, 1, 2, 2, 2, 4, 4})
-	sameSlice(t, resample(series{}, grid, 100, nil), nans(len(grid)))
+	sameSlice(t, resample(s, grid, 0, nil, false), []float64{nan, 1, 1, 2, 2, 2, 4, 4})
+	sameSlice(t, resample(series{}, grid, 100, nil, false), nans(len(grid)))
+}
+
+func TestResampleHeld(t *testing.T) {
+	nan := math.NaN()
+	// Points where the value changes; the last one lasts one step.
+	s := series{t: []float64{100, 400, 500}, v: []float64{1, 4, 5}}
+	grid := []float64{50, 100, 300, 399, 400, 450, 500, 599, 600}
+	sameSlice(t, resample(s, grid, 100, nil, true), []float64{nan, 1, 1, 1, 4, 4, 5, 5, nan})
 }
 
 func TestResampleSpans(t *testing.T) {
@@ -56,8 +64,8 @@ func TestResampleSpans(t *testing.T) {
 	spans := parseSpans(strs("0/1000/300", "1000/2000/60"))
 	s := series{t: []float64{600, 900, 1000, 1060}, v: []float64{1, 2, 3, 4}}
 	grid := []float64{600, 899, 1150, 1000, 1059, 1060, 1119, 1120}
-	sameSlice(t, resample(s, grid[:2], 60, spans), []float64{1, 1})
-	sameSlice(t, resample(s, grid[3:], 60, spans), []float64{3, 3, 4, 4, nan})
+	sameSlice(t, resample(s, grid[:2], 60, spans, false), []float64{1, 1})
+	sameSlice(t, resample(s, grid[3:], 60, spans, false), []float64{3, 3, 4, 4, nan})
 }
 
 func TestParseSpans(t *testing.T) {
@@ -289,6 +297,37 @@ func nodesDoc() map[string]any {
 }
 
 // snapshotDoc has a single sample.
+// heldDoc is a compact file: 15-minute points from 1-minute data, with
+// requests, replicas and node allocatable written only where they change.
+func heldDoc() map[string]any {
+	n, step := 40, 900
+	base := with(common(step, 1, "prometheus"), iAttr("thoras.source_step_seconds", 60))
+	wl := with(base, sAttr("k8s.namespace.name", "shop"), sAttr("k8s.deployment.name", "api"))
+	times := func(idx ...int) []int {
+		out := make([]int, len(idx))
+		for i, k := range idx {
+			out[i] = t0 + k*step
+		}
+		return out
+	}
+	return map[string]any{"resourceMetrics": []any{
+		rm(with(base, sAttr("k8s.node.name", "n1"), sAttr("host.type", "m5.xlarge"), sAttr("cloud.region", "us-east-1"), sAttr("thoras.node.capacity_type", "on_demand"),
+			arrAttr("thoras.held_metrics", "k8s.node.cpu.allocatable", "k8s.node.memory.allocatable")),
+			metricAt("k8s.node.cpu.allocatable", times(0, 10, 39), []float64{3.92, 7.9, 7.9}, false),
+			metricAt("k8s.node.memory.allocatable", times(0, 39), []float64{14.5 * gib, 14.5 * gib}, true)),
+		rm(with(wl, arrAttr("thoras.held_metrics", "k8s.deployment.pod.desired")),
+			metricAt("k8s.deployment.pod.desired", times(0, 5, 25, 39), []float64{2, 3, 1, 1}, true)),
+		rm(with(wl, sAttr("k8s.container.name", "app"), arrAttr("thoras.held_metrics", cpuReq, memReq)),
+			metric(cpuUse, fill(n, func(i int) float64 { return 0.2 + float64(i%7)/20 }), step, false),
+			metric(cpuPeak, fill(n, func(i int) float64 { return 0.3 + float64(i%7)/10 }), step, false),
+			metric(memUse, fill(n, func(i int) float64 { return gib * (1 + float64(i%3)/4) }), step, true),
+			metric(memPeak, fill(n, func(i int) float64 { return gib * (1.2 + float64(i%3)/4) }), step, true),
+			metricAt(cpuReq, times(0, 20, 39), []float64{1, 0.5, 0.5}, false),
+			// Ends before the usage, so the last steps have no request.
+			metricAt(memReq, times(0, 30), []float64{2 * gib, 2 * gib}, true)),
+	}}
+}
+
 func snapshotDoc() map[string]any {
 	base := common(300, 3, "kube-api")
 	wl := with(base, sAttr("k8s.namespace.name", "a"), sAttr("k8s.deployment.name", "b"))
@@ -412,6 +451,7 @@ type jsResult struct {
 	Fidelity struct {
 		Tier        float64 `json:"tier"`
 		StepSeconds float64 `json:"stepSeconds"`
+		SourceStep  float64 `json:"sourceStepSeconds"`
 		SpanSeconds float64 `json:"spanSeconds"`
 		Snapshot    bool    `json:"snapshot"`
 		Source      string  `json:"source"`
@@ -444,7 +484,7 @@ func TestParityWithModelJS(t *testing.T) {
 	}
 	dir := t.TempDir()
 	files := []string{fixture}
-	for name, doc := range map[string]map[string]any{"partial": partialDoc(), "nodes": nodesDoc(), "snapshot": snapshotDoc(), "spans": spansDoc()} {
+	for name, doc := range map[string]map[string]any{"partial": partialDoc(), "nodes": nodesDoc(), "snapshot": snapshotDoc(), "spans": spansDoc(), "held": heldDoc()} {
 		b, err := json.Marshal(doc)
 		if err != nil {
 			t.Fatal(err)
@@ -490,6 +530,7 @@ func TestParityWithModelJS(t *testing.T) {
 			}{
 				{"tier", float64(got.Tier), w.Fidelity.Tier},
 				{"step", float64(got.StepSeconds), w.Fidelity.StepSeconds},
+				{"sourceStep", float64(got.SourceStepSeconds), w.Fidelity.SourceStep},
 				{"span", float64(got.SpanSeconds), w.Fidelity.SpanSeconds},
 				{"end-start", got.End.Sub(got.Start).Seconds(), w.Fidelity.SpanSeconds},
 				{"spend", got.Totals.AnnualSpend, w.Totals["spend"]},

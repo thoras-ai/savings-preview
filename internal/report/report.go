@@ -94,7 +94,8 @@ type Entry struct {
 }
 
 // WriteZip writes the entries to path, replacing any file already there.
-func WriteZip(path string, entries []Entry) error {
+// comment, when set, is the archive comment that unzip -z shows.
+func WriteZip(path, comment string, entries []Entry) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".savings-preview-*.zip")
 	if err != nil {
 		return err
@@ -109,6 +110,12 @@ func WriteZip(path string, entries []Entry) error {
 			return err
 		}
 		if _, err := w.Write(e.Data); err != nil {
+			tmp.Close()
+			return err
+		}
+	}
+	if comment != "" {
+		if err := zw.SetComment(comment); err != nil {
 			tmp.Close()
 			return err
 		}

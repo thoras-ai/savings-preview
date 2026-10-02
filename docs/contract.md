@@ -1,6 +1,6 @@
 # Savings Preview OTel contract
 
-Version 1.2.0. Every adapter writes one OTLP-JSON metrics file in this shape, and the report page reads only that file. `scripts/validate_contract.py` checks a file against this document. `fixtures/savings-preview.otlp.json` is a valid example.
+Version 1.3.0. Every adapter writes one OTLP-JSON metrics file in this shape, and the report page reads only that file. `scripts/validate_contract.py` checks a file against this document. `fixtures/savings-preview.otlp.json` is a valid example.
 
 ## Pinned conventions
 
@@ -34,6 +34,8 @@ All kinds:
 | `thoras.missing_metrics` | string[] | Optional. Required metrics the adapter looked for and could not get. |
 | `thoras.fidelity_notes` | string[] | Optional. How the series were derived when it differs from the metric definitions, see below. |
 | `thoras.step_spans` | string[] | Optional. Set when the points use more than one step, see Mixed steps below. |
+| `thoras.source_step_seconds` | int | Optional. Set on a compact resource: the step of the data it was built from, see Compact files below. |
+| `thoras.held_metrics` | string[] | Optional. Level metrics whose points are written only where the value changes, see Held metrics below. |
 
 Container and workload resources also take `k8s.namespace.name` and exactly one of `k8s.deployment.name` or `k8s.statefulset.name`. Container resources add `k8s.container.name`.
 
@@ -41,7 +43,7 @@ Node resources add `k8s.node.name`, `host.type` (the instance type), `cloud.prov
 
 ## Metrics
 
-All data points are dense series at `thoras.step_seconds`, or at the step of each span when a resource has `thoras.step_spans`. Data points carry no attributes. Everything that identifies a series is on the resource.
+All data points are dense series at `thoras.step_seconds`, or at the step of each span when a resource has `thoras.step_spans`, except the metrics a resource lists in `thoras.held_metrics`. Data points carry no attributes. Everything that identifies a series is on the resource.
 
 ### Per container (container resource)
 
@@ -107,7 +109,7 @@ The fidelity tier of a resource with step spans follows its coarsest step.
 
 A file with step spans is still structurally valid for an earlier reader, to which only the new attribute and metrics are unknown. Such a reader sees points spaced by more than `thoras.step_seconds` in the coarser spans. If it treats each point as covering only `thoras.step_seconds`, it misses most of that time, and if it takes peaks from the usage means it understates them, which overstates savings. Readers must handle `thoras.step_spans` and the peak metrics to price such files correctly. The report page handles both from 1.2.0.
 
-An adapter may claim a lower tier than its data supports but not a higher one. The validator rejects a claim the step and span cannot support.
+An adapter may claim a lower tier than its data supports but not a higher one. The validator rejects a claim the step and span cannot support. For a resource with `thoras.source_step_seconds` the tier is judged on that step instead of the coarsest step of the points.
 
 `thoras.fidelity_notes` lists derivations a reader should know about. Readers ignore values they do not recognize.
 
@@ -115,10 +117,33 @@ An adapter may claim a lower tier than its data supports but not a higher one. T
 | --- | --- |
 | `usage_split_from_pod_by_requests` | The source had no per-container usage. Container usage is the pod's usage split between its containers in proportion to their requests (evenly when none has a request, so a single container gets all of it). |
 
+### Compact files
+
+A compact file holds the same resources as a full file at a 15-minute step (900 seconds), which is the window the report takes peaks over. `savings-preview export --compact` writes one from a full file, and `run` writes one for the report and the zip. Each point summarizes the source points in its step:
+
+- `container.cpu.usage` and `container.memory.working_set` carry their mean, weighted by the step of each source point.
+- `thoras.container.cpu.usage.max` and `thoras.container.memory.working_set.max` carry the highest reading in the step, from the source's usage and peak metrics. A compact file always has them where it has usage.
+- Requests, limits, replica counts and node allocatable carry their weighted mean, rounded to a whole number for integer metrics, and are held (see below) when that gives the same value at every time a reader uses them.
+- `thoras.container.oom_kills` carries the sum of the kills in the step.
+
+Steps start at the first point of the file, so data on one grid stays on one grid. A compact resource sets `thoras.step_seconds` to 900, drops `thoras.step_spans`, keeps its `thoras.fidelity_tier`, and records the coarsest step of its source data in `thoras.source_step_seconds`. The tier follows the source step: the 15-minute peaks of 1-minute data are those of the 1-minute data. `thoras.source_step_seconds` is at most the coarsest step of the points. A resource whose data is already at 900 seconds or coarser is copied as it is, without the attribute.
+
+Totals from a compact file match the full file closely but not always exactly. The target follows the peak over the 15 minutes before each point, which in a compact file is the point's own step. A workload's peak is that of its containers' summed usage, and a compact file can only bound it by the sum of each container's peak, which lowers the savings slightly for workloads with several containers. A replica count that changes within a step is written as its mean rounded to a whole pod. Requests and spend match exactly when replica counts are steady within each step.
+
+### Held metrics
+
+A resource may list level metrics in `thoras.held_metrics`: `k8s.container.cpu.request.desired`, `k8s.container.memory.request.desired`, `k8s.container.cpu.limit.desired`, `k8s.container.memory.limit.desired`, `k8s.deployment.pod.desired`, `k8s.statefulset.pod.desired`, `k8s.node.cpu.allocatable` and `k8s.node.memory.allocatable`. A listed metric must be present. Its points are written at its first time, at its last time, and wherever its value changes. Each point's value holds until the next point, and the last point holds for one step. A held series cannot show a gap, so a writer holds a metric only when the series has a value at every step from its first point to its last that a reader prices: for a container, every step with usage; for a workload or node, every step.
+
+A reader averaging a held series over time weights each point by the time until the next one.
+
+### Readers before 1.3.0
+
+A compact file is structurally valid for an earlier reader, to which only the new attributes are unknown. Such a reader sees held series as points far apart, treats the time between them as gaps, and prices only the steps where a level changes, so it misprices the file. The validator before 1.3.0 also rejects the fidelity tier of a compact resource built from data finer than 300 seconds, since it judges the tier on the 900-second points. Readers must handle `thoras.held_metrics` and `thoras.source_step_seconds` to read compact files. The report page handles both from 1.3.0. Full files written by 1.3.0 adapters use neither attribute and read as before.
+
 ## Missing data
 
 - A series that could not be retrieved is left out of the file, and its metric name is listed in the resource's `thoras.missing_metrics`. Every required metric must be either present or listed, never both and never neither. Only required metrics can be listed.
-- A gap inside a series is represented by omitting the points for those steps. Zero, `NaN` and carried-forward values are never used to fill a gap.
+- A gap inside a series is represented by omitting the points for those steps. Zero, `NaN` and carried-forward values are never used to fill a gap. Held metrics are the exception: their points are only the changes, so they have no gaps.
 - A container with a required series missing is shown in the report but excluded from savings, because cost is the larger of the CPU and memory cost and cannot be computed from one of them.
 - Optional metrics are simply absent when unavailable, with no declaration.
 
@@ -126,6 +151,7 @@ An adapter may claim a lower tier than its data supports but not a higher one. T
 
 - 1.1.0 adds the optional `thoras.fidelity_notes` attribute. 1.0.0 files are valid 1.1.0 files.
 - 1.2.0 adds the optional `thoras.step_spans` attribute and the optional `thoras.container.cpu.usage.max` and `thoras.container.memory.working_set.max` metrics. 1.1.0 files are valid 1.2.0 files.
+- 1.3.0 adds the optional `thoras.source_step_seconds` and `thoras.held_metrics` attributes, used by compact files. 1.2.0 files are valid 1.3.0 files.
 
 ## Out of scope
 

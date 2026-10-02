@@ -129,7 +129,16 @@ func runRun(args []string) error {
 		return err
 	}
 
-	data, err := os.ReadFile(o.out)
+	// The report and the zip use a 15-minute copy that prices the same; the
+	// full file can be too large for a browser or an email.
+	compactPath := compactName(o.out)
+	start := time.Now()
+	st, err := compactFile(o.out, compactPath)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, compactReport(o.out, compactPath, st, time.Since(start)))
+	data, err := os.ReadFile(compactPath)
 	if err != nil {
 		return err
 	}
@@ -137,9 +146,13 @@ func runRun(args []string) error {
 		for _, e := range errs {
 			fmt.Fprintln(os.Stderr, "  "+e)
 		}
-		return fmt.Errorf("%s does not follow the contract (%d problems)", o.out, len(errs))
+		return fmt.Errorf("%s does not follow the contract (%d problems)", compactPath, len(errs))
 	}
-	fmt.Fprintf(os.Stderr, "%s passes the contract checks\n", o.out)
+	fmt.Fprintf(os.Stderr, "%s passes the contract checks\n", compactPath)
+	full, err := fullDataOf(o.out)
+	if err != nil {
+		return err
+	}
 
 	sum, err := savings.Analyze(data)
 	if err != nil {
@@ -149,15 +162,16 @@ func runRun(args []string) error {
 	if err != nil {
 		return err
 	}
-	zipPath, err := writeBundle(o.out, data, page, summaryFile{Summary: *sum, Version: versionString(),
-		Generated: time.Now().UTC().Truncate(time.Second)})
+	zipPath, err := writeBundle(o.out, filepath.Base(compactPath), data, page, summaryFile{Summary: *sum, Version: versionString(),
+		Generated: time.Now().UTC().Truncate(time.Second), FullData: full})
 	if err != nil {
 		return fmt.Errorf("write zip: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "\n%s: %s a year in requests, %s a year in savings (%d of %d workloads counted, tier %d, %s)\n",
 		sum.Cluster, money(sum.Totals.AnnualSpend), money(sum.Totals.AnnualSavings), sum.Totals.Counted, sum.Totals.Workloads,
 		sum.Tier, spanText(time.Duration(sum.SpanSeconds)*time.Second))
-	fmt.Fprintf(os.Stderr, "wrote %s with the contract file, a summary and a copy of the report that opens without this tool\n", zipPath)
+	fmt.Fprintf(os.Stderr, "wrote %s with %s, a summary and a copy of the report that opens without this tool\n", zipPath, filepath.Base(compactPath))
+	fmt.Fprintf(os.Stderr, "the full-resolution file stays at %s (%s); it is not in the zip\n", o.out, megabytes(full.Bytes))
 
 	// The first Ctrl-C may have ended polling; a fresh one stops the server.
 	stop()
@@ -236,7 +250,7 @@ func printAccess(w io.Writer, conn *kube.Conn, o *runOptions) {
 		}
 		fmt.Fprintln(w, prefix+"read Pods, ReplicaSets, Deployments, StatefulSets, Nodes and metrics-server pod usage at each interval")
 	}
-	fmt.Fprintf(w, "Output goes to %s and %s. Nothing is uploaded.\n\n", o.out, zipName(o.out))
+	fmt.Fprintf(w, "Output goes to %s, a 15-minute copy for the report in %s, and %s. Nothing is uploaded.\n\n", o.out, compactName(o.out), zipName(o.out))
 }
 
 // pollWithProgress polls until o.duration passes or the user presses Ctrl-C,
@@ -357,12 +371,18 @@ func money(v float64) string {
 
 // writeContract writes f to path, replacing it only once the write succeeded.
 func writeContract(path string, f *contract.File) error {
+	return replaceFile(path, f.Write)
+}
+
+// replaceFile writes path through a temporary file, replacing it only once the
+// write succeeded.
+func replaceFile(path string, write func(io.Writer) error) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".savings-preview-*.json")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(tmp.Name())
-	if err := f.Write(tmp); err != nil {
+	if err := write(tmp); err != nil {
 		tmp.Close()
 		return err
 	}
@@ -385,9 +405,27 @@ type summaryFile struct {
 	savings.Summary
 	Version   string    `json:"version"`
 	Generated time.Time `json:"generated_at"`
+	FullData  *fullData `json:"full_data,omitempty"`
 }
 
-func writeBundle(out string, data []byte, page string, sum summaryFile) (string, error) {
+// fullData names the full-resolution contract file, which stays next to the
+// zip; the zip holds the compact one.
+type fullData struct {
+	File  string `json:"file"`
+	Bytes int64  `json:"bytes"`
+}
+
+func fullDataOf(path string) (*fullData, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	return &fullData{File: filepath.Base(path), Bytes: fi.Size()}, nil
+}
+
+// writeBundle writes the zip next to out with the compact contract file as
+// name, the summary and a copy of the report that carries the data.
+func writeBundle(out, name string, data []byte, page string, sum summaryFile) (string, error) {
 	inline, err := report.Inline(page, data)
 	if err != nil {
 		return "", err
@@ -397,8 +435,13 @@ func writeBundle(out string, data []byte, page string, sum summaryFile) (string,
 		return "", err
 	}
 	path := zipName(out)
-	return path, report.WriteZip(path, []report.Entry{
-		{Name: report.DataName, Data: data},
+	comment := ""
+	if sum.FullData != nil {
+		comment = fmt.Sprintf("%s holds 15-minute peaks and means. The full-resolution file, %s (%s), was written next to this zip and is not in it.",
+			name, sum.FullData.File, megabytes(sum.FullData.Bytes))
+	}
+	return path, report.WriteZip(path, comment, []report.Entry{
+		{Name: name, Data: data},
 		{Name: "summary.json", Data: append(js, '\n')},
 		{Name: "report.html", Data: []byte(inline)},
 	})

@@ -256,5 +256,42 @@ class StepSpanTest(unittest.TestCase):
         self.assertHas("claims more than step 300s")
 
 
+class CompactTest(unittest.TestCase):
+    """Attributes a compact file adds: the source step and held level metrics."""
+
+    def setUp(self):
+        self.doc = load()
+        self.app = find(self.doc, **{"k8s.container.name": "app"})
+
+    def add(self, key, value):
+        self.app["resource"]["attributes"].append({"key": key, "value": value})
+
+    def errors(self):
+        return vc.validate(self.doc)
+
+    def test_tier_follows_source_step(self):
+        attr(self.app, "thoras.fidelity_tier")["value"] = {"intValue": "1"}
+        self.assertTrue(any("claims more than step 300s" in e for e in self.errors()))
+        self.add("thoras.source_step_seconds", {"intValue": "60"})
+        self.assertEqual(self.errors(), [])
+
+    def test_source_step_not_coarser_than_points(self):
+        self.add("thoras.source_step_seconds", {"intValue": "600"})
+        self.assertTrue(any("must not be coarser" in e for e in self.errors()))
+
+    def test_held_levels(self):
+        held = ["k8s.container.cpu.request.desired", "k8s.container.memory.request.desired"]
+        self.add("thoras.held_metrics", {"arrayValue": {"values": [{"stringValue": x} for x in held]}})
+        self.assertEqual(self.errors(), [])
+
+    def test_held_usage_rejected(self):
+        self.add("thoras.held_metrics", {"arrayValue": {"values": [{"stringValue": "container.cpu.usage"}]}})
+        self.assertTrue(any("not a request, limit, replica or allocatable metric" in e for e in self.errors()))
+
+    def test_held_absent(self):
+        self.add("thoras.held_metrics", {"arrayValue": {"values": [{"stringValue": "k8s.container.cpu.limit.desired"}]}})
+        self.assertTrue(any("which is absent" in e for e in self.errors()))
+
+
 if __name__ == "__main__":
     unittest.main()
