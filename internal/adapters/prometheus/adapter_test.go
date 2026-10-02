@@ -473,7 +473,8 @@ func TestPodLevelFallback(t *testing.T) {
 			}
 		}
 		if q.Get("start") == "" && q.Get("time") != "" && strings.Contains(query, "container_memory_working_set_bytes") &&
-			!strings.Contains(query, "count by") && query != UsageProbe && query != PodUsageProbe {
+			!strings.Contains(query, "count by") && query != UsageProbe && query != PodUsageProbe &&
+			query != `count(container_memory_working_set_bytes{})` && query != `count(container_memory_working_set_bytes{namespace!="",pod!=""})` {
 			t.Errorf("unexpected instant query: %s", query)
 		}
 	}

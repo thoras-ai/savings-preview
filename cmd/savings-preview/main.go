@@ -10,7 +10,8 @@ import (
 const usage = `usage: savings-preview <source> [flags]
 
 Sources:
-  prometheus   Prometheus-compatible store reached through the Kubernetes API server
+  prometheus   Prometheus-compatible store, reached through the Kubernetes API server
+               or by URL (Mimir, Grafana Cloud, Amazon Managed Prometheus)
 
 Run "savings-preview <source> -h" for the flags of a source.
 `
