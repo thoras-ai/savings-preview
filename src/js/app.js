@@ -230,8 +230,17 @@
     }
   }
 
+  // A copy saved for sharing carries the contract file in the page itself.
+  function inlineData() {
+    var el = document.getElementById('report-data');
+    if (!el) return null;
+    try { return JSON.parse(el.textContent); } catch (e) { return null; }
+  }
+
   applyTheme();
   bind();
-  if (location.protocol === 'file:') showError('');
+  var inline = inlineData();
+  if (inline) load(inline);
+  else if (location.protocol === 'file:') showError('');
   else fetchData();
 })();
