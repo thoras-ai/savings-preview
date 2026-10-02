@@ -204,7 +204,7 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 	}
 	for _, r := range []Role{CPUUsage, MemoryUsage} {
 		if _, ok := p.roles[r]; !ok {
-			msg := fmt.Sprintf("no container %s in the last %s: looked for %s with the %s and %s tags", r, days(o.Days),
+			msg := fmt.Sprintf("no container %s in the last %s: looked for %s with the %s and %s tags", r, plural(o.Days, "day"),
 				strings.Join(p.tried[r], ", "), KubeTags.Namespace, KubeTags.Container)
 			if len(o.Filters) > 0 {
 				msg += " matching the selector"
@@ -664,16 +664,16 @@ func assemble(o Options, p *probed, pl *pulled, rep *Report) *contract.File {
 	rep.FullHistory = earliest > 0 && rep.Start.Sub(o.Now.Add(-o.window())) < time.Hour
 	if earliest > 0 && !rep.FullHistory {
 		rep.Warnings = append(rep.Warnings, fmt.Sprintf("Datadog holds container usage from %s, less than the %s asked for",
-			rep.Start.UTC().Format(time.RFC3339), days(o.Days)))
+			rep.Start.UTC().Format(time.RFC3339), plural(o.Days, "day")))
 	}
 	return f
 }
 
-func days(n int) string {
+func plural(n int, word string) string {
 	if n == 1 {
-		return "1 day"
+		return "1 " + word
 	}
-	return fmt.Sprintf("%d days", n)
+	return fmt.Sprintf("%d %ss", n, word)
 }
 
 // peaks keeps the peak points at the times the mean has a point, never below

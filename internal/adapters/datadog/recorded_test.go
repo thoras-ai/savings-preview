@@ -201,7 +201,8 @@ func scrub(b []byte) []byte {
 // and DD_SITE, and RECORD_DATADOG_SELECTOR when the organization has several
 // clusters. The recording holds one day of the organization's usage, with
 // cluster, namespace, workload, container, node and region names replaced by
-// numbered ones.
+// numbered ones. Values of other tags, such as a selector on env or team,
+// are kept, so review the file before committing it.
 func TestRecordDatadog(t *testing.T) {
 	if os.Getenv("RECORD_DATADOG") == "" {
 		t.Skip("RECORD_DATADOG is not set")

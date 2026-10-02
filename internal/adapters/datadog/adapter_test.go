@@ -348,10 +348,10 @@ func TestBadKeysStopBeforeQuerying(t *testing.T) {
 	}
 }
 
-func TestDays(t *testing.T) {
-	for n, want := range map[int]string{1: "1 day", 7: "7 days", 14: "14 days"} {
-		if got := days(n); got != want {
-			t.Errorf("days(%d) = %q, want %q", n, got, want)
+func TestPlural(t *testing.T) {
+	for n, want := range map[int]string{0: "0 nodes", 1: "1 node", 3: "3 nodes"} {
+		if got := plural(n, "node"); got != want {
+			t.Errorf("plural(%d) = %q, want %q", n, got, want)
 		}
 	}
 }

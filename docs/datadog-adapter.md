@@ -28,7 +28,7 @@ DD_API_KEY=... DD_APP_KEY=... savings-preview datadog --site us1 [--selector kub
    2. Copy the key when it is shown.
    3. Open the key, edit its scopes, and select only `timeseries_query`.
 
-   The scope can also be set through the API, with the key itself, while it is still unscoped. Save both keys to files (step 4), find the key's ID on its page in Datadog, then:
+   The scope of a key on your own user can also be set through the API, with the key itself, while it is still unscoped. Save both keys to files (step 4), find the key's ID on its page in Datadog, then:
 
    ```
    K=~/.config/savings-preview
@@ -38,7 +38,7 @@ DD_API_KEY=... DD_APP_KEY=... savings-preview datadog --site us1 [--selector kub
        -d '{"data":{"type":"application_keys","id":"KEY_ID","attributes":{"scopes":["timeseries_query"]}}}'
    ```
 
-   Use the API host of your site (`api.datadoghq.eu`, `api.us5.datadoghq.com`). For a key on a service account, the path is `/api/v2/service_accounts/SERVICE_ACCOUNT_ID/application_keys/KEY_ID`. Headers read from standard input stay out of the process list. Once the key is scoped, other APIs answer it with 403 Forbidden, which is expected.
+   Use the API host of your site (`api.datadoghq.eu`, `api.us5.datadoghq.com`). For a key on a service account, the path is `/api/v2/service_accounts/SERVICE_ACCOUNT_ID/application_keys/KEY_ID`, and the call needs the application key of a user who can manage service accounts, because the Read Only Role cannot change the service account's keys. The UI is simpler there. Headers read from standard input stay out of the process list. Once the key is scoped, other APIs answer it with 403 Forbidden, which is expected.
 4. **Save both keys to files.** Copy each key, then on macOS:
 
    ```
@@ -198,7 +198,7 @@ RECORD_DATADOG=1 DD_SITE=us1 DD_API_KEY=... DD_APP_KEY=... RECORD_DATADOG_SELECT
   go test -run TestRecordDatadog ./internal/adapters/datadog
 ```
 
-This writes `testdata/live-SITE.json` with one day at 1 minute ending at the current minute, which the replay test then runs too. The recording holds the keys of no request. Cluster, namespace, workload, container, node and region names are replaced with numbered ones (`cluster-1`, `namespace-3`) in the queries, filters and responses alike, so the run replays unchanged. The usage values are kept. `live-api.datadoghq.com.json` is a recording of a one-node minikube cluster with the Agent installed as above.
+This writes `testdata/live-SITE.json` with one day at 1 minute ending at the current minute, which the replay test then runs too. The recording holds the keys of no request. Cluster, namespace, workload, container, node and region names are replaced with numbered ones (`cluster-1`, `namespace-3`) in the queries, filters and responses alike, so the run replays unchanged. The usage values are kept. Values of other tags are not rewritten: a `RECORD_DATADOG_SELECTOR` on `env`, `team` or a custom cluster tag is written as is into the filters and every query. Review the file before committing it. `live-api.datadoghq.com.json` is a recording of a one-node minikube cluster with the Agent installed as above.
 
 Checked against a live organization:
 
