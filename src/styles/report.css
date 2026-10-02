@@ -29,9 +29,9 @@ code { font-family: var(--primitive-font-mono); font-size: 0.92em; }
 .wordmark svg { display: block; width: auto; height: 14px; }
 .product { color: var(--fixed-icon-emphasized); font-weight: var(--primitive-weight-medium); }
 .context { color: var(--fixed-text-light); font-size: var(--primitive-text-sm); margin-left: var(--primitive-space-4); }
-.top-tools { display: flex; align-items: center; gap: var(--primitive-space-12); }
+.top-tools { display: flex; align-items: center; gap: var(--primitive-space-12); flex-wrap: wrap; }
 .top-button {
-  height: 32px; padding: 0 var(--primitive-space-16); cursor: pointer;
+  height: 32px; padding: 0 var(--primitive-space-16); cursor: pointer; white-space: nowrap;
   background: transparent; color: var(--fixed-text-default);
   border: 1px solid var(--fixed-border-default); border-radius: var(--primitive-radius-full);
   font-size: var(--primitive-text-sm); font-weight: var(--primitive-weight-medium);
@@ -319,12 +319,69 @@ button.tm-cell:hover { filter: brightness(0.94); }
 .steps li + li { margin-top: var(--primitive-space-8); }
 .steps strong { font-weight: var(--primitive-weight-medium); }
 
-/* Placeholders for sections 5 and 6. */
+/* Placeholder for section 5. */
 .settings { display: grid; grid-template-columns: max-content 1fr; gap: var(--primitive-space-8) var(--primitive-space-24); margin: var(--primitive-space-16) 0; }
 .settings dt { color: var(--text-light); }
 .settings dd { margin: 0; font-variant-numeric: tabular-nums; }
-.missing { margin: var(--primitive-space-12) 0 0; padding-left: var(--primitive-space-20); }
-.missing li + li { margin-top: var(--primitive-space-4); }
+
+/* Section 6: data and method. */
+.section-lead { color: var(--text-light); margin: var(--primitive-space-4) 0 0; max-width: 70ch; }
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--primitive-space-8) var(--primitive-space-20); margin: var(--primitive-space-12) 0 0; }
+.facts dt { color: var(--text-light); }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.facts-list, .method-steps { display: flex; flex-direction: column; gap: var(--primitive-space-8); margin: var(--primitive-space-12) 0 0; padding-left: var(--primitive-space-20); }
+.facts-list li::marker, .method-steps li::marker { color: var(--text-lighter); font-family: var(--primitive-font-mono); }
+.method-after { margin: var(--primitive-space-12) 0 0; }
+.mono-sub { color: var(--text-lighter); font-family: var(--primitive-font-mono); font-size: var(--primitive-text-xs); }
+.card code { background: var(--surface-inset); padding: 1px var(--primitive-space-4); border-radius: var(--primitive-radius-4); overflow-wrap: anywhere; }
+.more { margin-top: var(--primitive-space-8); }
+.more summary { cursor: pointer; color: var(--text-brand); font-weight: var(--primitive-weight-medium); }
+[data-theme="dark"] .more summary { color: var(--primitive-brand-300); }
+.more summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* The printed summary: hidden on screen, the only thing printed while a report is open. */
+.print { display: none; }
+@page { size: letter; margin: 0.5in; }
+@media print {
+  html[data-theme] { color-scheme: light; }
+  body.has-print { background: none; }
+  body.has-print > :not(.print) { display: none !important; }
+  body.has-print > .print { display: flex; }
+}
+.print {
+  flex-direction: column; gap: var(--primitive-space-12);
+  background: var(--surface-default); color: var(--text-default);
+  font-size: var(--primitive-text-xs); line-height: var(--primitive-leading-normal);
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.print h1 { font-size: var(--primitive-text-xl); }
+.print h2 { font-size: var(--primitive-text-sm); }
+.print p { margin: var(--primitive-space-6) 0 0; }
+.print .banner { margin-top: 0; }
+.print .legend { gap: var(--primitive-space-16); margin: var(--primitive-space-6) 0; }
+.print-top { display: flex; justify-content: space-between; align-items: baseline; gap: var(--primitive-space-16); border-bottom: 1px solid var(--text-default); padding-bottom: var(--primitive-space-8); }
+.print-top strong { font-size: var(--primitive-text-sm); }
+.print-top span, .print-muted { color: var(--text-light); }
+.print-title { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--primitive-space-16); }
+.print-box { border: 1px solid var(--border-light); border-radius: var(--primitive-radius-8); padding: var(--primitive-space-12) var(--primitive-space-16); break-inside: avoid; }
+.print-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--primitive-space-12); }
+.print-label { color: var(--text-light); font-weight: var(--primitive-weight-medium); }
+.print-figure { font-size: var(--primitive-text-xl); line-height: var(--primitive-leading-tight); font-weight: var(--primitive-weight-medium); margin: var(--primitive-space-2) 0; font-variant-numeric: tabular-nums; }
+.print-hero .print-figure { color: var(--text-brand); }
+.print-provisional { border: 1px dashed var(--primitive-mango-400); }
+.print-hero.print-provisional .print-figure { color: var(--text-caution); }
+.print-meanings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--primitive-space-12); margin-top: var(--primitive-space-6); }
+.print-meanings > div + div { border-left: 1px solid var(--border-lighter); padding-left: var(--primitive-space-12); }
+.print-meaning { font-size: var(--primitive-text-md); font-weight: var(--primitive-weight-medium); font-variant-numeric: tabular-nums; }
+.print-chart svg { width: 100%; height: auto; }
+.print-ranks { display: grid; grid-template-columns: 180px minmax(0, 1fr) 120px; gap: var(--primitive-space-6) var(--primitive-space-12); align-items: center; margin-top: var(--primitive-space-6); }
+.print-name { display: block; font-weight: var(--primitive-weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.print-sub { display: block; color: var(--text-lighter); font-size: var(--primitive-text-xs); }
+.print-mono { font-family: var(--primitive-font-mono); }
+.print-value { text-align: right; font-variant-numeric: tabular-nums; }
+.print-bar { height: 12px; background: var(--surface-inset); }
+.print-bar i { display: block; height: 100%; background: var(--primitive-brand-500); }
+.print-foot { color: var(--text-lighter); margin: 0; }
 @media (max-width: 640px) {
   main { padding: var(--primitive-space-12); }
   .top { padding: var(--primitive-space-12); }

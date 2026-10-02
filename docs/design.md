@@ -135,3 +135,7 @@ A row of options in a fully rounded track (`--surface-inset` with a `--border-li
 ### Alert
 
 A caution banner with one sentence. Put the count first, in bold, so the scope is clear: "**1 of 4 workloads** have too little data for a savings figure and are not in the totals."
+
+### Print summary
+
+What prints while a report is open: one letter-size document with half-inch margins, always in the light theme (the element carries `data-theme="light"`, so the semantic tokens resolve to light whatever the page theme). It repeats the summary's figures under the current settings: the cluster heading and confidence pill, the four headline figures in a two-column grid, confidence, what this means, spend over the window, the top workloads, and a paragraph on how the figure is computed. Cards are 1px `--border-light` boxes with `--primitive-radius-8` and no shadow, and none splits across a page break. Body text is `--primitive-text-xs`. Provisional data prints as on screen: the caution banner, dashed mango-400 edges and rounded figures with ~.
