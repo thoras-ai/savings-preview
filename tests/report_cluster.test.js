@@ -6,6 +6,7 @@ const path = require('node:path');
 const model = require('../src/js/model.js');
 const state = require('../src/js/state.js');
 const cluster = require('../src/js/section-cluster.js');
+const { budget } = require('./budget');
 
 const GIB = 1 << 30;
 const T0 = 1789516800;
@@ -205,7 +206,7 @@ test('at 1,000 workloads a lever change re-renders the section well inside the b
     const t0 = performance.now();
     const html = cluster.markup(cluster.summarize(data, r, st), false);
     const ms = performance.now() - t0;
-    assert.ok(ms < 50, `${hash || 'defaults'}: ${ms.toFixed(1)} ms`);
+    assert.ok(ms < budget(50), `${hash || 'defaults'}: ${ms.toFixed(1)} ms`);
     assert.match(html, /<div class="kpi-value">60</);
   }
 });
