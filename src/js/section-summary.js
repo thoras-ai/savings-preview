@@ -25,14 +25,15 @@
   function year(sec) { return new Date(sec * 1000).getUTCFullYear(); }
 
   // The dates the figures cover: the time range when one is set, else the file.
-  function window_(r, st) {
+  function coverage(r, st) {
     var a = st.range ? st.range[0] : r.fidelity.start, b = st.range ? st.range[1] : r.fidelity.end;
     if (a === null || b === null) return '';
+    if (day(a) === day(b) && year(a) === year(b)) return day(b) + ', ' + year(b) + ' (UTC)';
     return day(a) + (year(a) !== year(b) ? ', ' + year(a) : '') + ' – ' + day(b) + ', ' + year(b) + ' (UTC)';
   }
 
   function heading(r, st, level) {
-    var filtered = st.namespaces || st.range, span = window_(r, st);
+    var filtered = st.namespaces || st.range, span = coverage(r, st);
     return '<div class="sum-head"><div><h1>' + esc(r.cluster || 'Unnamed cluster') + '</h1>' +
       '<div class="sum-meta">' + esc(r.fidelity.label) + (r.fidelity.source ? ' · ' + esc(r.fidelity.source) : '') +
       (span ? ' · ' + esc(span) : '') +
@@ -54,8 +55,8 @@
     return '<div class="kpis">' +
       ui.kpiTile({ label: 'Annual savings opportunity', value: ui.money(t.savings, approx), context: ui.pct(share) + ' of projected spend', variant: 'hero' + edge }) +
       ui.kpiTile({ label: 'Projected annual spend', value: ui.money(t.spend, approx), context: 'Priced from current requests', variant: 'default' + edge }) +
-      ui.kpiTile({ label: 'CPU that could be freed', value: ui.num(t.cores, 1) + ' cores', context: 'of ' + ui.num(t.reqCores, t.reqCores < 10 ? 1 : 0) + ' cores requested', variant: 'default' + edge }) +
-      ui.kpiTile({ label: 'Memory that could be freed', value: ui.num(t.gib, 1) + ' GiB', context: 'of ' + ui.num(t.reqGiB, t.reqGiB < 10 ? 1 : 0) + ' GiB requested', variant: 'default' + edge }) +
+      ui.kpiTile({ label: 'CPU that could be freed', value: ui.num(t.cores, t.cores < 1 ? 2 : 1) + ' cores', context: 'of ' + ui.num(t.reqCores, t.reqCores < 10 ? 1 : 0) + ' cores requested', variant: 'default' + edge }) +
+      ui.kpiTile({ label: 'Memory that could be freed', value: ui.num(t.gib, t.gib < 1 ? 2 : 1) + ' GiB', context: 'of ' + ui.num(t.reqGiB, t.reqGiB < 10 ? 1 : 0) + ' GiB requested', variant: 'default' + edge }) +
       '</div>';
   }
 
@@ -120,7 +121,7 @@
   }
 
   function topCard(r, approx) {
-    var sub = approx ? 'Rounded, from ' + (r.fidelity.snapshot ? 'a single snapshot' : model.formatSpan(r.fidelity.spanSeconds)) + ' of data' :
+    var sub = approx ? 'Rounded, from ' + (r.fidelity.snapshot ? 'a single snapshot' : model.formatSpan(r.fidelity.spanSeconds) + ' of data') :
       'Where most of the savings are. Select a workload to see its history.';
     var top = r.workloads.filter(function (w) { return w.series && w.annualSavings > 0; })
       .sort(function (a, b) { return b.annualSavings - a.annualSavings || a.name.localeCompare(b.name); }).slice(0, TOP);
