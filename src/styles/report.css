@@ -271,6 +271,50 @@ tr.excluded { color: var(--text-light); }
 .rank-bar i { display: block; height: 100%; background: var(--primitive-brand-600); border-radius: var(--primitive-radius-full); }
 [data-theme="dark"] .rank-bar i { background: var(--primitive-brand-400); }
 
+/* Section 2: where the money is. Treemap cells take chart-1 to chart-4 by
+ * namespace, chart-other for the rest, and a neutral hatch when not counted. */
+.money-lead { color: var(--text-light); margin: var(--primitive-space-4) 0 0; max-width: 70ch; }
+.tm-host { margin: 0 -2px; }
+.tm { position: relative; }
+.tm-cell {
+  position: absolute; display: flex; flex-direction: column; align-items: flex-start; gap: var(--primitive-space-2); overflow: hidden;
+  padding: var(--primitive-space-8) var(--primitive-space-10); margin: 0; text-align: left;
+  border: 2px solid var(--surface-default); border-radius: 6px; background-clip: padding-box;
+  color: var(--color-zinc-950);
+}
+.tm-cell b { font-weight: var(--primitive-weight-medium); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-cell span { font-family: var(--primitive-font-mono); font-size: var(--primitive-text-xs); color: var(--color-zinc-800); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.tm-cell { cursor: pointer; transition: filter var(--primitive-duration-150) var(--primitive-ease-in-out); }
+button.tm-cell:hover { filter: brightness(0.94); }
+.tm-s { padding: var(--primitive-space-4) var(--primitive-space-6); }
+.tm-s span, .tm-xs > * { display: none; }
+.tm-1 { background-color: var(--chart-1); }
+.tm-2 { background-color: var(--chart-2); }
+.tm-3 { background-color: var(--chart-3); }
+.tm-4 { background-color: var(--chart-4); }
+.tm-other { background-color: var(--chart-other); }
+[data-theme="dark"] .tm-cell.tm-other { color: var(--color-zinc-50); }
+[data-theme="dark"] .tm-cell.tm-other span { color: var(--color-zinc-200); }
+.tm-gap, .tm-key.tm-gap, .rank-bar-gap {
+  background: repeating-linear-gradient(-45deg, var(--hatch-neutral) 0, var(--hatch-neutral) 1px, transparent 1px, transparent 3px);
+  box-shadow: inset 0 0 0 1px var(--border-light);
+}
+.tm-cell.tm-gap { color: var(--text-light); background-clip: padding-box; }
+.tm-cell.tm-gap span { font-family: var(--primitive-font-sans); color: var(--text-light); }
+.tm-key { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
+.money-ranks .rank { grid-template-columns: minmax(0, 150px) minmax(0, 1fr) 130px; gap: var(--primitive-space-12); }
+.money-ranks .rank-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.money-ranks .rank-bar { height: 14px; border-radius: 2px; }
+.money-ranks .rank-bar i { background: var(--primitive-brand-500); border-radius: 2px; }
+[data-theme="dark"] .money-ranks .rank-bar i { background: var(--primitive-brand-400); }
+.rank-static { cursor: default; }
+.rank-static:hover { background: none; }
+.money-ranks .rank-gap .rank-sub { white-space: normal; }
+.rank-gap .rank-name > span:first-child { color: var(--text-light); }
+.rank-gap .rank-value { color: var(--text-light); font-weight: var(--primitive-weight-normal); }
+.money-more { margin: var(--primitive-space-12) 0 0; font-size: var(--primitive-text-xs); }
+.money-more .link { font-size: var(--primitive-text-sm); }
+
 .steps { margin: var(--primitive-space-12) 0 0; padding-left: var(--primitive-space-20); }
 .steps li + li { margin-top: var(--primitive-space-8); }
 .steps strong { font-weight: var(--primitive-weight-medium); }
