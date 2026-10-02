@@ -24,12 +24,12 @@
 
 ## run reads Datadog when its keys are set
 
-**What changes.** `run` without `--source` reads Datadog first when both keys are given: `DD_API_KEY` and `DD_APP_KEY` (or `DD_APPLICATION_KEY`) in the environment, or `--api-key-file` and `--app-key-file`. Before, it ignored these variables and looked for a store in the cluster. A store named with `--url` or `--target` still comes first. When Datadog has no usable data, `run` prints why and goes on as before; only a Datadog organization with several clusters stops it, with the `--selector` to pass.
+**What changes.** `run` without `--source` reads Datadog first when both keys are given: `DD_API_KEY` and `DD_APP_KEY` (or `DD_APPLICATION_KEY`) in the environment, or `--api-key-file` and `--app-key-file`. Before, it ignored these variables and looked for a store in the cluster. A store named with `--url` or `--target` comes first. When Datadog has no usable data, `run` prints why and goes on as before; only a Datadog organization with several clusters stops it, with the `--selector` to pass.
 
-**Who it affects.** People who have both Datadog keys in their shell environment for other tools and run `run` without `--source`. Their report now comes from Datadog, and `--selector` is read as Datadog tag filters. `--step` must then be a whole number of minutes.
+**Who it affects.** People who have both Datadog keys in their shell environment for other tools and run `run` without `--source`. Their report now comes from Datadog, and `--selector` is read as Datadog tag filters. `--step` must then be a whole number of minutes. When Datadog has no usable data and the run falls back to a store in the cluster that holds several clusters, label matchers for that store can be passed only with `--source prometheus`.
 
 **Why.** A prospect that already sends metrics to Datadog gets 14 days of history in one command instead of starting a poll.
 
-**How to keep the old behavior.** Pass `--source prometheus` or `--source poll`, or unset the keys for the run (`env -u DD_API_KEY savings-preview run`).
+**How to keep the old behavior.** Unset either key for the run, for example `env -u DD_API_KEY savings-preview run`; the run then looks for a store and polls when there is none, as before. `--source prometheus` and `--source poll` also skip Datadog, but each reads only one source and does not fall back to the other.
 
 **How to tell which you have.** The access list `run` prints first starts with "query the Datadog metrics API" when it will read Datadog, and the line after the pull says `from Datadog`. The file's `thoras.source` is `datadog`.

@@ -225,7 +225,8 @@ func TestRunReadsDatadog(t *testing.T) {
 	t.Setenv(datadog.EnvAPIKey, "api")
 	t.Setenv(datadog.EnvAppKey, "app")
 	out := filepath.Join(t.TempDir(), "savings-preview.otlp.json")
-	o, err := runFlags([]string{"--site", srv.URL, "--selector", "kube_cluster_name:prod-us", "--days", "1", "--step", "5m", "-o", out})
+	o, err := runFlags([]string{"--site", srv.URL, "--selector", "kube_cluster_name:prod-us", "--days", "1", "--step", "5m", "-o", out,
+		"--kubeconfig", filepath.Join(t.TempDir(), "missing")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +240,9 @@ func TestRunReadsDatadog(t *testing.T) {
 	if err := collect(context.Background(), s, o, &log); err != nil {
 		t.Fatalf("%v\n%s", err, log.String())
 	}
-	if !strings.Contains(log.String(), "query the Datadog metrics API") || !strings.Contains(log.String(), "from Datadog:") {
+	// Without a kubeconfig the run still reads Datadog.
+	if !strings.Contains(log.String(), "Cannot read the kubeconfig") || !strings.Contains(log.String(), "query the Datadog metrics API") ||
+		!strings.Contains(log.String(), "from Datadog:") {
 		t.Errorf("log:\n%s", log.String())
 	}
 	if errs := withFile(out, validate.ValidateReader); len(errs) > 0 {

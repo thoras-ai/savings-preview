@@ -305,6 +305,12 @@ func newSources(o *runOptions, w io.Writer) (sources, error) {
 		if _, err := connect(); err != nil {
 			return s, err
 		}
+	case o.source == "auto":
+		// The cluster is read only if Datadog fails, so a kubeconfig that
+		// cannot be read stops the run only then.
+		if _, err := connect(); err != nil {
+			fmt.Fprintf(w, "Cannot read the kubeconfig (%v); only Datadog can be read.\n", err)
+		}
 	}
 	printAccess(w, o)
 
@@ -440,7 +446,7 @@ func collect(ctx context.Context, s sources, o *runOptions, w io.Writer) error {
 		}
 		fmt.Fprintf(w, "Not using Datadog: %v.\n", err)
 		if o.selector != "" {
-			fmt.Fprintln(w, "--selector holds Datadog tag filters, so it is not applied to the store or to polling.")
+			fmt.Fprintln(w, "--selector holds Datadog tag filters, so it is not applied to the store or to polling. To pass label matchers to a store, run again with --source prometheus.")
 		}
 		fmt.Fprintln(w)
 	}

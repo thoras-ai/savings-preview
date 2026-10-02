@@ -136,12 +136,6 @@ func (f *Flags) KeysGiven() bool {
 	return given(f.APIKeyFile, EnvAPIKey) && given(f.AppKeyFile, EnvAppKey, EnvAppKeyAlt)
 }
 
-// AnyKeyGiven reports whether either key is given.
-func (f *Flags) AnyKeyGiven() bool {
-	return f.APIKeyFile != "" || f.AppKeyFile != "" ||
-		strings.TrimSpace(os.Getenv(EnvAPIKey)) != "" || strings.TrimSpace(os.Getenv(EnvAppKey)) != "" || strings.TrimSpace(os.Getenv(EnvAppKeyAlt)) != ""
-}
-
 // Client resolves the site and reads the keys.
 func (f *Flags) Client() (*Client, error) {
 	siteName := f.Site

@@ -93,11 +93,9 @@ func runPrometheus(args []string) error {
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "using %s\n", cand)
-	}
-
-	if direct.maxRange > 0 {
 		store.MaxRange = direct.maxRange
 	}
+
 	client := &prometheus.Client{G: getter, Selector: matchers, MaxRange: store.MaxRange}
 	f, rep, err := prometheus.Run(ctx, prometheus.Options{Client: client, Cluster: clusterName, Days: *days, Step: *step,
 		Concurrency: *concurrency, Log: logf, AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud})
