@@ -13,6 +13,7 @@
  *   from, to  time range, Unix seconds (the whole file)
  *   cost      loaded cost of an engineer per year, in USD (200000)
  *   bill      annual cloud bill, in USD (none)
+ *   clusters  clusters like this one, for the fleet figure (1)
  *   workload  the workload in focus, as namespace/kind/name (none)
  */
 (function () {
@@ -31,6 +32,7 @@
     range: null,
     engineerCost: 200000,
     bill: null,
+    clusters: 1,
     workload: null
   };
 
@@ -61,6 +63,8 @@
     if (cost) st.engineerCost = cost;
     var bill = positive(q.get('bill'));
     if (bill) st.bill = bill;
+    var clusters = positive(q.get('clusters'));
+    if (clusters && clusters <= 10000 && clusters === Math.round(clusters)) st.clusters = clusters;
     if (q.get('workload')) st.workload = q.get('workload');
     return st;
   }
@@ -79,6 +83,7 @@
     if (st.range) { q.set('from', String(st.range[0])); q.set('to', String(st.range[1])); }
     if (st.engineerCost !== DEFAULTS.engineerCost) q.set('cost', round(st.engineerCost));
     if (st.bill) q.set('bill', round(st.bill));
+    if (st.clusters !== DEFAULTS.clusters) q.set('clusters', String(st.clusters));
     if (st.workload) q.set('workload', st.workload);
     // Commas and slashes stay readable.
     return q.toString().replace(/%2C/g, ',').replace(/%2F/g, '/');
@@ -108,7 +113,7 @@
   }
 
   // Keys that change the figures, as opposed to what the page shows.
-  var VIEW_KEYS = ['section', 'engineerCost', 'bill', 'node', 'workload'];
+  var VIEW_KEYS = ['section', 'engineerCost', 'bill', 'clusters', 'node', 'workload'];
   function affectsFigures(changed) {
     return changed.some(function (k) { return VIEW_KEYS.indexOf(k) < 0; });
   }

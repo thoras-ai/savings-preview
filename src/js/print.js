@@ -1,6 +1,6 @@
-/* The printed summary: one letter-size document in the light theme with the
- * executive summary's figures under the current settings. The page renders
- * it just before printing, and only print shows it. */
+/* The printed summary: page one on one letter-size sheet in the light theme,
+ * under the current settings. The page renders it just before printing, and
+ * only print shows it. */
 (function () {
   'use strict';
 
@@ -11,111 +11,70 @@
     return MONTHS[now.getMonth()] + ' ' + now.getDate() + ', ' + now.getFullYear();
   }
 
-  function head(r, st, level, now) {
-    var f = r.fidelity, span = summary.coverage(r, st), filtered = st.namespaces || st.range;
-    return '<div class="print-top"><strong>Thoras Savings Preview</strong><span>' + esc((r.cluster || 'Unnamed cluster') + ' · ' + f.label + ' · printed ' + today(now)) + '</span></div>' +
-      '<div class="print-title"><div><h1>' + esc(r.cluster || 'Unnamed cluster') + '</h1><div class="print-muted">' +
-      esc(f.label + (f.source ? ' · ' + f.source : '') + (span ? ' · ' + span : '')) +
-      (filtered ? ' <span class="pill pill-neutral">Filtered</span>' : '') + '</div></div>' + ui.confidencePill(level) + '</div>';
+  function side(cls, title, s) {
+    return '<div class="print-box print-side print-' + cls + '"><div class="print-label">' + esc(title) + '</div>' +
+      '<div class="print-figure">' + esc(ui.money(s.spend)) + ' / yr</div>' +
+      '<div>' + esc(ui.pct(s.utilization)) + ' utilization</div>' +
+      '<div class="print-muted">' + esc(ui.num(s.cores, s.cores < 10 ? 1 : 0) + ' cores · ' + ui.num(s.gib, s.gib < 10 ? 1 : 0) + ' GiB requested') + '</div></div>';
   }
 
-  function figure(label, value, context, cls) {
-    return '<div class="print-box print-kpi' + (cls ? ' ' + cls : '') + '"><div class="print-label">' + esc(label) + '</div>' +
-      '<div class="print-figure">' + esc(value) + '</div><div class="print-muted">' + esc(context) + '</div></div>';
+  function versus(fig) {
+    return '<div class="print-vs">' + side('today', 'Today', fig.today) +
+      '<div class="print-saves">saves<strong>' + esc(ui.money(fig.savings)) + '</strong>' + esc(ui.pct(fig.share)) + '</div>' +
+      side('thoras', 'With Thoras', fig.thoras) + '</div>';
   }
 
-  function kpis(t, approx) {
-    var share = t.spend > 0 ? t.savings / t.spend : 0, edge = approx ? ' print-provisional' : '';
-    return '<div class="print-kpis">' +
-      figure('Annual savings opportunity', ui.money(t.savings, approx), ui.pct(share) + ' of projected spend', 'print-hero' + edge) +
-      figure('Projected annual spend', ui.money(t.spend, approx), 'Priced from current requests', edge.trim()) +
-      figure('CPU that could be freed', ui.num(t.cores, t.cores < 1 ? 2 : 1) + ' cores', 'of ' + ui.num(t.reqCores, t.reqCores < 10 ? 1 : 0) + ' cores requested', edge.trim()) +
-      figure('Memory that could be freed', ui.num(t.gib, t.gib < 1 ? 2 : 1) + ' GiB', 'of ' + ui.num(t.reqGiB, t.reqGiB < 10 ? 1 : 0) + ' GiB requested', edge.trim()) +
-      '</div>';
-  }
-
-  // The model's reasons as the end of a sentence about the workload.
-  function why(reason) {
-    if (reason === 'Missing replica count') return 'has no replica count';
-    if (reason === 'No time with complete data') return 'never has all its series at the same time';
-    if (reason === 'No data in the selected time range') return 'has no data in the selected time range';
-    if (/^Missing /.test(reason)) return 'is missing ' + reason.slice(8);
-    return 'is left out: ' + reason.charAt(0).toLowerCase() + reason.slice(1);
-  }
-
-  function confidence(r, level, st) {
-    var t = r.totals, out = '<p>' + ui.confidencePill(level) + ' ' + esc(summary.confidenceText(r.fidelity, level, st.peakMinutes)) + '</p>';
-    var left = r.workloads.filter(function (w) { return !w.series; });
-    if (left.length) {
-      var named = left.slice(0, 3).map(function (w) { return w.name + ' (' + w.ns + ') ' + why(w.reason); });
-      out += '<p class="print-muted">' + ui.num(left.length) + ' of ' + ui.num(t.workloads) + ' ' + ui.plural(t.workloads, 'workload') + ' ' +
-        (left.length === 1 ? 'has' : 'have') + ' too little data for a savings figure and ' + (left.length === 1 ? 'is' : 'are') + ' not in the totals: ' +
-        esc(named.join('; ') + (left.length > 3 ? '; and ' + (left.length - 3) + ' more' : '')) + '.</p>';
-    }
-    r.fidelity.notes.forEach(function (n) { out += '<p class="print-muted">' + esc(n) + '</p>'; });
-    return '<div class="print-box"><h2>Confidence</h2>' + out + '</div>';
-  }
-
-  function meaning(t, approx, st) {
-    var share = t.spend > 0 ? t.savings / t.spend : 0;
-    var fig = function (big, small) { return '<div><div class="print-meaning">' + esc(big) + '</div><div class="print-muted">' + esc(small) + '</div></div>'; };
-    return '<div class="print-box"><h2>What this means</h2><div class="print-meanings">' +
-      fig(ui.money(t.savings / 12, approx), 'per month, at current prices') +
-      fig(summary.engineers(t.savings, st.engineerCost), 'a year, at ' + ui.money(st.engineerCost) + ' loaded cost') +
-      fig(ui.pct(share), 'of this cluster’s projected spend') + '</div></div>';
-  }
-
-  function spend(r, approx) {
-    var t = r.totals, s = r.series;
-    var first = s && summary.day(s.t[0]), last = s && summary.day(s.t[s.t.length - 1]);
-    var range = s ? (first === last ? first : first + ' – ' + last) + ' (UTC)' : '';
-    var totals = { a: ui.money(t.spend, approx), b: ui.money(t.spend - t.savings, approx) };
-    var legend = SP.chart.legend('spend').map(function (item) {
+  function gap(r, st, fig) {
+    var span = summary.coverage(r, st);
+    var totals = { a: ui.money(fig.today.spend), b: ui.money(fig.thoras.spend), gap: ui.money(fig.savings) };
+    var legend = SP.chart.legend('gap').map(function (item) {
       return '<span><i class="swatch swatch-' + item.kind + '"></i>' + esc(item.name) + (totals[item.kind] ? ' <b>' + esc(totals[item.kind]) + '</b>' : '') + '</span>';
     }).join('');
-    return '<div class="print-box"><h2>Spend over the window</h2><div class="print-muted">Annualized hourly spend' + (range ? ', ' + esc(range) : '') + '. ' +
-      ui.num(t.counted) + ' of ' + ui.num(t.workloads) + ' ' + ui.plural(t.workloads, 'workload') + '.</div>' +
-      '<div class="legend">' + legend + '</div><div class="print-chart"></div></div>';
+    return '<div class="print-box"><h2>Requested today against Thoras</h2><div class="print-muted">Annualized compute spend' + (span ? ', ' + esc(span) : '') +
+      '. The hatched gap is waste.</div><div class="legend legend-gap">' + legend + '</div><div class="print-chart"></div></div>';
   }
 
-  function top(r, approx) {
-    var list = summary.topWorkloads(r);
+  function workloads(list, killed) {
     if (!list.length) return '';
-    var max = list[0].annualSavings;
-    return '<div class="print-box"><h2>Top opportunities</h2><div class="print-ranks">' + list.map(function (w) {
-      return '<div><span class="print-name">' + esc(w.name) + '</span><span class="print-sub print-mono">' + esc(w.ns + ' · ' + w.kind) + '</span></div>' +
-        '<div class="print-bar"><i style="width:' + Math.max(1, Math.round(w.annualSavings / max * 100)) + '%"></i></div>' +
-        '<div class="print-value">' + esc(ui.money(w.annualSavings, approx)) + '<span class="print-sub">' + ui.pct(w.savingsPct) + ' of its spend</span></div>';
-    }).join('') + '</div></div>';
+    var rows = list.map(function (w) {
+      var month = w.annualSpend / 12, saves = w.annualSavings / 12;
+      return '<tr><td><span class="print-name">' + esc(w.name) + '</span><span class="print-sub print-mono">' + esc(w.ns + ' · ' + w.kind) + '</span></td>' +
+        '<td class="num">' + esc(ui.money(month)) + '</td><td class="num">' + esc(ui.money(month - saves)) + '</td><td class="num"><span class="pill pill-brand">' + esc(ui.money(saves)) + '</span></td></tr>';
+    }).join('');
+    var oom = killed ? '<p class="print-muted">' + killed + ' ' + ui.plural(killed, 'workload is', 'workloads are') +
+      ' being OOM-killed today. Thoras can raise their memory until the kills stop.</p>' : '';
+    return '<div class="print-box"><h2>Three workloads, before and after</h2><table class="print-table"><thead><tr><th>Workload</th><th class="num">Today / month</th>' +
+      '<th class="num">With Thoras / month</th><th class="num">Saves</th></tr></thead><tbody>' + rows + '</tbody></table>' + oom + '</div>';
   }
 
-  function pricedWith(p) {
-    var d = SP.model.constants.DEFAULT_NODE;
-    if (p.custom) return 'at ' + p.basis;
-    if (!p.priced) return 'at the default node, ' + d.cores + ' cores, ' + d.gib + ' GiB, $' + d.hourly + ' per hour';
-    return 'from the node inventory (' + p.basis + ')';
+  function fleet(fig, st) {
+    var total = fig.savings * st.clusters;
+    return '<div class="print-box"><h2>Across your fleet</h2><div class="print-meaning">' + esc(ui.money(total) + ' a year') + '</div>' +
+      '<div class="print-muted">' + esc(ui.num(st.clusters, 0) + ' ' + ui.plural(st.clusters, 'cluster') + ' like this one; ' +
+        summary.engineers(total, st.engineerCost) + ', at ' + ui.money(st.engineerCost) + ' each') + '</div></div>';
   }
 
-  function method(r, st) {
-    var scope = st.namespaces ? ' Only the namespaces ' + st.namespaces.join(', ') + ' are counted.' : '';
-    return '<div class="print-box"><h2>How the figure is computed</h2><p>' + esc('Target is ' + ui.num(1 + st.headroom, 2) + ' times the highest usage in any ' +
-      st.peakMinutes + '-minute window, per workload, for CPU and memory. Waste is the amount requested above the target. A workload’s cost is the larger of its CPU and memory cost, priced ' +
-      pricedWith(r.pricing) + ', averaged over ' + (st.range ? 'the selected time range' : 'the window') + ' and annualized at 8,760 hours. Replica counts are taken as they were; horizontal scaling is out of scope.' + scope) + '</p></div>';
+  function next(r, st) {
+    return '<div class="print-box"><h2>Next step</h2><p>A two-week proof of value on this cluster, read-only, with the same numbers measured live. Book a demo at thoras.ai/book-a-demo.</p>' +
+      (summary.thin(r, st) ? '<p class="print-muted">Run it for a week for a full-month figure: <span class="print-mono">savings-preview run --duration 168h</span></p>' : '') + '</div>';
   }
 
   // now is the print date; tests pass a fixed one.
   function html(ctx, now) {
-    var r = ctx.result, st = ctx.state, approx = ctx.approx, level = ui.confidenceLevel(r.fidelity);
-    return head(r, st, level, now || new Date()) +
-      (level === 'provisional' ? ui.banner({ tone: 'caution', title: 'Provisional.', body: esc((r.fidelity.snapshot ? 'A single snapshot' : r.fidelity.label) + ' is too little history for a dependable figure. Numbers are rounded and marked with ~.') }) : '') +
-      kpis(r.totals, approx) + confidence(r, level, st) + meaning(r.totals, approx, st) + spend(r, approx) + top(r, approx) + method(r, st) +
-      '<p class="print-foot">Full report, with every workload, the node inventory and the settings used: open the report link shared with this printout. Computed locally from the cluster’s own metrics; nothing was uploaded.</p>';
+    var r = ctx.result, st = ctx.state, fig = summary.figures(r);
+    return '<div class="print-top"><strong>Thoras Savings Preview</strong><span>' + esc((r.cluster || 'Unnamed cluster') + ' · printed ' + today(now || new Date())) + '</span></div>' +
+      '<div><h1>' + esc(summary.headline(fig)) + '</h1>' +
+      '<p>Thoras forecasts what each workload will use and keeps its CPU and memory requests at that forecast plus a safety buffer, raising or lowering them as demand moves.</p>' +
+      '<p class="print-muted">' + esc(summary.provenance(r, st)) + '</p></div>' +
+      versus(fig) + gap(r, st, fig) + workloads(summary.pick(r, st), summary.oomKilled(ctx.data, r, st)) +
+      '<div class="print-pair">' + fleet(fig, st) + next(r, st) + '</div>' +
+      '<p class="print-foot">' + esc(summary.method(st)) + ' Every workload, the node inventory and the settings used are in the report link shared with this printout.</p>';
   }
 
   function render(host, ctx) {
     host.innerHTML = html(ctx);
     var chart = host.querySelector('.print-chart');
-    if (ctx.result.series) SP.chart.render(chart, ctx.result.series, 'spend', { title: 'Spend over the window', fromZero: true, height: 240, patternId: 'print-hatch' });
+    if (ctx.result.series) SP.chart.render(chart, ctx.result.series, 'gap', { title: 'Requested today against Thoras', fromZero: true, height: 220, patternId: 'print-hatch', className: 'chart-gap' });
     else chart.innerHTML = '<p class="empty">No workload has complete data, so there is nothing to chart.</p>';
   }
 

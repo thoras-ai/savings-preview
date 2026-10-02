@@ -14,7 +14,9 @@ class BuildReportTest(unittest.TestCase):
     def test_page_is_self_contained(self):
         page = build_report.build()
         self.assertNotIn("{{", page)
-        self.assertEqual(re.findall(r"""(?:src|href)=["']https?:""", page), [])
+        # Nothing loads from the network; the only outside link is the demo booking page.
+        self.assertEqual(re.findall(r"""(?:src=|<link[^>]*href=)["']https?:""", page), [])
+        self.assertEqual(re.findall(r"""<a [^>]*href=["'](https?:[^"']+)""", page), ["https://www.thoras.ai/book-a-demo"])
         self.assertNotIn("@import", page)
         self.assertIn("data:font/woff2;base64,", page)
         self.assertIn('<span class="wordmark" role="img" aria-label="Thoras"><svg', page)

@@ -16,7 +16,7 @@ globalThis.SP = {
   chart: require('../src/js/chart.js'),
   sections: { register: s => { registered[s.id] = s; } }
 };
-require('../src/js/section-summary.js');
+SP.summary = require('../src/js/section-summary.js');
 require('../src/js/section-method.js');
 require('../src/js/print.js');
 const { model, state, ui } = SP;
@@ -28,7 +28,7 @@ function fixture(name = 'savings-preview.otlp.json') {
 function context(data, patch = {}) {
   const st = Object.assign({}, state.DEFAULTS, patch);
   const result = model.compute(data, state.levers(st));
-  return { data, result, state: st, changed: null, approx: ui.confidenceLevel(result.fidelity) === 'provisional' };
+  return { data, result, state: st, changed: null };
 }
 
 function method(ctx) {
@@ -75,23 +75,19 @@ test('data and method follows the levers', () => {
   assert.ok(outside.includes('No data in the time range set under Assumptions. The file covers Sep 16, 12:00 AM to Sep 30, 12:00 AM UTC, 14 days.'));
   assert.ok(!/-\d+ seconds/.test(outside));
   const outsidePrint = text(SP.print.html(context(data, { range: [1, 2] }), PRINTED));
-  assert.ok(outsidePrint.includes('checkout-api (shop) has no data in the selected time range'), outsidePrint);
+  assert.ok(outsidePrint.includes('compute spend by $0 a year'), outsidePrint);
 });
 
-test('a polled file reads as provisional, with its rolled-up peaks named', () => {
+test('a polled file names its tier in data and method and prints exact figures', () => {
   const ctx = context(model.prepare(fixture('minikube-poll.otlp.json')));
-  assert.strictEqual(ctx.approx, true);
   const out = text(method(ctx));
   assert.ok(out.includes('Provisional tier 3'), out.slice(0, 400));
   assert.ok(out.includes('live polling'));
   const missed = text(method(context(ctx.data, { range: [1, 2] })));
   assert.ok(missed.includes('No data in the time range set under Assumptions. The file covers'), missed.slice(0, 600));
-  const printed = SP.print.html(ctx, PRINTED);
-  assert.ok(printed.includes('banner-caution'));
-  assert.ok(printed.includes('print-provisional'));
-  assert.ok(text(printed).includes(ui.money(ctx.result.totals.savings, true)));
-  assert.match(ui.money(ctx.result.totals.savings, true), /^~/);
-  assert.ok(text(printed).includes('priced at the default node, 4 cores, 16 GiB, $0.192 per hour, averaged'));
+  const printed = text(SP.print.html(ctx, PRINTED));
+  for (const s of [ui.money(ctx.result.totals.savings), 'From a 1-minute read of your cluster.', 'savings-preview run --duration 168h']) assert.ok(printed.includes(s), s);
+  assert.ok(!/~|[Pp]rovisional|confidence|tier/.test(printed), printed);
 });
 
 test('the printed summary shows the totals the parity test checks against the Go figures', () => {
@@ -99,12 +95,11 @@ test('the printed summary shows the totals the parity test checks against the Go
   const go = model.analyze(doc).totals;
   const out = text(SP.print.html(context(model.prepare(doc)), PRINTED));
   for (const s of [
-    'printed Oct 2, 2026', ui.money(go.savings), ui.money(go.spend), ui.money(go.spend - go.savings), ui.money(go.savings / 12),
-    ui.num(go.cores, 1) + ' cores', ui.num(go.gib, 1) + ' GiB', ui.pct(go.savings / go.spend) + ' of projected spend',
-    '1 of 4 workloads has too little data for a savings figure and is not in the totals: report-worker (batch) is missing memory usage data.',
-    'priced from the node inventory (2 of 2 nodes at AWS us-east-1 on-demand list prices; spot nodes are priced at on-demand), averaged',
-    'Target is 1.1 times the highest usage in any 15-minute window'
+    'printed Oct 2, 2026', 'compute spend by ' + ui.money(go.savings) + ' a year, ' + ui.pct(go.savings / go.spend) + '.',
+    ui.money(go.spend) + ' / yr', ui.money(go.spend - go.savings) + ' / yr', 'From 14 days of your Prometheus data.',
+    'Target is 1.1 × the highest usage in any 15-minute window'
   ]) assert.ok(out.includes(s), s);
+  assert.ok(!out.includes('savings-preview run'), 'a 14-day file needs no longer run');
   assert.deepStrictEqual(out.match(/checkout-api|ledger-db|search-indexer/g), ['checkout-api', 'ledger-db', 'search-indexer']);
 });
 
@@ -114,8 +109,9 @@ test('the printed summary follows the levers', () => {
   const out = text(SP.print.html(ctx, PRINTED));
   assert.ok(out.includes(ui.money(ctx.result.totals.savings)));
   assert.notStrictEqual(ctx.result.totals.savings, model.analyze(fixture()).totals.savings);
-  assert.ok(text(SP.print.html(context(data, { rates: { perCore: 0.05, perGiB: 0.006 } }), PRINTED)).includes('priced at $0.05 per core-hour and $0.006 per GiB-hour, averaged'));
-  for (const s of ['Filtered', 'Target is 1.3 times', 'Only the namespaces shop are counted.', 'at $100,000 loaded cost']) assert.ok(out.includes(s), s);
+  const priced = model.compute(data, state.levers(Object.assign({}, state.DEFAULTS, { rates: { perCore: 0.05, perGiB: 0.006 } })));
+  assert.ok(text(SP.print.html(context(data, { rates: { perCore: 0.05, perGiB: 0.006 } }), PRINTED)).includes(ui.money(priced.totals.savings)));
+  for (const s of ['Target is 1.3 ×', 'Only the namespace shop is included.', 'at $100,000 each']) assert.ok(out.includes(s), s);
 });
 
 // A compact file at the scale the page must stay fast for: 1,000 workloads,
@@ -169,6 +165,5 @@ test('data and method and the printed summary render 1,000 workloads within the 
   assert.ok(out.includes('1-minute samples, kept as 15-minute peaks and means'));
   assert.ok(out.includes('Show 32 more'), 'the 20 workloads and 20 spot nodes past the first 8 fold away');
   assert.strictEqual((html.match(/<li>/g) || []).length, 40 + 6 + 4);
-  assert.ok(text(printed).includes('20 of 1,000 workloads have too little data'));
-  assert.ok(text(printed).includes('; and 17 more.'));
+  assert.ok(text(printed).includes('Thoras would cut this cluster’s compute spend by'));
 });

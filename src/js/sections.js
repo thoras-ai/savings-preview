@@ -17,8 +17,7 @@
  *   state    the shared state (SP.state), read only
  *   changed  the state keys that changed since the last render, or null after a load
  *   set      set(patch) changes the state; the page recomputes and re-renders
- *   approx   true when figures should be rounded and marked with ~
- *   go       go(sectionId) scrolls to a section
+ *   go       go(sectionId) scrolls to a section, opening the details for any but the summary
  */
 (function () {
   'use strict';

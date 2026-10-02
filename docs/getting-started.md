@@ -104,7 +104,7 @@ The last line sums it up. The exit status is 0 when `run` would read 14 days at 
 
 ### No metrics store
 
-If the cluster has no Prometheus-compatible store, `run` polls metrics-server once a minute. Leave it running: 7 days of readings give a figure you can budget on, and fewer give a provisional one. Set `--duration 168h` for 7 days, or stop it with Ctrl-C at any time; the report is built from what was read. Running the same command again continues where it stopped.
+If the cluster has no Prometheus-compatible store, `run` polls metrics-server once a minute. Leave it running: 7 days of readings cover a full week of demand. Set `--duration 168h` for 7 days, or stop it with Ctrl-C at any time; the report is built from what was read. Running the same command again continues where it stopped.
 
     $ savings-preview run --context minikube --duration 4m
     Context minikube (cluster minikube, API server https://127.0.0.1:32771)
@@ -180,16 +180,18 @@ Give `run` an API key and an application key scoped to `timeseries_query`. If Da
 
 ## Read the report
 
-The report opens on the summary:
+The report opens on one page:
 
-- **Annual savings opportunity**: what right-sizing every counted workload would save a year, and its share of projected spend.
-- **Projected annual spend**: what the current requests cost a year.
-- **CPU and memory that could be freed**: the requests above the target, against the total requested.
-- **Confidence**: how much the history supports the figure. Under 7 days the figures are marked provisional, rounded and shown with `~`. 7 days at 5-minute steps give good confidence, and 14 days at 1-minute steps give high confidence.
+- **The headline**: what right-sizing every workload would save a year, and its share of what the current requests cost. The line under it says where the data came from.
+- **Today and with Thoras**: annual spend, utilization (usage over requests, CPU and memory weighted by price) and requested cores and GiB on each side.
+- **The gap chart**: requested spend today against spend with Thoras over the window, with usage under them and the waste hatched.
+- **Three workloads, before and after**: monthly spend today and with Thoras for the biggest saver that runs all day, a job that runs in bursts, and one that is already right-sized. Select one to open its drill-down.
+- **Across your fleet**: the saving times the number of clusters like this one, in dollars and in loaded engineers.
+- **Next step**: Book a demo, and Copy summary, which copies four plain lines for chat or email. With less than 7 days of data it also suggests a week-long run.
 
 The target for each workload is 1.1 times its highest use in any 15 minutes. Waste is the request above the target. Prices come from AWS on-demand list prices (us-east-1) for known instance types, and from a 4-core, 16 GiB, $0.192 per hour node otherwise.
 
-The other sections:
+Details for engineers, under page one, opens the other sections:
 
 - **Where the money is** maps savings or spend by namespace or by workload, and ranks the namespaces and the top 10 workloads. With more than 60 workloads the map opens on namespaces; select one to see its workloads.
 - **Workloads** lists every Deployment and StatefulSet, with a filter. Select one to see its requested, usage and target over time with OOM kills marked, the per-pod requests Thoras would set, and what could make the saving smaller or unsafe: OOM kills, limits below the peak-safe value, or provisional data.
@@ -197,7 +199,7 @@ The other sections:
 - **Assumptions** holds the settings every figure uses: headroom above the peak, the peak window, pricing (an instance type from built-in AWS, Google Cloud and Azure list prices, or your own rates per core-hour and GiB-hour), a spot or committed-use discount, an optional annual cloud bill to show the savings as a share of, the loaded engineer cost, namespaces and time range. Changing one recomputes every section. Each setting has its own Reset, and Reset to defaults clears them all.
 - **Data and method** describes the file (source, window, resolution, tier, pricing), lists the workloads, containers and nodes the totals leave out or price differently and why, and spells out the calculation with the current settings. DaemonSets and bare pods are not counted.
 
-The page address keeps the settings, so **Copy link** in the header gives a link that opens the same view. **Print summary** prints a one-page summary under the current settings.
+The page address keeps the settings, so **Copy link** in the header gives a link that opens the same view. **Print summary** prints page one under the current settings.
 
 ## Share the results
 
@@ -218,4 +220,4 @@ The full-resolution file, `savings-preview.otlp.json`, stays on your machine and
 | `another poller is writing ...` | A poll with the same output file is still running. Stop it, or pass another `-o`. |
 | `N running pods are not owned by a Deployment or StatefulSet` | Expected: DaemonSets, Jobs and bare pods are not counted. |
 | `the store has no per-container usage series` | The container runtime does not label container usage, so each pod's usage is split between its containers by their requests. The figures are still usable. |
-| Report figures marked provisional | Less than 7 days of history. Point `run` at a store with more, or poll longer. |
+| Next step suggests a week-long run | Less than 7 days of history. Point `run` at a store with more, or poll longer. |

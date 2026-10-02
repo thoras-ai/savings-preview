@@ -7,6 +7,7 @@
 
   var MODES = {
     spend: { label: 'Spend', a: 'cur', b: 'opt', scale: 8760, aName: 'Current spend', bName: 'Without waste', money: true },
+    gap: { label: 'Spend', a: 'cur', b: 'opt', scale: 8760, aName: 'Requested today', bName: 'With Thoras', money: true, use: 'useCost', uName: 'Usage' },
     cpu: { label: 'CPU', a: 'reqCpu', b: 'tgtCpu', scale: 1, aName: 'Requested', bName: 'Usage + 10%', unit: 'cores', use: 'useCpu', peak: 'peakCpu' },
     mem: { label: 'Memory', a: 'reqMem', b: 'tgtMem', scale: 1, aName: 'Requested', bName: 'Usage + 10%', unit: 'GiB', use: 'useMem', peak: 'peakMem' }
   };
@@ -15,6 +16,7 @@
     var mode = MODES[modeKey];
     var items = [{ kind: 'a', name: mode.aName }, { kind: 'b', name: mode.bName }];
     if (mode.peak) items.push({ kind: 'p', name: 'Peak usage' }, { kind: 'u', name: 'Mean usage' });
+    else if (mode.use) items.push({ kind: 'u', name: mode.uName });
     items.push({ kind: 'gap', name: mode.money ? 'Waste' : 'Gap' });
     return items;
   }
@@ -75,7 +77,7 @@
       out.t.push(series.t[i]);
       out.a.push(c ? sa / c * mode.scale : NaN);
       out.b.push(c ? sb / c * mode.scale : NaN);
-      out.u.push(c && mode.use ? su / c : NaN);
+      out.u.push(c && mode.use ? su / c * mode.scale : NaN);
       out.p.push(c && mode.peak ? pk : NaN);
     }
     return out;
@@ -103,6 +105,7 @@
       if (!isFinite(d.a[i])) continue;
       vals.push(d.a[i], d.b[i]);
       if (isFinite(d.p[i])) vals.push(d.p[i]);
+      if (isFinite(d.u[i])) vals.push(d.u[i]);
     }
     if (!vals.length) { host.innerHTML = '<p class="empty">No complete data to chart.</p>'; return; }
     var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
@@ -139,15 +142,14 @@
       var cmd = pen ? 'L' : 'M';
       aPath += cmd + x(k).toFixed(1) + ' ' + y(d.a[k]).toFixed(1);
       bPath += cmd + x(k).toFixed(1) + ' ' + y(d.b[k]).toFixed(1);
-      if (mode.peak) {
-        uPath += cmd + x(k).toFixed(1) + ' ' + y(d.u[k]).toFixed(1);
-        pPath += cmd + x(k).toFixed(1) + ' ' + y(d.p[k]).toFixed(1);
-      }
+      if (mode.use) uPath += cmd + x(k).toFixed(1) + ' ' + y(d.u[k]).toFixed(1);
+      if (mode.peak) pPath += cmd + x(k).toFixed(1) + ' ' + y(d.p[k]).toFixed(1);
       pen = true;
       run.push(k);
       if (n === 1) {
         dots = '<circle class="dot-a" cx="' + x(k) + '" cy="' + y(d.a[k]) + '" r="4"/><circle class="dot-b" cx="' + x(k) + '" cy="' + y(d.b[k]) + '" r="4"/>';
-        if (mode.peak) dots += '<circle class="dot-u" cx="' + x(k) + '" cy="' + y(d.u[k]) + '" r="3"/><circle class="dot-p" cx="' + x(k) + '" cy="' + y(d.p[k]) + '" r="4"/>';
+        if (mode.use) dots += '<circle class="dot-u" cx="' + x(k) + '" cy="' + y(d.u[k]) + '" r="3"/>';
+        if (mode.peak) dots += '<circle class="dot-p" cx="' + x(k) + '" cy="' + y(d.p[k]) + '" r="4"/>';
       }
     }
     flush();
@@ -176,11 +178,13 @@
 
     host.innerHTML =
       '<svg class="chart' + (opts.className ? ' ' + esc(opts.className) : '') + '" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' +
-      esc((opts.title || 'Chart') + ': ' + [mode.aName, mode.bName].concat(mode.peak ? ['Peak usage', 'Mean usage'] : []).join(', ')) + '">' +
+      esc((opts.title || 'Chart') + ': ' + legend(modeKey).filter(function (it) { return it.kind !== 'gap'; }).map(function (it) {
+        return it.kind === 'a' ? mode.aName : it.kind === 'b' ? mode.bName : it.name;
+      }).join(', ')) + '">' +
       '<defs><pattern id="' + hatchId + '" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">' +
       '<line x1="0" y1="0" x2="0" y2="3" class="hatch-line" stroke-width="1"/></pattern></defs>' +
       grid + xt + gaps.replace(/class="gap"/g, 'class="gap" fill="url(#' + hatchId + ')"') +
-      (mode.peak ? '<path class="line-u" d="' + uPath + '"/><path class="line-p" d="' + pPath + '"/>' : '') +
+      (mode.use ? '<path class="line-u" d="' + uPath + '"/>' : '') + (mode.peak ? '<path class="line-p" d="' + pPath + '"/>' : '') +
       '<path class="line-a" d="' + aPath + '"/><path class="line-b" d="' + bPath + '"/>' + dots +
       '<line class="cursor" y1="' + m.top + '" y2="' + (m.top + h) + '" x1="0" x2="0" visibility="hidden"/>' +
       '<rect class="hit" x="' + m.left + '" y="' + m.top + '" width="' + w + '" height="' + h + '" fill="transparent"/>' + marks + '</svg>' +
@@ -202,6 +206,7 @@
       var rows = '<div class="tip-time">' + esc(fmtDate(d.t[best], true)) + '</div>' +
         row('a', mode.aName, valueText(mode, d.a[best])) + row('b', mode.bName, valueText(mode, d.b[best]));
       if (mode.peak) rows += row('p', 'Peak usage', valueText(mode, d.p[best])) + row('u', 'Mean usage', valueText(mode, d.u[best]));
+      else if (mode.use) rows += row('u', mode.uName, valueText(mode, d.u[best]));
       rows += '<div class="tip-row tip-total"><span>' + (mode.money ? 'Waste' : 'Gap') + '</span><span>' +
         valueText(mode, Math.max(0, d.a[best] - d.b[best])) + '</span></div>';
       var until = best + 1 < n ? d.t[best + 1] : d.t[best] + d.size * series.step;
