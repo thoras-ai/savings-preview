@@ -122,19 +122,18 @@
   // before the capacity and the counted workloads, as in the summary.
   function figures(r, st, ui, approx) {
     var t = r.totals, share = t.spend > 0 ? t.savings / t.spend : NaN;
-    var amount = function (v, unit) {
-      var x = approx ? ui.rough(v) : v;
-      return (approx ? '~' : '') + ui.num(x, x < 1 ? 2 : 1) + ' ' + unit;
+    var amount = function (v, one, many) {
+      var x = approx ? ui.rough(v) : v, shown = ui.num(x, x < 1 ? 2 : 1);
+      return (approx ? '~' : '') + shown + ' ' + (shown === '1' ? one : many);
     };
-    var out = [
+    return [
       { label: 'Annual savings', value: ui.money(t.savings, approx) },
       { label: 'Projected spend', value: ui.money(t.spend, approx) },
       { label: 'Share of spend', value: ui.pct(share), note: st.bill ? pctOf(t.savings, st.bill) + ' of the cloud bill' : '' },
-      { label: 'CPU to free', value: amount(t.cores, 'cores'), sep: true },
-      { label: 'Memory to free', value: amount(t.gib, 'GiB') },
+      { label: 'CPU to free', value: amount(t.cores, 'core', 'cores'), sep: true },
+      { label: 'Memory to free', value: amount(t.gib, 'GiB', 'GiB') },
       { label: 'Workloads counted', value: t.counted + ' of ' + t.workloads, sep: true }
     ];
-    return out;
   }
 
   // Small shares keep one decimal, so a saving is not shown as 0%.

@@ -78,6 +78,10 @@ test('provisional figures are rounded and marked, and a bill adds its share', ()
   assert.strictEqual(f[3].value, '~5.1 cores');
   assert.strictEqual(f[2].note, '5.1% of the cloud bill');
   assert.strictEqual(levers.figures(r, { bill: null }, ui, false)[2].note, '');
+  const one = { totals: Object.assign({}, r.totals, { cores: 0.96 }) };
+  assert.strictEqual(levers.figures(one, {}, ui, true)[3].value, '~0.96 cores');
+  one.totals.cores = 1.02;
+  assert.strictEqual(levers.figures(one, {}, ui, true)[3].value, '~1 core');
 });
 
 test('instance prices divide the hourly price by vCPUs and GiB, scaled by region', () => {
