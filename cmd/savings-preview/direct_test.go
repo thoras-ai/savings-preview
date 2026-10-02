@@ -315,8 +315,10 @@ func TestDirectAuthAzure(t *testing.T) {
 	if err != nil || a != (prometheus.Bearer{Token: "eyJ.from-az"}) || got.ClientID != "unset" {
 		t.Errorf("bearer: %#v, %v", a, err)
 	}
-	if _, err := directAuth(context.Background(), b, credentialFiles{azureClientID: "app"}, ""); err == nil || !strings.Contains(err.Error(), "only one of") {
-		t.Errorf("bearer and app registration: %v", err)
+	for _, files := range []credentialFiles{{azureClientID: "app"}, {azureTenant: "t"}} {
+		if _, err := directAuth(context.Background(), b, files, ""); err == nil || !strings.Contains(err.Error(), "only one of") {
+			t.Errorf("bearer and %+v: %v", files, err)
+		}
 	}
 	t.Setenv(envBearer, "")
 	if _, err := directAuth(context.Background(), b, credentialFiles{}, "team-a"); err == nil || !strings.Contains(err.Error(), "--tenant applies to Mimir") {

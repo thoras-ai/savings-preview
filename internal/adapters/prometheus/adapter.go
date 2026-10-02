@@ -232,10 +232,10 @@ func prepare(ctx context.Context, o Options) (*plan, *Report, error) {
 		} else if len(missing) > 0 {
 			return nil, rep, &LabelsMissingError{Metric: "kube_pod_container_info", Labels: missing}
 		}
-	} else if c.OneMetricPerQuery {
-		// UnlabeledPods joins three metrics.
-	} else if s, err := c.Query(ctx, UnlabeledPods, o.Now); err == nil && len(s) > 0 && len(s[0].Points) > 0 && s[0].Points[0].V > 0 {
-		rep.Warnings = append(rep.Warnings, fmt.Sprintf("%.0f workload pods have pod-level usage but no per-container usage series (their nodes do not label cAdvisor series) and are left out of the usage averages", s[0].Points[0].V))
+	} else if !c.OneMetricPerQuery { // UnlabeledPods joins three metrics
+		if s, err := c.Query(ctx, UnlabeledPods, o.Now); err == nil && len(s) > 0 && len(s[0].Points) > 0 && s[0].Points[0].V > 0 {
+			rep.Warnings = append(rep.Warnings, fmt.Sprintf("%.0f workload pods have pod-level usage but no per-container usage series (their nodes do not label cAdvisor series) and are left out of the usage averages", s[0].Points[0].V))
+		}
 	}
 	hasRestarts, _ := c.present(ctx, RestartsProbe, o.Now)
 	hasPhase, _ := c.present(ctx, PhaseProbe, o.Now)

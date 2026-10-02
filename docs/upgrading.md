@@ -38,7 +38,7 @@
 
 **What changes.** A `--url` under `prometheus.monitor.azure.com` (or the `.us` and `.cn` domains) was read as a plain Prometheus-compatible store. It is now read as Azure Monitor managed Prometheus: each query reads one metric and the adapter joins the results, queries are limited to 32 days, and without a token given directly the run gets an Entra ID token from an app registration or the Azure CLI.
 
-**Who it affects.** People who already ran against an Azure Monitor workspace with a token in `--bearer-token-file`, `SAVINGS_PREVIEW_BEARER_TOKEN` or an `Authorization` header. The token is still used as is. The figures are the same as from the joined queries, except as [prometheus-adapter.md](prometheus-adapter.md#one-metric-per-query) describes. A workspace without per-container usage series, which the joined queries handled by splitting pod-level usage, now stops the run.
+**Who it affects.** People who already ran against an Azure Monitor workspace with a token in `--bearer-token-file`, `SAVINGS_PREVIEW_BEARER_TOKEN` or an `Authorization` header. The token is still used as is. The figures are the same as from the joined queries, except as [prometheus-adapter.md](prometheus-adapter.md#one-metric-per-query) describes. A workspace without per-container usage series, which the joined queries handled by splitting pod-level usage, now stops the run. An Azure Monitor URL with `--tenant` used to be read as Mimir and is now refused.
 
 **How to keep the old behavior.** Pass `--backend prometheus`.
 

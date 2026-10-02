@@ -428,8 +428,8 @@ func directAuth(ctx context.Context, store prometheus.Backend, files credentialF
 		if authz != nil || hasAuthorization(chain) {
 			// A token given directly, such as one from az account
 			// get-access-token, is used as is.
-			if explicit {
-				return nil, errors.New("use only one of an Azure app registration and a bearer token or Authorization header")
+			if explicit || files.azureTenant != "" {
+				return nil, errors.New("use only one of --azure-tenant-id, --azure-client-id or --azure-client-secret-file and a bearer token or Authorization header")
 			}
 			break
 		}

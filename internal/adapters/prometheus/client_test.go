@@ -123,13 +123,6 @@ func TestBearerAuth(t *testing.T) {
 	}
 }
 
-func TestUnsupportedAuthFails(t *testing.T) {
-	g := &HTTPGetter{Base: "http://127.0.0.1:1", Auth: Unsupported{Scheme: "sigv4"}}
-	if _, _, err := g.Get(context.Background(), "/x", nil); err == nil {
-		t.Fatal("expected an error")
-	}
-}
-
 func TestAPIServerStatusErrorIsReadable(t *testing.T) {
 	f := &fakeStore{handle: func(string, url.Values) (int, any) {
 		return 403, map[string]any{"kind": "Status", "status": "Failure", "reason": "Forbidden", "code": 403,

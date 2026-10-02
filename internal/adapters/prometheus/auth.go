@@ -323,10 +323,3 @@ func runAz(ctx context.Context, args ...string) ([]byte, error) {
 	}
 	return stdout.Bytes(), nil
 }
-
-// Unsupported stands in for a managed-backend scheme that is not implemented yet.
-type Unsupported struct{ Scheme string }
-
-func (u Unsupported) Wrap(*http.Client) (*http.Client, error) {
-	return nil, fmt.Errorf("authentication scheme %q is not implemented", u.Scheme)
-}

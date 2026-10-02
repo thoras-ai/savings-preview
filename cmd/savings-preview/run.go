@@ -519,7 +519,7 @@ func printAccess(w io.Writer, o *runOptions) {
 		case err == nil && b.Name == prometheus.BackendGMP:
 			fmt.Fprintf(w, "  - query Google Cloud Monitoring in project %s with your Google credentials (read-only queries)\n", b.Project)
 		case err == nil && b.Name == prometheus.BackendAzure:
-			fmt.Fprintf(w, "  - query the Azure Monitor workspace at %s with your Entra ID credentials (read-only queries)\n", prometheus.RedactURL(b.Base))
+			fmt.Fprintf(w, "  - query the Azure Monitor workspace at %s (read-only queries)\n", prometheus.RedactURL(b.Base))
 		default:
 			fmt.Fprintf(w, "  - query the store at %s directly (read-only queries)\n", prometheus.RedactURL(o.direct.url))
 		}
