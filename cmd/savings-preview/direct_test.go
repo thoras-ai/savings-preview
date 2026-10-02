@@ -227,11 +227,25 @@ func TestDirectAuthGMP(t *testing.T) {
 		t.Errorf("headers: %#v, %v", got, err)
 	}
 	t.Setenv(envHeaders, "")
-	t.Setenv(envBearer, "tok")
-	if _, err := directAuth(context.Background(), b, credentialFiles{}, ""); err == nil || !strings.Contains(err.Error(), "Google credentials") {
-		t.Errorf("bearer with GMP: %v", err)
+
+	// A token given directly, as from gcloud auth print-access-token, is
+	// used without loading Google credentials.
+	gotFile = "unset"
+	t.Setenv(envBearer, "ya29.from-gcloud")
+	got, err = directAuth(context.Background(), b, credentialFiles{}, "")
+	if err != nil || got != (prometheus.Bearer{Token: "ya29.from-gcloud"}) || gotFile != "unset" {
+		t.Errorf("bearer with GMP: %#v, %v, file %q", got, err, gotFile)
+	}
+	if _, err := directAuth(context.Background(), b, credentialFiles{google: "key.json"}, ""); err == nil || !strings.Contains(err.Error(), "only one of --google-credentials-file") {
+		t.Errorf("bearer and key file: %v", err)
 	}
 	t.Setenv(envBearer, "")
+	t.Setenv(envHeaders, "authorization: Bearer ya29.header")
+	got, err = directAuth(context.Background(), b, credentialFiles{}, "")
+	if err != nil || got != (prometheus.Header{Name: "authorization", Value: "Bearer ya29.header"}) || gotFile != "unset" {
+		t.Errorf("Authorization header with GMP: %#v, %v, file %q", got, err, gotFile)
+	}
+	t.Setenv(envHeaders, "")
 	if _, err := directAuth(context.Background(), b, credentialFiles{}, "team-a"); err == nil || !strings.Contains(err.Error(), "--tenant") {
 		t.Errorf("tenant with GMP: %v", err)
 	}

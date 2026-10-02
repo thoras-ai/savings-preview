@@ -309,6 +309,18 @@ func TestDownsampledWarning(t *testing.T) {
 	}
 }
 
+func TestGKEClientRenamesLabels(t *testing.T) {
+	c := &Client{Selector: `cluster="a",namespace_name="shop",pod=~"web-.*",container_name="app",location="us-central1"`}
+	if got, want := gkeClient(c, "cluster_name").Selector,
+		`cluster_name="a",namespace_name="shop",pod_name=~"web-.*",container_name="app",location="us-central1"`; got != want {
+		t.Errorf("system: %s", got)
+	}
+	if got, want := gkeClient(c, "cluster").Selector,
+		`cluster="a",namespace="shop",pod=~"web-.*",container="app",location="us-central1"`; got != want {
+		t.Errorf("prometheus: %s", got)
+	}
+}
+
 func TestRenameMatchers(t *testing.T) {
 	sel, err := ParseSelector(`cluster="a,b", location=~"us-.*", cluster_name!="c"`)
 	if err != nil {

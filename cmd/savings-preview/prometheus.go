@@ -300,6 +300,15 @@ func storeName(store prometheus.Backend) string {
 	return fmt.Sprintf("%s store at %s", store.Name, prometheus.RedactURL(store.Base))
 }
 
+func hasAuthorization(chain prometheus.Chain) bool {
+	for _, a := range chain {
+		if h, ok := a.(prometheus.Header); ok && strings.EqualFold(h.Name, "Authorization") {
+			return true
+		}
+	}
+	return false
+}
+
 // newGoogle loads Google credentials; tests replace it.
 var newGoogle = func(ctx context.Context, file string) (prometheus.Auth, error) {
 	return prometheus.NewGoogle(ctx, file)
@@ -374,8 +383,13 @@ func directAuth(ctx context.Context, store prometheus.Backend, files credentialF
 		// Signing comes last so that it covers the headers added before it.
 		return append(chain, sig), nil
 	case prometheus.BackendGMP:
-		if authz != nil {
-			return nil, errors.New("Google Managed Prometheus uses Google credentials; remove the bearer token or basic auth")
+		// A token given directly, such as one from gcloud auth
+		// print-access-token, is used as is, as before this backend existed.
+		if authz != nil || hasAuthorization(chain) {
+			if files.google != "" {
+				return nil, errors.New("use only one of --google-credentials-file and a bearer token, basic auth or Authorization header")
+			}
+			break
 		}
 		g, err := newGoogle(ctx, files.google)
 		if err != nil {

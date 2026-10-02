@@ -183,12 +183,22 @@ func gkeMode(ctx context.Context, c *Client, mode string, now time.Time) (string
 	return "", fmt.Errorf("the project has neither GKE system metrics (%s) nor cAdvisor and kube-state-metrics series (container_memory_working_set_bytes and kube_pod_owner) from Managed Prometheus; check the project, that system metrics are enabled on the cluster, and that the selector matches it", gkeMemory)
 }
 
-// gkeClient is c with the cluster matchers of its selector renamed to the
-// label the metrics use: cluster_name on GKE system metrics, cluster on
-// Managed Prometheus series. Either name can then be given in --selector.
+// gkeClient is c with the matchers of its selector renamed to the labels
+// the metrics use: cluster_name, namespace_name, pod_name and container_name
+// on GKE system metrics, cluster, namespace, pod and container on Managed
+// Prometheus series. Either name can then be given in --selector.
 func gkeClient(c *Client, clusterLabel string) *Client {
+	system := clusterLabel == "cluster_name"
+	names := map[string]string{}
+	for _, l := range []string{"cluster", "namespace", "pod", "container"} {
+		to := l
+		if system {
+			to = l + "_name"
+		}
+		names[l], names[l+"_name"] = to, to
+	}
 	cc := *c
-	cc.Selector = renameMatchers(c.Selector, map[string]string{"cluster": clusterLabel, "cluster_name": clusterLabel})
+	cc.Selector = renameMatchers(c.Selector, names)
 	return &cc
 }
 
