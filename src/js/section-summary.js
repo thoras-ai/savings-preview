@@ -120,11 +120,15 @@
       '<div class="legend">' + legend + '</div><div class="chart-host sum-chart"></div></div>';
   }
 
+  function topWorkloads(r) {
+    return r.workloads.filter(function (w) { return w.series && w.annualSavings > 0; })
+      .sort(function (a, b) { return b.annualSavings - a.annualSavings || a.name.localeCompare(b.name); }).slice(0, TOP);
+  }
+
   function topCard(r, approx) {
     var sub = approx ? 'Rounded, from ' + (r.fidelity.snapshot ? 'a single snapshot' : model.formatSpan(r.fidelity.spanSeconds) + ' of data') :
       'Where most of the savings are. Select a workload to see its history.';
-    var top = r.workloads.filter(function (w) { return w.series && w.annualSavings > 0; })
-      .sort(function (a, b) { return b.annualSavings - a.annualSavings || a.name.localeCompare(b.name); }).slice(0, TOP);
+    var top = topWorkloads(r);
     if (!top.length) return '';
     var max = top[0].annualSavings;
     var rows = top.map(function (w) {
@@ -160,6 +164,9 @@
       if (b) { ctx.set({ workload: b.getAttribute('data-workload') }); ctx.go('workloads'); }
     });
   }
+
+  // The printed summary repeats these figures and sentences.
+  SP.summary = { day: day, coverage: coverage, confidenceText: confidenceText, engineers: engineers, topWorkloads: topWorkloads };
 
   SP.sections.register({ id: 'summary', number: 1, title: 'Summary', render: render, resize: function (host, ctx) {
     var chartHost = host.querySelector('.sum-chart');
