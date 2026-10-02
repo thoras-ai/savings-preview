@@ -132,6 +132,10 @@ A fully rounded chip for short states and counts, one to three words. Colour pai
 
 A row of options in a fully rounded track (`--surface-inset` with a `--border-lighter` edge). The selected option is `--surface-default` with a 1px `--border-light` ring and weight 500. Used for the chart's Spend, CPU and Memory views, and, with the `--fixed-*` tokens, for the theme switch in the header.
 
+### Capacity bar
+
+A flat bar for one resource against a capacity: the nodes' allocatable CPU or memory, or the requests when the file has no nodes. Three layers start at the left edge: requests hatched in ruby-400, the right-sized target in iris-300 (iris-500 in dark), and usage in zinc-800 (zinc-200 in dark) on top. The track is `--surface-inset` with a 1px `--border-emphasized` edge, and a layer larger than the capacity stops at the edge. The figures sit to the right in Roboto Mono 12px `--text-light`, and the legend above names each layer with a matching swatch.
+
 ### Alert
 
 A caution banner with one sentence. Put the count first, in bold, so the scope is clear: "**1 of 4 workloads** have too little data for a savings figure and are not in the totals."

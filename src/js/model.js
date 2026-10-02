@@ -303,7 +303,7 @@
     var res = {
       id: p.id, ns: p.ns, kind: p.kind, name: p.name, containers: p.containers, notes: p.notes,
       status: p.status, reason: p.reason, series: null,
-      annualSpend: 0, annualSavings: 0, savingsPct: 0, wasteCores: 0, wasteGiB: 0, reqCores: 0, reqGiB: 0
+      annualSpend: 0, annualSavings: 0, savingsPct: 0, wasteCores: 0, wasteGiB: 0, reqCores: 0, reqGiB: 0, useCores: 0, useGiB: 0
     };
     if (!p.s) return res;
     var s = p.s, n = s.t.length, weight = p.weight, lo = 0, hi = n;
@@ -329,6 +329,8 @@
     res.series = lv.range ? clip(s, lv.range) : s;
     res.reqCores = mean(s.reqCpu, weight, lo, hi);
     res.reqGiB = mean(s.reqMem, weight, lo, hi);
+    res.useCores = mean(s.useCpu, weight, lo, hi);
+    res.useGiB = mean(s.useMem, weight, lo, hi);
     var cur = mean(s.cur, weight, lo, hi);
     res.annualSpend = cur * HOURS_PER_YEAR;
     res.annualSavings = (cur - mean(s.opt, weight, lo, hi)) * HOURS_PER_YEAR;
@@ -528,11 +530,12 @@
       if (!scope || scope[p.ns]) workloads.push(computeWorkload(p, rates, lv));
     });
     var counted = workloads.filter(function (w) { return w.series; });
-    var totals = { spend: 0, savings: 0, cores: 0, gib: 0, reqCores: 0, reqGiB: 0, workloads: workloads.length, counted: counted.length };
+    var totals = { spend: 0, savings: 0, cores: 0, gib: 0, reqCores: 0, reqGiB: 0, useCores: 0, useGiB: 0, workloads: workloads.length, counted: counted.length };
     counted.forEach(function (w) {
       totals.spend += w.annualSpend; totals.savings += w.annualSavings;
       totals.cores += w.wasteCores; totals.gib += w.wasteGiB;
       totals.reqCores += w.reqCores; totals.reqGiB += w.reqGiB;
+      totals.useCores += w.useCores; totals.useGiB += w.useGiB;
     });
     var series = counted.length ? combine(counted) : null;
     if (series && lv.range) series = clip(series, lv.range);
@@ -554,7 +557,7 @@
   }
 
   var api = {
-    analyze: analyze, prepare: prepare, nodePrices: NODE_PRICES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, resample: resample, rollingMax: rollingMax,
+    analyze: analyze, prepare: prepare, nodePrices: NODE_PRICES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
     fidelityLabel: fidelityLabel, formatSpan: formatSpan, formatStep: formatStep, notes: NOTES, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

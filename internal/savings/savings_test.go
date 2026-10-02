@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"os/exec"
@@ -461,20 +462,32 @@ type jsResult struct {
 	Totals map[string]float64 `json:"totals"`
 	// The money section's namespace figures, added up.
 	Money map[string]float64 `json:"money"`
+	// Section holds the figures the cluster and nodes section shows.
+	Section struct {
+		ReqCores, ReqGiB, WasteCores, WasteGiB float64
+	} `json:"section"`
+	Prices map[string]float64 `json:"prices"`
 }
 
 // The page loads a file once and recomputes it whenever a lever changes, so
 // the script computes with other levers first and then with the defaults.
 const nodeScript = `const fs = require('fs');
+const path = require('path');
 const model = require(process.argv[2]);
 const money = require(process.argv[3]);
+const section = require(path.join(path.dirname(process.argv[2]), 'section-cluster.js'));
 const out = process.argv.slice(4).map(f => {
   const data = model.prepare(JSON.parse(fs.readFileSync(f, 'utf8')));
   model.compute(data, { headroom: 1.5, peakWindow: 3600, rates: { perCore: 1, perGiB: 1 } });
   const r = model.compute(data, model.defaultLevers);
   const ns = { savings: 0, spend: 0 };
   money.summarize(r).namespaces.forEach(n => { ns.savings += n.savings; ns.spend += n.spend; });
-  return { cluster: r.cluster, fidelity: r.fidelity, basis: r.pricing.basis, totals: r.totals, money: ns };
+  const s = section.summarize(data, r, { range: null, namespaces: null });
+  const counted = r.totals.counted > 0;
+  return {
+    cluster: r.cluster, fidelity: r.fidelity, basis: r.pricing.basis, totals: r.totals, money: ns, prices: model.nodePrices,
+    section: counted ? { ReqCores: s.cpu.req, ReqGiB: s.mem.req, WasteCores: s.cpu.req - s.cpu.target, WasteGiB: s.mem.req - s.mem.target } : {}
+  };
 });
 process.stdout.write(JSON.stringify(out));
 `
@@ -557,11 +570,18 @@ func TestParityWithModelJS(t *testing.T) {
 				{"reqGiB", got.Totals.RequestedGiB, w.Totals["reqGiB"]},
 				{"workloads", float64(got.Totals.Workloads), w.Totals["workloads"]},
 				{"counted", float64(got.Totals.Counted), w.Totals["counted"]},
+				{"section reqCores", got.Totals.RequestedCores, w.Section.ReqCores},
+				{"section reqGiB", got.Totals.RequestedGiB, w.Section.ReqGiB},
+				{"section wasteCores", got.Totals.WasteCores, w.Section.WasteCores},
+				{"section wasteGiB", got.Totals.WasteGiB, w.Section.WasteGiB},
 			}
 			for _, n := range nums {
 				if !same(n.got, n.want) {
 					t.Errorf("%s: got %v, want %v", n.name, n.got, n.want)
 				}
+			}
+			if !maps.Equal(nodePrices, w.Prices) {
+				t.Errorf("node prices: got %v, want %v", nodePrices, w.Prices)
 			}
 			js, _ := json.Marshal(got)
 			t.Logf("%s", js)
