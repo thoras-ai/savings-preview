@@ -259,14 +259,24 @@
     // Per-pod limits, summed over containers; null when any container has none.
     var limCpu = new Float64Array(n), limMem = new Float64Array(n);
     var hasLimCpu = true, hasLimMem = true;
+    // Containers with both usage values at each point. One without them while
+    // others have them is not running then: an init container, a check that
+    // runs now and then, or a sidecar that has exited. It adds no usage and
+    // no request there, since the file carries requests only where a
+    // container has usage.
+    var running = new Int32Array(n);
     usable.forEach(function (c, ci) {
       var at = function (name) { return resample(c.series[name], grid, c.step, c.spans, !!c.held[name]); };
       var cu = at(M.cpuUse), mu = at(M.memUse), cr = at(M.cpuReq), mr = at(M.memReq);
       // Rolled-up points carry the peak of the readings they summarize.
       var pc = c.series[M.cpuPeak] ? at(M.cpuPeak) : cu, pm = c.series[M.memPeak] ? at(M.memPeak) : mu;
+      var up = new Uint8Array(n);
       for (var i = 0; i < n; i++) {
         if (ci === 0) { s.useCpu[i] = 0; s.useMem[i] = 0; s.reqCpu[i] = 0; s.reqMem[i] = 0; }
         weight[i] = Math.max(weight[i], stepAt(c.spans, grid[i], c.step) || 1);
+        if (!isFinite(cu[i]) || !isFinite(mu[i])) continue;
+        up[i] = 1;
+        running[i]++;
         s.useCpu[i] += cu[i] * replicas[i];
         s.useMem[i] += mu[i] / GIB * replicas[i];
         s.reqCpu[i] += cr[i] * replicas[i];
@@ -276,16 +286,16 @@
       }
       if (c.series[M.cpuLim] && c.series[M.cpuLim].t.length) {
         var lc = at(M.cpuLim);
-        for (var a = 0; a < n; a++) limCpu[a] += lc[a];
+        for (var a = 0; a < n; a++) if (up[a]) limCpu[a] += lc[a];
       } else hasLimCpu = false;
       if (c.series[M.memLim] && c.series[M.memLim].t.length) {
         var lm = at(M.memLim);
-        for (var b = 0; b < n; b++) limMem[b] += lm[b] / GIB;
+        for (var b = 0; b < n; b++) if (up[b]) limMem[b] += lm[b] / GIB;
       } else hasLimMem = false;
     });
     var anyValid = false;
     for (var i = 0; i < n; i++) {
-      var ok = isFinite(s.useCpu[i]) && isFinite(s.useMem[i]) && isFinite(s.reqCpu[i]) && isFinite(s.reqMem[i]);
+      var ok = running[i] > 0 && isFinite(s.useCpu[i]) && isFinite(s.useMem[i]) && isFinite(s.reqCpu[i]) && isFinite(s.reqMem[i]);
       if (ok) anyValid = true;
       else { s.useCpu[i] = s.useMem[i] = s.reqCpu[i] = s.reqMem[i] = pkCpu[i] = pkMem[i] = NaN; }
     }
@@ -382,9 +392,15 @@
     return name;
   }
 
-  // Sum workload series onto one grid. A bucket counts only when every workload has a value in it.
-  // Each workload adds its mean to a bucket, except for peaks, where it adds its highest point.
+  // Sum workload series onto one grid. Each workload adds its mean to a
+  // bucket, except for peaks, where it adds its highest point, and adds
+  // nothing outside its first and last point. A bucket inside that span where
+  // the workload has no value takes the value of its nearest bucket that has
+  // one. The bucket counts only when the workloads filled this way make up at
+  // most FILL_SHARE of the spend of the workloads in it; otherwise every field
+  // is NaN. Buckets at either end that do not count are dropped.
   var PEAKS = ['peakCpu', 'peakMem'];
+  var FILL_SHARE = 0.05;
   function combine(list) {
     var step = 0, t0 = Infinity, t1 = -Infinity;
     list.forEach(function (w) {
@@ -396,32 +412,53 @@
     var nb = Math.floor((t1 - t0) / step) + 1, nf = FIELDS.length;
     var out = { t: new Float64Array(nb), step: step };
     for (var b = 0; b < nb; b++) out.t[b] = t0 + b * step;
-    var have = new Float64Array(nb);
     var outs = FIELDS.map(function (f) { return (out[f] = new Float64Array(nb)); });
     var peak = FIELDS.map(function (f) { return PEAKS.indexOf(f) >= 0; });
+    // Spend of the workloads in each bucket, of those filled there, and how
+    // many have a value there.
+    var inSpend = new Float64Array(nb), fillSpend = new Float64Array(nb), real = new Float64Array(nb);
     // One scratch row per field, reset over each workload's own buckets.
-    var sum = FIELDS.map(function () { return new Float64Array(nb); }), cnt = new Float64Array(nb);
+    var sum = FIELDS.map(function () { return new Float64Array(nb); }), cnt = new Float64Array(nb), near = new Int32Array(nb);
     var bin = new Int32Array(0);
     list.forEach(function (w) {
       var s = w.series, n = s.t.length, i, k;
       var first = Math.floor((s.t[0] - t0) / step), last = Math.floor((s.t[n - 1] - t0) / step);
+      var spend = w.annualSpend > 0 ? w.annualSpend : 0;
       if (bin.length < n) bin = new Int32Array(n);
       // The bucket of each valid point, or -1.
       for (i = 0; i < n; i++) bin[i] = isFinite(s.cur[i]) ? Math.floor((s.t[i] - t0) / step) : -1;
       for (k = first; k <= last; k++) cnt[k] = 0;
       for (i = 0; i < n; i++) if (bin[i] >= 0) cnt[bin[i]]++;
+      // The nearest bucket with a value, the earlier one on a tie.
+      var prev = -1;
+      for (k = first; k <= last; k++) { if (cnt[k]) prev = k; near[k] = prev; }
+      var next = -1;
+      for (k = last; k >= first; k--) {
+        if (cnt[k]) next = k;
+        if (next >= 0 && (near[k] < 0 || next - k < k - near[k])) near[k] = next;
+      }
+      for (k = first; k <= last; k++) {
+        inSpend[k] += spend;
+        if (cnt[k]) real[k]++;
+        else fillSpend[k] += spend;
+      }
       for (var f = 0; f < nf; f++) {
         var row = sum[f], src = s[FIELDS[f]], dst = outs[f];
         for (k = first; k <= last; k++) row[k] = peak[f] ? -Infinity : 0;
         if (peak[f]) { for (i = 0; i < n; i++) if (bin[i] >= 0) row[bin[i]] = Math.max(row[bin[i]], src[i]); }
         else { for (i = 0; i < n; i++) if (bin[i] >= 0) row[bin[i]] += src[i]; }
-        for (k = first; k <= last; k++) if (cnt[k]) dst[k] += peak[f] ? row[k] : row[k] / cnt[k];
+        for (k = first; k <= last; k++) if (cnt[k]) row[k] = peak[f] ? row[k] : row[k] / cnt[k];
+        for (k = first; k <= last; k++) if (near[k] >= 0) dst[k] += row[near[k]];
       }
-      for (k = 0; k < nb; k++) if (k < first || k > last || cnt[k]) have[k]++;
     });
+    var lo = nb, hi = -1;
     for (var q = 0; q < nb; q++) {
-      if (have[q] !== list.length) for (var g = 0; g < nf; g++) outs[g][q] = NaN;
+      if (real[q] && fillSpend[q] <= inSpend[q] * FILL_SHARE) { lo = Math.min(lo, q); hi = q; continue; }
+      for (var g = 0; g < nf; g++) outs[g][q] = NaN;
     }
+    if (hi < 0) return out;
+    out.t = out.t.subarray(lo, hi + 1);
+    FIELDS.forEach(function (f) { out[f] = out[f].subarray(lo, hi + 1); });
     return out;
   }
 

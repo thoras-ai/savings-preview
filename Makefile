@@ -19,14 +19,14 @@ test: demo
 	go test -count=1 ./...
 	python3 -m unittest discover -s tests
 	node --test 'tests/**/*.test.js'
-	python3 scripts/validate_contract.py fixtures/savings-preview.otlp.json
+	python3 scripts/validate_contract.py fixtures/savings-preview.otlp.json fixtures/intermittent.otlp.json
 
 test-all: demo
 	go vet ./...
 	go test -race -count=1 ./...
 	python3 -m unittest discover -s tests
 	node --test 'tests/**/*.test.js'
-	python3 scripts/validate_contract.py fixtures/savings-preview.otlp.json
+	python3 scripts/validate_contract.py fixtures/savings-preview.otlp.json fixtures/intermittent.otlp.json
 
 # vulncheck downloads the Go vulnerability database, so it is not part of test.
 vulncheck:

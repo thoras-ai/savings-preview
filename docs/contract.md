@@ -148,6 +148,7 @@ A reader averaging a held series over time weights each point by the time until 
 - A series that could not be retrieved is left out of the file, and its metric name is listed in the resource's `thoras.missing_metrics`. Every required metric must be either present or listed, never both and never neither. Only required metrics can be listed.
 - A gap inside a series is represented by omitting the points for those steps. Zero, `NaN` and carried-forward values are never used to fill a gap. Held metrics are the exception: their points are only the changes, so they have no gaps.
 - A container with a required series missing is shown in the report but excluded from savings, because cost is the larger of the CPU and memory cost and cannot be computed from one of them.
+- At a step where a container has no CPU usage or no memory usage point, the report takes it as not running: it adds no usage and no request to its workload there. Init containers, checks that run now and then, and sidecars that have exited look like this. A workload has no value at a step where none of its containers has both usage points.
 - Optional metrics are simply absent when unavailable, with no declaration.
 
 ## Versioning

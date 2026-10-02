@@ -173,7 +173,7 @@
       p.priced ? 'Price a core-hour and a GiB-hour from the node inventory: the priced nodes’ total list price divided by their total cores, and by their total GiB. Here that is ' + esc(rates(p)) + '.' :
         'Price a core-hour and a GiB-hour from the default node, ' + d.cores + ' cores, ' + d.gib + ' GiB, $' + d.hourly + ' per hour, since the file has no node with a known list price: ' + esc(rates(p)) + '.';
     var steps = [
-      'Total each workload’s usage and requests across its replicas at every step, for CPU and for memory.',
+      'Total each workload’s usage and requests across its replicas at every step, for CPU and for memory. A container counts at a step only when it has CPU and memory usage there; one without them, such as an init container or a check that runs now and then, is not running and adds no usage and no request.',
       'Take the highest usage in the trailing ' + st.peakMinutes + '-minute window. The target is ' + code(target + ' × that peak') + '.' +
         (f.sourceStepSeconds ? ' Each point in this file keeps the highest ' + esc(model.formatStep(f.sourceStepSeconds)) + ' reading of its step, so short peaks are not lost.' : ''),
       'Waste at each step is ' + code('max(0, requested − target)') + '. A request below the target is left alone; the report never adds.',

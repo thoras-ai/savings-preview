@@ -158,8 +158,8 @@ function multi(workloads, nodes = []) {
     const first = containers[0].first || 0;
     rms.push({ resource: { attributes: base }, scopeMetrics: [{ metrics: [series('k8s.deployment.pod.desired', '{pod}', Array(n).fill(replicas), 300, { int: true })] }] });
     containers.forEach(c => {
-      const pad = Array(first).fill(null);
-      const v = (x) => pad.concat(Array(n - first).fill(x));
+      const off = new Set(c.off || []);
+      const v = (x) => Array.from({ length: n }, (_, i) => (i < first || off.has(i) ? null : x));
       const metrics = [
         series('container.cpu.usage', '{cpu}', v(c.use), 300, { gauge: true }),
         series('container.memory.working_set', 'By', v(1 * GIB), 300, { int: true }),
@@ -186,6 +186,109 @@ test('a workload that starts late does not blank the cluster series', () => {
 test('a gap inside a workload range still drops the cluster bucket', () => {
   const r = model.analyze(doc({ cpu: [1, 1, null, 1, 1], mem: [1, 1, 1, 1, 1] }));
   assert.ok(Number.isNaN(r.series.cur[2]));
+});
+
+test('a container without usage at a step is not running then and adds no usage or request', () => {
+  const cpu = Array(10).fill(0);
+  const r = model.analyze(multi([
+    { name: 'w', replicas: 2, cpu, containers: [{ name: 'app', use: 0.5, req: 1 }, { name: 'check', use: 0.25, req: 3, off: [0, 1, 2, 3, 4, 6, 7, 8, 9] }] }
+  ]));
+  const w = r.workloads[0];
+  assert.strictEqual(w.status, 'ok');
+  assert.ok(Array.from(w.series.cur).every(Number.isFinite));
+  assert.strictEqual(w.series.reqCpu[0], 2);
+  assert.strictEqual(w.series.reqCpu[5], 8);
+  assert.strictEqual(w.series.useCpu[5], 1.5);
+  assert.ok(Math.abs(w.reqCores - 2.6) < 1e-9);
+});
+
+test('a workload is unknown at a step when none of its containers has usage', () => {
+  const cpu = Array(10).fill(0);
+  const r = model.analyze(multi([
+    { name: 'w', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 1, off: [4] }, { name: 'b', use: 0.5, req: 1, off: [4, 5] }] }
+  ]));
+  const s = r.workloads[0].series;
+  assert.strictEqual(s.t.length, 9);
+  assert.strictEqual(s.reqCpu[4], 1);
+  assert.strictEqual(s.reqCpu[5], 2);
+  assert.ok(Number.isNaN(r.series.cur[4]));
+});
+
+test('a container with only one usage value at a step is not running then', () => {
+  const cpu = Array(4).fill(0);
+  const doc2 = multi([{ name: 'w', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 1 }, { name: 'b', use: 0.5, req: 1 }] }]);
+  // Container b loses its CPU point at step 1 but keeps memory.
+  const b = doc2.resourceMetrics[2].scopeMetrics[0].metrics.find(m => m.name === 'container.cpu.usage');
+  b.gauge.dataPoints.splice(1, 1);
+  const s = model.analyze(doc2).workloads[0].series;
+  assert.strictEqual(s.reqCpu[0], 2);
+  assert.strictEqual(s.reqCpu[1], 1);
+  assert.strictEqual(s.reqCpu[2], 2);
+});
+
+test('a small workload with a gap is filled from its nearest bucket, a large one drops the bucket', () => {
+  const cpu = Array(10).fill(0);
+  const small = model.analyze(multi([
+    { name: 'big', replicas: 1, cpu, containers: [{ name: 'a', use: 1, req: 40 }] },
+    { name: 'small', replicas: 1, cpu, containers: [{ name: 'a', use: 0.1, req: 1, off: [3, 4, 5, 6] }] }
+  ]));
+  assert.ok(Array.from(small.series.cur).every(Number.isFinite));
+  assert.strictEqual(small.series.reqCpu[3], 41);
+  const large = model.analyze(multi([
+    { name: 'big', replicas: 1, cpu, containers: [{ name: 'a', use: 1, req: 40, off: [3] }] },
+    { name: 'small', replicas: 1, cpu, containers: [{ name: 'a', use: 0.1, req: 1 }] }
+  ]));
+  assert.ok(Number.isNaN(large.series.cur[3]));
+  assert.strictEqual(large.series.reqCpu[4], 41);
+});
+
+test('leading buckets where no workload has data are dropped from the cluster series', () => {
+  const cpu = Array(10).fill(0);
+  const d = multi([
+    { name: 'gappy', replicas: 1, cpu, containers: [{ name: 'a', use: 0.1, req: 1, off: [0, 1, 2] }] },
+    { name: 'late', replicas: 1, cpu, containers: [{ name: 'a', use: 0.1, req: 1, first: 3 }] }
+  ]);
+  // The gappy workload keeps CPU points from the start, as a store with
+  // shorter memory history gives.
+  const cpuSeries = d.resourceMetrics[1].scopeMetrics[0].metrics.find(m => m.name === 'container.cpu.usage');
+  cpuSeries.gauge.dataPoints = [0, 1, 2].map(i => ({ timeUnixNano: String((1000000 + i * 300) * 1e9), asDouble: 0.1 })).concat(cpuSeries.gauge.dataPoints);
+  const r = model.analyze(d);
+  assert.strictEqual(r.workloads[0].series.t.length, 10);
+  assert.strictEqual(r.series.t.length, 7);
+  assert.strictEqual(r.series.t[0], 1000000 + 3 * 300);
+  assert.ok(Array.from(r.series.cur).every(Number.isFinite));
+});
+
+test('intermittent containers and late series do not blank the cluster chart', () => {
+  const file = path.join(__dirname, '..', 'fixtures', 'intermittent.otlp.json');
+  const r = model.analyze(JSON.parse(fs.readFileSync(file, 'utf8')));
+  assert.strictEqual(r.totals.counted, 5);
+  assert.strictEqual(r.series.t.length, 192);
+  assert.ok(Array.from(r.series.cur).every(Number.isFinite));
+  const lg = r.workloads.find(w => w.name === 'loadgenerator');
+  assert.strictEqual(lg.status, 'partial');
+  assert.deepStrictEqual(lg.containers.filter(c => c.excluded).map(c => c.name), ['istio-init']);
+  assert.ok(Array.from(lg.series.cur).every(Number.isFinite));
+  // main, istio-proxy and test-sidecar request 0.45 cores; the check adds 0.1 only where it has both usage values.
+  assert.ok(Math.abs(lg.series.reqCpu[10] - 0.45) < 1e-9);
+  assert.ok(Math.abs(lg.series.reqCpu[20] - 0.45) < 1e-9);
+  assert.ok(Math.abs(lg.series.reqCpu[150] - 0.55) < 1e-9);
+  // The monitoring workloads have no memory or replicas for six hours; the
+  // chart fills them from their first value, since they are a small share.
+  const prom = r.workloads.find(w => w.name === 'prometheus-server');
+  assert.ok(Number.isNaN(prom.series.cur[23]) && Number.isFinite(prom.series.cur[24]));
+  assert.ok(Math.abs(r.series.reqCpu[0] - r.series.reqCpu[24]) < 1e-9);
+});
+
+test('totals for the committed fixtures match the figures before intermittent containers were handled', () => {
+  const want = {
+    'savings-preview.otlp.json': { spend: 6155.221709224345, savings: 2181.09021553841, reqCores: 14, reqGiB: 44, counted: 3 },
+    'minikube-poll.otlp.json': { spend: 1595.0728125, savings: 1468.3183583557436, reqCores: 3.236, reqGiB: 8.78125, counted: 21 }
+  };
+  Object.entries(want).forEach(([name, w]) => {
+    const r = model.analyze(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', name), 'utf8')));
+    Object.entries(w).forEach(([k, v]) => assert.ok(Math.abs(r.totals[k] - v) <= 1e-9 * Math.max(1, Math.abs(v)), name + ' ' + k + ': ' + r.totals[k]));
+  });
 });
 
 test('totals multiply per-pod values by replicas and sum containers', () => {
