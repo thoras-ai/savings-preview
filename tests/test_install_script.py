@@ -366,6 +366,10 @@ class InstallScriptTest(unittest.TestCase):
             with self.subTest(gh=gh):
                 self.assertFailed(self.run_script(gh=gh, VERSION="v9.9.9"), "v9.9.9")
 
+    def test_unknown_version_with_a_token(self):
+        r = self.run_script(VERSION="v9.9.9", GITHUB_TOKEN="t0k", FAKE_REQUIRE_TOKEN="t0k")
+        self.assertFailed(r, f"release v9.9.9 of {REPO} was not found, or the token cannot read it")
+
     def test_gh_is_used_when_logged_in(self):
         r = self.run_script(gh=True)
         self.assertInstalled(r, "savings-preview v0.2.0 darwin_arm64")

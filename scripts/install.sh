@@ -123,14 +123,18 @@ download() {
 		fi
 		archive=$(printf '%s' "$archive" | sed "s/@TAG@/$tag/")
 		gh release download "$tag" -R "$REPO" -D "$dir" -p "$archive" -p checksums.txt >&2 ||
-			die "gh could not download $archive from release $tag of $REPO. Check that the account gh uses can read it (gh auth status), or set GH_TOKEN to a token that can."
+			die "gh could not download $archive from release $tag of $REPO. Check that the release exists and that the account gh uses can read it (gh auth status)."
 	else
 		command -v curl >/dev/null 2>&1 ||
 			die "install gh (https://cli.github.com) or curl to download releases"
 		[ -n "$(token)" ] ||
 			say "gh is not installed or not logged in, and GITHUB_TOKEN is not set; trying without credentials."
-		release_json "$tag" "$dir/release.json" ||
+		if ! release_json "$tag" "$dir/release.json"; then
+			if [ -n "$(token)" ]; then
+				die "release ${tag:-latest} of $REPO was not found, or the token cannot read it."
+			fi
 			die "could not read release ${tag:-latest} of $REPO from the GitHub API. The repository is private: log in with gh, or set GITHUB_TOKEN to a token that can read it."
+		fi
 		if [ -z "$tag" ]; then
 			tag=$(sed -n 's/^"tag_name"[[:space:]]*:[[:space:]]*"\(.*\)"$/\1/p' "$dir/release.json" | head -n 1)
 			[ -n "$tag" ] || die "the latest release of $REPO has no tag name"
