@@ -392,3 +392,31 @@ button.tm-cell:hover { filter: brightness(0.94); }
   .rank { grid-template-columns: 1fr auto; }
   .rank-bar { display: none; }
 }
+
+/* Section 4: cluster and nodes. The capacity bar layers used over target over
+ * hatched requests, against allocatable capacity. */
+.cl-lead { color: var(--text-light); margin: var(--primitive-space-4) 0 0; max-width: 70ch; }
+.cl-note { color: var(--text-light); font-size: var(--primitive-text-xs); margin: var(--primitive-space-8) 0 0; }
+.cap-legend { margin-bottom: var(--primitive-space-8); }
+.cap-swatch { display: inline-block; width: 14px; height: 10px; }
+.cap-grid { display: grid; grid-template-columns: 110px minmax(0, 1fr) minmax(min-content, 320px); gap: var(--primitive-space-12); align-items: center; }
+.cap-bar { position: relative; height: 14px; background: var(--surface-inset); border: 1px solid var(--border-emphasized); overflow: hidden; }
+.cap-bar i { position: absolute; left: 0; top: 0; bottom: 0; }
+.cap-used { background: var(--color-zinc-800); }
+.cap-target { background: var(--primitive-iris-300); }
+.cap-req { background: repeating-linear-gradient(-45deg, var(--primitive-ruby-400) 0, var(--primitive-ruby-400) 1px, transparent 1px, transparent 3px); }
+.cap-swatch.cap-req { border: 1px solid var(--primitive-ruby-400); }
+[data-theme="dark"] .cap-used { background: var(--color-zinc-200); }
+[data-theme="dark"] .cap-target { background: var(--primitive-iris-500); }
+.cap-figures { font-family: var(--primitive-font-mono); font-size: var(--primitive-text-xs); color: var(--text-light); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cl-pair > .card { min-width: 0; }
+.cl-mix th { padding: var(--primitive-space-8) var(--primitive-space-12); }
+.cl-mix code { font-size: var(--primitive-text-sm); }
+.cl-freed { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--primitive-space-16); margin-top: var(--primitive-space-12); }
+.cl-fig + .cl-fig { border-left: 1px solid var(--border-lighter); padding-left: var(--primitive-space-16); }
+@media (max-width: 640px) {
+  .cap-grid { grid-template-columns: 1fr; gap: var(--primitive-space-4); }
+  .cap-figures { text-align: left; margin-bottom: var(--primitive-space-8); }
+  .cl-freed { grid-template-columns: 1fr; }
+  .cl-fig + .cl-fig { border-left: 0; padding-left: 0; }
+}
