@@ -1,6 +1,6 @@
 # Savings Preview OTel contract
 
-Version 1.1.0. Every adapter writes one OTLP-JSON metrics file in this shape, and the report page reads only that file. `scripts/validate_contract.py` checks a file against this document. `fixtures/savings-preview.otlp.json` is a valid example.
+Version 1.2.0. Every adapter writes one OTLP-JSON metrics file in this shape, and the report page reads only that file. `scripts/validate_contract.py` checks a file against this document. `fixtures/savings-preview.otlp.json` is a valid example.
 
 ## Pinned conventions
 
@@ -33,6 +33,7 @@ All kinds:
 | `thoras.fidelity_tier` | int | 1, 2 or 3, see below. |
 | `thoras.missing_metrics` | string[] | Optional. Required metrics the adapter looked for and could not get. |
 | `thoras.fidelity_notes` | string[] | Optional. How the series were derived when it differs from the metric definitions, see below. |
+| `thoras.step_spans` | string[] | Optional. Set when the points use more than one step, see Mixed steps below. |
 
 Container and workload resources also take `k8s.namespace.name` and exactly one of `k8s.deployment.name` or `k8s.statefulset.name`. Container resources add `k8s.container.name`.
 
@@ -40,7 +41,7 @@ Node resources add `k8s.node.name`, `host.type` (the instance type), `cloud.prov
 
 ## Metrics
 
-All data points are dense series at `thoras.step_seconds`. Data points carry no attributes. Everything that identifies a series is on the resource.
+All data points are dense series at `thoras.step_seconds`, or at the step of each span when a resource has `thoras.step_spans`. Data points carry no attributes. Everything that identifies a series is on the resource.
 
 ### Per container (container resource)
 
@@ -48,6 +49,8 @@ All data points are dense series at `thoras.step_seconds`. Data points carry no 
 | --- | --- | --- | --- | --- | --- |
 | `container.cpu.usage` | gauge | `{cpu}` | double | yes | CPU used by the container, averaged across the workload's pods. |
 | `container.memory.working_set` | updowncounter | `By` | int | yes | Memory working set, averaged across the workload's pods. |
+| `thoras.container.cpu.usage.max` | gauge | `{cpu}` | double | no | Highest `container.cpu.usage` reading within the point's step. |
+| `thoras.container.memory.working_set.max` | updowncounter | `By` | int | no | Highest `container.memory.working_set` reading within the point's step. |
 | `k8s.container.cpu.request.desired` | updowncounter | `{cpu}` | double | yes | CPU request per pod. |
 | `k8s.container.memory.request.desired` | updowncounter | `By` | int | yes | Memory request per pod. |
 | `k8s.container.cpu.limit.desired` | updowncounter | `{cpu}` | double | no | CPU limit per pod. Omit when no limit is set. |
@@ -94,6 +97,16 @@ The target is 14 days at 60 seconds, which is what the forecaster trains on. 300
 | 2 | Step of 300 seconds or less over at least 7 days. |
 | 3 | Anything coarser or shorter, including a single snapshot. |
 
+### Mixed steps
+
+An adapter that keeps recent data at a fine step and older data at a coarser one records the spans in `thoras.step_spans`. Each entry is `START/END/STEP` in unix seconds, START inclusive and END exclusive: points in that range are STEP seconds apart. Entries are in time order, do not overlap, and every point lies in one of them on its grid (START plus a multiple of STEP). Each STEP is a multiple of `thoras.step_seconds`, which is the finest of them. For example, `["1789200000/1790236800/300", "1790236800/1790409600/60"]` is 5-minute data followed by two days of 1-minute data.
+
+A point summarizing several readings carries their mean in the usage metric. When an adapter has the peaks, it adds them as `thoras.container.cpu.usage.max` and `thoras.container.memory.working_set.max`, with a point wherever the usage metric has one. Readers that compute peaks should prefer the max series when it is present.
+
+The fidelity tier of a resource with step spans follows its coarsest step.
+
+A file with step spans is still structurally valid for an earlier reader, to which only the new attribute and metrics are unknown. Such a reader sees points spaced by more than `thoras.step_seconds` in the coarser spans. If it treats each point as covering only `thoras.step_seconds`, it misses most of that time, and if it takes peaks from the usage means it understates them, which overstates savings. Readers must handle `thoras.step_spans` and the peak metrics to price such files correctly. The report page handles both from 1.2.0.
+
 An adapter may claim a lower tier than its data supports but not a higher one. The validator rejects a claim the step and span cannot support.
 
 `thoras.fidelity_notes` lists derivations a reader should know about. Readers ignore values they do not recognize.
@@ -112,6 +125,7 @@ An adapter may claim a lower tier than its data supports but not a higher one. T
 ## Versions
 
 - 1.1.0 adds the optional `thoras.fidelity_notes` attribute. 1.0.0 files are valid 1.1.0 files.
+- 1.2.0 adds the optional `thoras.step_spans` attribute and the optional `thoras.container.cpu.usage.max` and `thoras.container.memory.working_set.max` metrics. 1.1.0 files are valid 1.2.0 files.
 
 ## Out of scope
 

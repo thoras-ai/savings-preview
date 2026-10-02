@@ -23,6 +23,8 @@
   var M = {
     cpuUse: 'container.cpu.usage',
     memUse: 'container.memory.working_set',
+    cpuPeak: 'thoras.container.cpu.usage.max',
+    memPeak: 'thoras.container.memory.working_set.max',
     cpuReq: 'k8s.container.cpu.request.desired',
     memReq: 'k8s.container.memory.request.desired',
     cpuAlloc: 'k8s.node.cpu.allocatable',
@@ -57,10 +59,30 @@
     return { t: t, v: v };
   }
 
-  function mean(arr) {
+  function mean(arr, weights) {
     var s = 0, n = 0;
-    for (var i = 0; i < arr.length; i++) if (isFinite(arr[i])) { s += arr[i]; n++; }
+    for (var i = 0; i < arr.length; i++) {
+      if (!isFinite(arr[i])) continue;
+      var w = weights ? weights[i] : 1;
+      s += arr[i] * w; n += w;
+    }
     return n ? s / n : NaN;
+  }
+
+  // thoras.step_spans entries "START/END/STEP", or null when the resource has one step.
+  function parseSpans(list) {
+    if (!Array.isArray(list) || !list.length) return null;
+    return list.map(function (x) {
+      var p = String(x).split('/').map(Number);
+      return { start: p[0], end: p[1], step: p[2] };
+    });
+  }
+
+  // Spacing of a resource's points around time t.
+  function stepAt(spans, t, step) {
+    if (!spans) return step;
+    for (var i = 0; i < spans.length; i++) if (t >= spans[i].start && t < spans[i].end) return spans[i].step;
+    return step;
   }
 
   function parse(doc) {
@@ -75,9 +97,12 @@
         (sm.metrics || []).forEach(function (m) { series[m.name] = readSeries(m); });
       });
       var kind = a['k8s.deployment.name'] ? 'deployment' : a['k8s.statefulset.name'] ? 'statefulset' : null;
+      var spans = parseSpans(a['thoras.step_spans']);
       var base = {
         attrs: a,
         step: a['thoras.step_seconds'] || 0,
+        spans: spans,
+        coarseStep: spans ? Math.max.apply(null, spans.map(function (x) { return x.step; })) : (a['thoras.step_seconds'] || 0),
         tier: a['thoras.fidelity_tier'] || 3,
         source: a['thoras.source'] || '',
         listedMissing: a['thoras.missing_metrics'] || [],
@@ -125,15 +150,17 @@
     };
   }
 
-  // Latest point at or before each grid time, only while it is younger than the series step.
-  function resample(s, grid, step) {
+  // Latest point at or before each grid time, only while it is younger than the
+  // series step, or the step of the span the point is in.
+  function resample(s, grid, step, spans) {
     var out = new Float64Array(grid.length).fill(NaN);
     if (!s || !s.t.length) return out;
-    var span = step > 0 ? step : Infinity;
     var j = 0;
     for (var i = 0; i < grid.length; i++) {
       var g = grid[i];
       while (j + 1 < s.t.length && s.t[j + 1] <= g) j++;
+      var st = stepAt(spans, s.t[j], step);
+      var span = st > 0 ? st : Infinity;
       if (s.t[j] <= g && g - s.t[j] < span) out[i] = s.v[j];
     }
     return out;
@@ -188,31 +215,39 @@
     usable.forEach(function (c) { lists.push(c.series[M.cpuUse].t, c.series[M.memUse].t); });
     var grid = unionTimes(lists);
     var step = 0;
-    usable.forEach(function (c) { step = Math.max(step, c.step); });
-    var repStep = info.workload.step;
-    var replicas = resample(rep, grid, repStep);
+    usable.forEach(function (c) { step = Math.max(step, c.coarseStep); });
+    var replicas = resample(rep, grid, info.workload.step, info.workload.spans);
     var n = grid.length;
+    // Means are weighted by the step of the span each grid point is in, so a
+    // rolled-up point counts for its whole step.
+    var weight = new Float64Array(n);
     var s = {};
     FIELDS.forEach(function (f) { s[f] = new Float64Array(n); });
+    var pkCpu = new Float64Array(n), pkMem = new Float64Array(n);
     usable.forEach(function (c, ci) {
-      var cu = resample(c.series[M.cpuUse], grid, c.step), mu = resample(c.series[M.memUse], grid, c.step);
-      var cr = resample(c.series[M.cpuReq], grid, c.step), mr = resample(c.series[M.memReq], grid, c.step);
+      var at = function (name) { return resample(c.series[name], grid, c.step, c.spans); };
+      var cu = at(M.cpuUse), mu = at(M.memUse), cr = at(M.cpuReq), mr = at(M.memReq);
+      // Rolled-up points carry the peak of the readings they summarize.
+      var pc = c.series[M.cpuPeak] ? at(M.cpuPeak) : cu, pm = c.series[M.memPeak] ? at(M.memPeak) : mu;
       for (var i = 0; i < n; i++) {
         if (ci === 0) { s.useCpu[i] = 0; s.useMem[i] = 0; s.reqCpu[i] = 0; s.reqMem[i] = 0; }
+        weight[i] = Math.max(weight[i], stepAt(c.spans, grid[i], c.step) || 1);
         s.useCpu[i] += cu[i] * replicas[i];
         s.useMem[i] += mu[i] / GIB * replicas[i];
         s.reqCpu[i] += cr[i] * replicas[i];
         s.reqMem[i] += mr[i] / GIB * replicas[i];
+        pkCpu[i] += (isFinite(pc[i]) ? pc[i] : cu[i]) * replicas[i];
+        pkMem[i] += (isFinite(pm[i]) ? pm[i] : mu[i]) / GIB * replicas[i];
       }
     });
     var anyValid = false;
     for (var i = 0; i < n; i++) {
       var ok = isFinite(s.useCpu[i]) && isFinite(s.useMem[i]) && isFinite(s.reqCpu[i]) && isFinite(s.reqMem[i]);
       if (ok) anyValid = true;
-      else { s.useCpu[i] = s.useMem[i] = s.reqCpu[i] = s.reqMem[i] = NaN; }
+      else { s.useCpu[i] = s.useMem[i] = s.reqCpu[i] = s.reqMem[i] = pkCpu[i] = pkMem[i] = NaN; }
     }
     if (!anyValid) { res.reason = 'No time with complete data'; return res; }
-    var pc = rollingMax(grid, s.useCpu, PEAK_WINDOW_SECONDS), pm = rollingMax(grid, s.useMem, PEAK_WINDOW_SECONDS);
+    var pc = rollingMax(grid, pkCpu, PEAK_WINDOW_SECONDS), pm = rollingMax(grid, pkMem, PEAK_WINDOW_SECONDS);
     for (var k = 0; k < n; k++) {
       s.tgtCpu[k] = pc[k] * TARGET_HEADROOM;
       s.tgtMem[k] = pm[k] * TARGET_HEADROOM;
@@ -228,13 +263,13 @@
     res.series = s;
     res.status = res.containers.some(function (c) { return c.excluded; }) ? 'partial' : 'ok';
     if (res.status === 'partial') res.reason = 'Some containers lack data and are left out';
-    res.reqCores = mean(s.reqCpu);
-    res.reqGiB = mean(s.reqMem);
-    res.annualSpend = mean(s.cur) * HOURS_PER_YEAR;
-    res.annualSavings = (mean(s.cur) - mean(s.opt)) * HOURS_PER_YEAR;
+    res.reqCores = mean(s.reqCpu, weight);
+    res.reqGiB = mean(s.reqMem, weight);
+    res.annualSpend = mean(s.cur, weight) * HOURS_PER_YEAR;
+    res.annualSavings = (mean(s.cur, weight) - mean(s.opt, weight)) * HOURS_PER_YEAR;
     res.savingsPct = res.annualSpend > 0 ? res.annualSavings / res.annualSpend : 0;
-    res.wasteCores = mean(wasteCpu);
-    res.wasteGiB = mean(wasteMem);
+    res.wasteCores = mean(wasteCpu, weight);
+    res.wasteGiB = mean(wasteMem, weight);
     return res;
   }
 
@@ -288,11 +323,11 @@
     var tier = 1, step = 0, t0 = Infinity, t1 = -Infinity, sources = [];
     containers.forEach(function (c) {
       tier = Math.max(tier, c.tier);
-      step = Math.max(step, c.step);
+      step = Math.max(step, c.coarseStep);
       if (c.source && sources.indexOf(c.source) < 0) sources.push(c.source);
       [M.cpuUse, M.memUse].forEach(function (n) {
         var s = c.series[n];
-        if (s && s.t.length) { t0 = Math.min(t0, s.t[0]); t1 = Math.max(t1, s.t[s.t.length - 1] + c.step); }
+        if (s && s.t.length) { t0 = Math.min(t0, s.t[0]); t1 = Math.max(t1, s.t[s.t.length - 1] + stepAt(c.spans, s.t[s.t.length - 1], c.step)); }
       });
     });
     var span = isFinite(t0) ? t1 - t0 : 0;

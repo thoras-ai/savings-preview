@@ -20,6 +20,8 @@ GAUGE, UPDOWN, DELTA = "gauge", "updowncounter", "delta_counter"
 CONTAINER_METRICS = {
     "container.cpu.usage": (GAUGE, "{cpu}", "double", True),
     "container.memory.working_set": (UPDOWN, "By", "int", True),
+    "thoras.container.cpu.usage.max": (GAUGE, "{cpu}", "double", False),
+    "thoras.container.memory.working_set.max": (UPDOWN, "By", "int", False),
     "k8s.container.cpu.request.desired": (UPDOWN, "{cpu}", "double", True),
     "k8s.container.memory.request.desired": (UPDOWN, "By", "int", True),
     "k8s.container.cpu.limit.desired": (UPDOWN, "{cpu}", "double", False),
@@ -105,6 +107,7 @@ def _check_points(where, name, spec, metric, step, errors):
         return None
     prev = None
     first = None
+    times = []
     for i, p in enumerate(points):
         t = p.get("timeUnixNano")
         if not _is_int_string(t):
@@ -115,6 +118,7 @@ def _check_points(where, name, spec, metric, step, errors):
             errors.append("%s: point %d timestamp is not a whole second" % (where, i))
             return None
         t //= 1_000_000_000
+        times.append(t)
         if first is None:
             first = t
         if prev is not None:
@@ -135,7 +139,47 @@ def _check_points(where, name, spec, metric, step, errors):
         if p.get("attributes"):
             errors.append("%s: data point attributes are not allowed" % where)
             return None
-    return first, prev
+    return first, prev, times
+
+
+def _parse_spans(where, raw, step, errors):
+    """Parse thoras.step_spans into [(start, end, step)], or None when invalid."""
+    if not isinstance(raw, list) or not raw or not all(isinstance(x, str) for x in raw):
+        errors.append("%s: thoras.step_spans must be a non-empty array of strings" % where)
+        return None
+    spans = []
+    for x in raw:
+        parts = x.split("/")
+        if len(parts) != 3 or not all(p.isdigit() for p in parts):
+            errors.append("%s: thoras.step_spans entry %r is not START/END/STEP" % (where, x))
+            return None
+        a, b, st = (int(p) for p in parts)
+        if st <= 0 or st % step or b <= a or (b - a) % st:
+            errors.append("%s: thoras.step_spans entry %r needs END > START, a step that is a multiple of %ds, "
+                          "and a length that is a multiple of its step" % (where, x, step))
+            return None
+        if spans and a < spans[-1][1]:
+            errors.append("%s: thoras.step_spans entries overlap or are out of order" % where)
+            return None
+        spans.append((a, b, st))
+    if min(st for _, _, st in spans) != step:
+        errors.append("%s: thoras.step_seconds must equal the finest step in thoras.step_spans" % where)
+        return None
+    return spans
+
+
+def _check_spans(where, name, times, spans, errors):
+    """Every point lies in a span, on that span's grid."""
+    for t in times:
+        for a, b, st in spans:
+            if a <= t < b:
+                if (t - a) % st:
+                    errors.append("%s %s: point at %d is off the %ds grid of its step span" % (where, name, t, st))
+                    return
+                break
+        else:
+            errors.append("%s %s: point at %d is outside thoras.step_spans" % (where, name, t))
+            return
 
 
 def validate(doc):
@@ -172,6 +216,9 @@ def validate(doc):
         if tier not in TIERS:
             errors.append("%s: thoras.fidelity_tier must be one of %s" % (where, TIERS))
             tier = None
+        spans = None
+        if "thoras.step_spans" in attrs and step is not None:
+            spans = _parse_spans(where, attrs["thoras.step_spans"], step, errors)
         if not isinstance(attrs.get("thoras.source", ""), str) or not attrs.get("thoras.source"):
             errors.append("%s: thoras.source must be a non-empty string" % where)
         if "k8s.cluster.name" in attrs:
@@ -245,8 +292,10 @@ def validate(doc):
                 if step is None:
                     continue
                 r = _check_points("%s %s" % (where, name), name, specs[name], metric, step, errors)
+                if r and spans:
+                    _check_spans(where, name, r[2], spans, errors)
                 if r and specs[name][3]:
-                    first_last.append(r)
+                    first_last.append(r[:2])
         for name, spec in specs.items():
             if spec[3] and name not in present and name not in missing:
                 errors.append("%s: required metric %s is absent and not listed in thoras.missing_metrics" % (where, name))
@@ -254,11 +303,12 @@ def validate(doc):
                 errors.append("%s: %s is listed in thoras.missing_metrics but present" % (where, name))
 
         if tier is not None and step is not None and first_last:
-            span = max(l for _, l in first_last) - min(f for f, _ in first_last) + step
-            floor = _tier_floor(step, span)
+            coarse = max(st for _, _, st in spans) if spans else step
+            span = max(l for _, l in first_last) - min(f for f, _ in first_last) + coarse
+            floor = _tier_floor(coarse, span)
             if tier < floor:
                 errors.append("%s: fidelity tier %d claims more than step %ds over %.1f days supports (best is %d)"
-                              % (where, tier, step, span / DAY, floor))
+                              % (where, tier, coarse, span / DAY, floor))
 
     if len(clusters) > 1:
         errors.append("file mixes clusters: %s" % sorted(clusters))

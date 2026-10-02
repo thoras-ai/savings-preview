@@ -185,3 +185,55 @@ test('node prices set the rates and the basis names the caveats', () => {
   assert.match(rates.basis, /spot/);
   assert.match(rates.basis, /outside us-east-1/);
 });
+
+// Two hours of one container: the first hour rolled up to 5-minute points, the
+// second at 1 minute, as the poll adapter writes it.
+function mixedDoc({ cpuOld, cpuNew, peakOld, cpuReqOld = 2, cpuReqNew = 2 }) {
+  const t0 = 1000000;
+  const times = [];
+  for (let i = 0; i < 12; i++) times.push(t0 + i * 300);
+  for (let i = 0; i < 60; i++) times.push(t0 + 3600 + i * 60);
+  const pts = (f, int) => times.map((t, i) => {
+    const v = f(i, i < 12);
+    return int ? { timeUnixNano: String(t * 1e9), asInt: String(v) } : { timeUnixNano: String(t * 1e9), asDouble: v };
+  });
+  const spans = { key: 'thoras.step_spans', value: { arrayValue: { values: [
+    { stringValue: `${t0}/${t0 + 3600}/300` }, { stringValue: `${t0 + 3600}/${t0 + 7200}/60` }] } } };
+  const base = [S('k8s.cluster.name', 'c'), S('thoras.source', 'kubectl-snapshot'), I('thoras.step_seconds', 60), I('thoras.fidelity_tier', 3), spans,
+    S('k8s.namespace.name', 'ns'), S('k8s.deployment.name', 'api')];
+  const metrics = [
+    { name: 'container.cpu.usage', unit: '{cpu}', gauge: { dataPoints: pts((i, old) => (old ? cpuOld : cpuNew)) } },
+    { name: 'container.memory.working_set', unit: 'By', sum: { dataPoints: pts(() => GIB, true) } },
+    { name: 'k8s.container.cpu.request.desired', unit: '{cpu}', sum: { dataPoints: pts((i, old) => (old ? cpuReqOld : cpuReqNew)) } },
+    { name: 'k8s.container.memory.request.desired', unit: 'By', sum: { dataPoints: pts(() => 4 * GIB, true) } }
+  ];
+  if (peakOld !== undefined) {
+    metrics.push({ name: 'thoras.container.cpu.usage.max', unit: '{cpu}', gauge: { dataPoints: pts((i, old) => (old ? peakOld : cpuNew)) } });
+  }
+  return {
+    resourceMetrics: [
+      { resource: { attributes: base }, scopeMetrics: [{ metrics: [{ name: 'k8s.deployment.pod.desired', unit: '{pod}', sum: { dataPoints: pts(() => 1, true) } }] }] },
+      { resource: { attributes: base.concat([S('k8s.container.name', 'app')]) }, scopeMetrics: [{ metrics }] }
+    ]
+  };
+}
+
+test('step spans: rolled-up points cover their whole step and means are weighted by time', () => {
+  // Request 4 cores for the first hour and 2 for the second: an even split in time.
+  const r = model.analyze(mixedDoc({ cpuOld: 0.5, cpuNew: 0.5, cpuReqOld: 4, cpuReqNew: 2 }));
+  const w = r.workloads[0];
+  assert.strictEqual(w.status, 'ok');
+  assert.ok(Array.from(w.series.reqCpu).every(Number.isFinite), 'no gaps in the rolled-up hour');
+  assert.ok(Math.abs(w.reqCores - 3) < 1e-9, String(w.reqCores));
+  assert.strictEqual(r.fidelity.stepSeconds, 300);
+  assert.ok(r.series.reqCpu.every(Number.isFinite), 'cluster series has no gaps');
+});
+
+test('step spans: peaks come from the max series when present', () => {
+  // The first hour averages 0.2 but peaked at 1.5; the target follows the peak.
+  const withPeak = model.analyze(mixedDoc({ cpuOld: 0.2, cpuNew: 0.2, peakOld: 1.5 })).workloads[0];
+  const without = model.analyze(mixedDoc({ cpuOld: 0.2, cpuNew: 0.2 })).workloads[0];
+  assert.ok(Math.abs(withPeak.series.tgtCpu[5] - 1.65) < 1e-9, String(withPeak.series.tgtCpu[5]));
+  assert.ok(Math.abs(without.series.tgtCpu[5] - 0.22) < 1e-9, String(without.series.tgtCpu[5]));
+  assert.ok(withPeak.wasteCores < without.wasteCores);
+});

@@ -206,5 +206,55 @@ class RejectTest(unittest.TestCase):
         self.assertEqual(vc.validate(doc), [])
 
 
+class StepSpanTest(unittest.TestCase):
+    """A resource whose older points are 300s apart and newer ones 60s apart."""
+
+    def setUp(self):
+        self.doc = load()
+        self.app = find(self.doc, **{"k8s.container.name": "app"})
+        times = [int(p["timeUnixNano"]) // 10**9 for p in metrics(self.app)[0]["gauge"]["dataPoints"]]
+        self.first, self.last = times[0], times[-1]
+        self.mid = self.last - 3600
+        attr(self.app, "thoras.step_seconds")["value"] = {"intValue": "60"}
+        self.set_spans(["%d/%d/300" % (self.first, self.mid), "%d/%d/60" % (self.mid, self.last + 60)])
+
+    def set_spans(self, spans):
+        self.app["resource"]["attributes"] = [
+            a for a in self.app["resource"]["attributes"] if a["key"] != "thoras.step_spans"] + [
+            {"key": "thoras.step_spans", "value": {"arrayValue": {"values": [{"stringValue": x} for x in spans]}}}]
+
+    def assertHas(self, text):
+        errs = vc.validate(self.doc)
+        self.assertTrue(any(text in e for e in errs), "%r not in %r" % (text, errs))
+
+    def test_valid(self):
+        self.assertEqual(vc.validate(self.doc), [])
+
+    def test_max_metrics_are_optional_and_accepted(self):
+        usage = metrics(self.app)[0]
+        metrics(self.app).append(dict(copy.deepcopy(usage), name="thoras.container.cpu.usage.max"))
+        self.assertEqual(vc.validate(self.doc), [])
+
+    def test_point_outside_spans(self):
+        self.set_spans(["%d/%d/300" % (self.first + 300, self.mid), "%d/%d/60" % (self.mid, self.last + 60)])
+        self.assertHas("outside thoras.step_spans")
+
+    def test_point_off_span_grid(self):
+        self.set_spans(["%d/%d/300" % (self.first - 60, self.mid - 60), "%d/%d/60" % (self.mid - 60, self.last + 60)])
+        self.assertHas("off the 300s grid")
+
+    def test_bad_entry(self):
+        self.set_spans(["%d-%d-300" % (self.first, self.last)])
+        self.assertHas("is not START/END/STEP")
+
+    def test_finest_step_must_match(self):
+        self.set_spans(["%d/%d/300" % (self.first, self.last + 300)])
+        self.assertHas("finest step")
+
+    def test_tier_follows_coarsest_span(self):
+        attr(self.app, "thoras.fidelity_tier")["value"] = {"intValue": "1"}
+        self.assertHas("claims more than step 300s")
+
+
 if __name__ == "__main__":
     unittest.main()
