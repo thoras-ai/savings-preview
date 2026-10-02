@@ -16,7 +16,7 @@ import (
 
 // The readings directory holds:
 //
-//	meta.json             cluster, step, rollup step and grid origin
+//	meta.json             cluster, step, rollup step, grid origin and the latest --keep-raw
 //	lock                  held by the poller writing the directory
 //	raw-<start>.bin       readings at the polling step, one file per segment
 //	roll-<start>.bin.gz   the same segment rolled up to the rollup step
@@ -34,6 +34,10 @@ type Meta struct {
 	Step       int    `json:"step"`
 	RollupStep int    `json:"rollup_step"`
 	Origin     int64  `json:"origin"`
+	// KeepRaw is the --keep-raw of the latest poll in seconds, so that an
+	// export can say when readings were rolled up. Directories written before
+	// it was recorded leave it nil.
+	KeepRaw *int64 `json:"keep_raw_seconds,omitempty"`
 }
 
 // SegmentSeconds is the span of one segment: about an hour, and a whole number
@@ -65,6 +69,11 @@ func rollName(start int64) string { return fmt.Sprintf("roll-%d.bin.gz", start) 
 
 // ErrLocked means another poller holds the readings directory.
 var ErrLocked = errors.New("locked")
+
+func writeMeta(dir string, m Meta) error {
+	b, _ := json.Marshal(m)
+	return writeAtomic(filepath.Join(dir, "meta.json"), func(w io.Writer) error { _, err := w.Write(b); return err })
+}
 
 func readMeta(dir string) (Meta, error) {
 	var m Meta
@@ -229,9 +238,14 @@ func (st *Store) prepare(m Meta) error {
 				st.Dir, old.Cluster, old.Step, old.RollupStep)
 		}
 		st.Meta = old
+		if m.KeepRaw != nil && (old.KeepRaw == nil || *old.KeepRaw != *m.KeepRaw) {
+			st.Meta.KeepRaw = m.KeepRaw
+			if err := writeMeta(st.Dir, st.Meta); err != nil {
+				return err
+			}
+		}
 	case os.IsNotExist(err):
-		b, _ := json.Marshal(m)
-		if err := writeAtomic(filepath.Join(st.Dir, "meta.json"), func(w io.Writer) error { _, err := w.Write(b); return err }); err != nil {
+		if err := writeMeta(st.Dir, m); err != nil {
 			return err
 		}
 		st.Meta = m

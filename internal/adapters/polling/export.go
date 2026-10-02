@@ -97,9 +97,19 @@ func duration(sec int64) string {
 	return b.String()
 }
 
+// keepRaw is the --keep-raw the readings were taken with, or -1 when the
+// directory does not record it.
+func (m Meta) keepRaw() time.Duration {
+	if m.KeepRaw == nil {
+		return -1
+	}
+	return time.Duration(*m.KeepRaw) * time.Second
+}
+
 // Progress says how much has been collected and how much more each tier needs.
 // keepRaw is how long readings stay at the polling step before being rolled up
-// to m.RollupStep; zero means they are never rolled up.
+// to m.RollupStep; zero means they are never rolled up, and a negative value
+// that it is not known.
 func (s *Summary) Progress(m Meta, keepRaw time.Duration) string {
 	span := s.Span()
 	tier := contract.TierFor(s.coarsest(), s.Covered)
@@ -113,7 +123,11 @@ func (s *Summary) Progress(m Meta, keepRaw time.Duration) string {
 		fmt.Fprintf(&b, " over %s with %s of gaps", duration(span), duration(gap))
 	}
 	if s.Steps[m.RollupStep] && m.RollupStep != m.Step {
-		fmt.Fprintf(&b, " (older than %s kept at %s)", duration(int64(keepRaw/time.Second)), time.Duration(m.RollupStep)*time.Second)
+		if keepRaw > 0 {
+			fmt.Fprintf(&b, " (older than %s kept at %s)", duration(int64(keepRaw/time.Second)), time.Duration(m.RollupStep)*time.Second)
+		} else {
+			fmt.Fprintf(&b, " (older readings kept at %s)", time.Duration(m.RollupStep)*time.Second)
+		}
 	}
 	fmt.Fprintf(&b, ", fidelity tier %d.", tier)
 	if s.Readings == 1 {
@@ -122,7 +136,10 @@ func (s *Summary) Progress(m Meta, keepRaw time.Duration) string {
 	const day = 86400
 	// The step a run of this length ends up with once old readings roll up.
 	stepAt := func(days int64) int {
-		if m.RollupStep != m.Step && keepRaw > 0 && int64(keepRaw/time.Second) < days*day {
+		if m.RollupStep == m.Step {
+			return m.Step
+		}
+		if keepRaw < 0 && s.Steps[m.RollupStep] || keepRaw > 0 && int64(keepRaw/time.Second) < days*day {
 			return m.RollupStep
 		}
 		return m.Step
