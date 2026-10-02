@@ -59,6 +59,7 @@ It prints the identity the kubeconfig gives, the result of `kubectl auth can-i` 
 - `docs/contract.md`: the OTel file every adapter writes and the report reads.
 - `fixtures/savings-preview.otlp.json`: a synthetic file that follows the contract. Regenerate it with `python3 scripts/gen_fixture.py`.
 - `fixtures/minikube-poll.otlp.json`: one minute of `savings-preview poll` readings from a local minikube cluster, with the cluster, node, namespace and workload names replaced (`kube-system`, `cert-manager`, `coredns` and `metrics-server` kept).
+- `scripts/gen_demo`: writes `fixtures/demo-cluster.compact.otlp.json`, a 60-workload cluster for demos, listed on the published page as Demo cluster. The file is about 20 MB, so it is generated rather than committed: run `go run ./scripts/gen_demo` (or `make demo`) before building the site. The output is the same on every run. `docs/demo.md` is a five-minute walk through the report with it.
 - `scripts/validate_contract.py FILE`: checks a file against the contract.
 - `src/` and `scripts/build_report.py`: the report page. It reads one contract file and shows spend, savings, a requested-versus-target chart and a workload table.
 - `docs/security.md`: what the CLI reads and writes, where its output goes, and how to check. `deploy/rbac/` has read-only ServiceAccounts for each source.
@@ -97,7 +98,7 @@ Each section is a script in `src/js/section-*.js` that registers itself with `SP
 
 The page fetches `savings-preview.otlp.json` from the same directory, or the file named in the `data` query parameter. A page that holds the file in a `<script type="application/json" id="report-data">` element, like the `report.html` in the zip, uses that instead of fetching. When the fetch fails, for example when the page is opened from disk, it asks for a file instead: a contract file, a `savings-preview.zip`, or a `report.html`, chosen or dropped on the page and read in the browser. The header switches between the light and dark themes or follows the system (Auto); the choice is kept in the browser's local storage. Print summary in the header, or the browser's own print command, prints a letter-size summary in the light theme: the headline figures, confidence, spend over the window, the top workloads and how the figure is computed, all under the current settings.
 
-`python3 scripts/build_report.py --site OUTDIR` builds the copy for GitHub Pages: it opens on the upload screen and lists the two fixtures as samples, copied to `OUTDIR/samples/`. `.github/workflows/pages.yml` builds and deploys it on every push to `main`; the repository's Pages source must be set to GitHub Actions. The site holds only the page and the two fixtures, no customer data.
+`python3 scripts/build_report.py --site OUTDIR` builds the copy for GitHub Pages: it opens on the upload screen and lists the two fixtures and the demo cluster as samples, copied to `OUTDIR/samples/`. Generate the demo cluster first. `.github/workflows/pages.yml` builds and deploys it on every push to `main`; the repository's Pages source must be set to GitHub Actions. The workflow generates the demo cluster before the build. The site holds only the page and the three samples, no customer data.
 
 To try it with the fixture:
 

@@ -48,9 +48,14 @@ FONTS = [
 ]
 SAMPLES = [
     {
+        "file": "fixtures/demo-cluster.compact.otlp.json",
+        "name": "Demo cluster",
+        "detail": "60 workloads in 8 namespaces, 14 days at 5-minute steps, generated",
+    },
+    {
         "file": "fixtures/savings-preview.otlp.json",
         "name": "Synthetic cluster",
-        "detail": "14 days at 1-minute steps, generated",
+        "detail": "14 days at 5-minute steps, generated",
     },
     {
         "file": "fixtures/minikube-poll.otlp.json",
@@ -91,6 +96,8 @@ def build_site(out):
     os.makedirs(os.path.join(out, "samples"), exist_ok=True)
     for s in SAMPLES:
         name = os.path.basename(s["file"])
+        if not os.path.isfile(os.path.join(ROOT, s["file"])):
+            raise SystemExit("%s is missing; generate it with go run ./scripts/gen_demo" % s["file"])
         shutil.copyfile(os.path.join(ROOT, s["file"]), os.path.join(out, "samples", name))
         listed.append({"url": "samples/" + name, "name": s["name"], "detail": s["detail"]})
     attr = html.escape(json.dumps(listed), quote=True)

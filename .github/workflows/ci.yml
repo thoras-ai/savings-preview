@@ -115,6 +115,13 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          check-latest: true
+          cache: false
+      - name: Generate the demo cluster sample
+        run: go run ./scripts/gen_demo
       - name: Contract and report build tests
         run: python3 -m unittest discover -s tests
       - name: Report page tests
@@ -123,3 +130,4 @@ jobs:
         run: |
           python3 scripts/validate_contract.py fixtures/savings-preview.otlp.json
           python3 scripts/validate_contract.py fixtures/minikube-poll.otlp.json
+          python3 scripts/validate_contract.py fixtures/demo-cluster.compact.otlp.json
