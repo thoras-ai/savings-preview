@@ -203,7 +203,7 @@ function largeDoc() {
   return { resourceMetrics: rms };
 }
 
-test('a lever change on 1,000 workloads recomputes and renders the figures within 200 ms', () => {
+test('a lever change on 1,000 workloads recomputes and builds the figures within 200 ms', () => {
   const data = model.prepare(largeDoc());
   assert.strictEqual(data.workloads.length, 1000);
   let st = Object.assign({}, state.DEFAULTS);

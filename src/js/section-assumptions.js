@@ -108,7 +108,7 @@
       '<div class="card lv-result"><h2>Result with these settings <span class="pill pill-info" data-changed hidden>Changed from defaults</span></h2><div class="lv-kpis" data-kpis></div></div>' +
       '<div class="pair">' + rightSizing(data) + pricing() + '</div>' +
       '<div class="pair">' + namespaces(data) + timeRange(view.choices) + '</div>' +
-      '<p class="lv-link">Link for this view: <span data-link></span></p>';
+      '<p class="lv-link">Link for this view: <span data-current-link></span></p>';
     q(host, '#lv-cloud').value = view.cloud;
     q(host, '#lv-region').value = view.region;
     bind(host, ctx.set);
@@ -155,8 +155,9 @@
     };
     host.addEventListener('input', function (e) {
       if (e.target.type === 'range') sliderLabel(e.target);
-      // Choosing from the list fires input only; typing a full name counts too.
-      if (e.target.id === 'lv-type' && prices.cloudOf(e.target.value.trim())) pickType(host, set);
+      // Choosing from the list fires input only. A typed name commits on
+      // change, so n1-standard-16 does not commit n1-standard-1 on the way.
+      if (e.target.id === 'lv-type' && (!e.inputType || e.inputType === 'insertReplacementText') && prices.cloudOf(e.target.value.trim())) pickType(host, set);
     });
     host.addEventListener('change', function (e) {
       var el = e.target, name = el.getAttribute('data-lever');
@@ -247,12 +248,15 @@
     var picked = st.rates && st.node ? prices.parseKey(st.node) : null;
     if (picked && (Math.abs(picked.perCore - st.rates.perCore) > picked.perCore * 1e-4 || Math.abs(picked.perGiB - st.rates.perGiB) > picked.perGiB * 1e-4)) picked = null;
     var type = q(host, '#lv-type');
-    if (picked && (picked.cloud !== view.cloud || picked.region !== view.region)) {
+    // The picker follows a new pick, or one from a link, but not a cloud or
+    // region the reader chose since.
+    if (picked && st.node !== view.synced && (picked.cloud !== view.cloud || picked.region !== view.region)) {
       view.cloud = picked.cloud; view.region = picked.region;
       q(host, '#lv-cloud').value = view.cloud;
       setRegions(host);
     }
-    setValue(type, picked ? picked.type : '');
+    view.synced = st.node;
+    setValue(type, picked && picked.cloud === view.cloud && picked.region === view.region ? picked.type : '');
     type.placeholder = 'Search, e.g. ' + EXAMPLE[view.cloud];
     q(host, '[data-hint="type"]').textContent = '';
     var cpu = q(host, '#lv-cpu'), gib = q(host, '#lv-gib'), base = data.pricing;
@@ -304,7 +308,7 @@
       to.value = String(b);
     }
 
-    q(host, '[data-link]').textContent = location.href;
+    q(host, '[data-current-link]').textContent = location.href;
   }
 
   function render(host, ctx) {

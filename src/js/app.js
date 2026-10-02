@@ -63,6 +63,7 @@
   function writeHash(st) {
     var h = state.serialize(st);
     try { history.replaceState(null, '', location.pathname + location.search + (h ? '#' + h : '')); } catch (e) { /* not allowed here */ }
+    Array.prototype.forEach.call(document.querySelectorAll('[data-current-link]'), function (el) { el.textContent = location.href; });
     // Each section link carries the settings, so it opens the same view in a new tab.
     Array.prototype.forEach.call($('secbar').querySelectorAll('a[data-section]'), function (a) {
       a.setAttribute('href', '#' + state.serialize(Object.assign({}, st, { section: a.getAttribute('data-section') })));
