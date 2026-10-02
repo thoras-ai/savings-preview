@@ -1,6 +1,6 @@
 # Security
 
-Savings Preview is a command-line program that runs on your machine with a kubeconfig you choose. It installs nothing in the cluster, changes nothing in it, and sends nothing anywhere except requests to your Kubernetes API server (or to a metrics store URL you pass with `--url`), apart from any credential plugin your kubeconfig runs, such as `aws eks get-token`. A kubeconfig for the ServiceAccount in `deploy/rbac/` holds a token and runs no plugin. Everything it produces stays in local files.
+Savings Preview is a command-line program that runs on your machine with a kubeconfig you choose. It installs nothing in the cluster, changes nothing in it, and sends nothing anywhere except requests to your Kubernetes API server (or to a metrics store URL you pass with `--url`, or to the Datadog API with `savings-preview datadog`), apart from any credential plugin your kubeconfig runs, such as `aws eks get-token`. A kubeconfig for the ServiceAccount in `deploy/rbac/` holds a token and runs no plugin. Everything it produces stays in local files.
 
 ## What it reads
 
@@ -48,13 +48,17 @@ A `list` on pods returns whole pod objects: container images, commands and argum
 
 The default command. It needs the access of `prometheus` (without `--target`, discovery) and, when it falls back to polling, the access of `poll`; `poll-and-prometheus.yaml` grants both. With `--source poll` it needs only `poll.yaml`, and with `--source prometheus` only the `prometheus` roles. When a request is forbidden during discovery, it reports why and polls instead. Before reading anything it prints which of these reads it will make.
 
+### `savings-preview datadog`
+
+Reads usage history from the Datadog metrics query API and needs no Kubernetes access. It sends an API key and an application key, read from files or environment variables, to the Datadog site you choose, and calls only `GET /api/v2/validate_keys` and `POST /api/v2/query/timeseries`. An application key scoped to `timeseries_query` is enough; [datadog-adapter.md](datadog-adapter.md#keys) shows how to create one. The metric queries are in `internal/adapters/datadog/metrics.go`. The keys are not printed or logged.
+
 ## What it writes
 
 Nothing in the cluster. None of the roles in `deploy/rbac/` grants a write verb (`create`, `update`, `patch`, `delete`) on any resource, and none grants `get` or `watch` on pods, Secrets or ConfigMaps.
 
 On your machine it writes:
 
-- the output file, `savings-preview.otlp.json` by default (`--out` for `prometheus` and `run`, `-o` for `poll` and `run`);
+- the output file, `savings-preview.otlp.json` by default (`--out` for `prometheus`, `datadog` and `run`, `-o` for `poll` and `run`);
 - for `poll`, and for `run` when it polls, a `FILE.readings/` directory holding the readings taken so far, so a stopped run can continue;
 - for `run`, a zip next to the output file (`savings-preview.zip` by default) holding the output file, `summary.json` (cluster name, time span, fidelity tier and the savings totals) and `report.html`, the report page with the output file inside it.
 
@@ -68,7 +72,7 @@ It contains no Secrets, environment variables, logs, images, annotations, labels
 
 ## Where the data goes
 
-Nowhere, unless you send it. The program makes no network requests other than to the API server, or to the `--url` store. The report page (`scripts/build_report.py`, also built into the binary) is one offline HTML file that reads the output file in the browser and makes no network requests. `run` serves the page and the output file on 127.0.0.1 on a random port until you press Ctrl-C; the server answers only requests addressed to that address, so it cannot be reached from other machines or read by a web page under another name. Sharing the output file or the zip with Thoras is a separate step that you choose to take.
+Nowhere, unless you send it. The program makes no network requests other than to the API server, the `--url` store, or the Datadog API. The report page (`scripts/build_report.py`, also built into the binary) is one offline HTML file that reads the output file in the browser and makes no network requests. `run` serves the page and the output file on 127.0.0.1 on a random port until you press Ctrl-C; the server answers only requests addressed to that address, so it cannot be reached from other machines or read by a web page under another name. Sharing the output file or the zip with Thoras is a separate step that you choose to take.
 
 ## How to check this
 
