@@ -15,6 +15,9 @@ import (
 // encoded parameters, so the run can be replayed without the store.
 type recording struct {
 	Store     string              `json:"store"`
+	Backend   string              `json:"backend,omitempty"`  // as ResolveBackend names it; empty for Mimir
+	Cluster   string              `json:"cluster,omitempty"`  // empty means "minikube"
+	Selector  string              `json:"selector,omitempty"` // as ParseSelector returns it
 	Now       int64               `json:"now"`
 	Days      int                 `json:"days"`
 	StepS     int                 `json:"step_seconds"`

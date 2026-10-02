@@ -1,0 +1,5948 @@
+{
+ "store": "grafana-cloud",
+ "backend": "grafana-cloud",
+ "cluster": "cluster-1",
+ "selector": "cluster=\"cluster-1\"",
+ "now": 1790934000,
+ "days": 1,
+ "step_seconds": 60,
+ "headers": null,
+ "responses": {
+  "/api/v1/query?query=count%28%0A++max+by+%28namespace%2C+pod%29+%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%2Ccontainer%3D%22%22%2Cpod%21%3D%22%22%7D%29%0A++unless+on+%28namespace%2C+pod%29+max+by+%28namespace%2C+pod%29+%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%2Ccontainer%21%3D%22%22%2Ccontainer%21%3D%22POD%22%2Cimage%21%3D%22%22%7D%29%0A++and+on+%28namespace%2C+pod%29+max+by+%28namespace%2C+pod%29+%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D~%22ReplicaSet%7CStatefulSet%22%7D%29%0A%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28container_cpu_usage_seconds_total%7Bcluster%3D%22cluster-1%22%2Cnamespace%21%3D%22%22%2Cpod%21%3D%22%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "42"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28container_cpu_usage_seconds_total%7Bcluster%3D%22cluster-1%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "42"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%2Ccontainer%21%3D%22%22%2Ccontainer%21%3D%22POD%22%2Cimage%21%3D%22%22%7D%29\u0026time=1790847600": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%2Ccontainer%21%3D%22%22%2Ccontainer%21%3D%22POD%22%2Cimage%21%3D%22%22%7D%29\u0026time=1790890800": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%2Ccontainer%21%3D%22%22%2Ccontainer%21%3D%22POD%22%2Cimage%21%3D%22%22%7D%29\u0026time=1790912400": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%2Ccontainer%21%3D%22%22%2Ccontainer%21%3D%22POD%22%2Cimage%21%3D%22%22%7D%29\u0026time=1790923200": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%2Ccontainer%21%3D%22%22%2Ccontainer%21%3D%22POD%22%2Cimage%21%3D%22%22%7D%29\u0026time=1790928600": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%2Ccontainer%21%3D%22%22%2Ccontainer%21%3D%22POD%22%2Cimage%21%3D%22%22%7D%29\u0026time=1790931300": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%2Ccontainer%21%3D%22%22%2Ccontainer%21%3D%22POD%22%2Cimage%21%3D%22%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "42"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%2Cnamespace%21%3D%22%22%2Cpod%21%3D%22%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "42"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "42"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_deployment_spec_replicas%7Bcluster%3D%22cluster-1%22%2Cnamespace%21%3D%22%22%2Cdeployment%21%3D%22%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "22"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_deployment_spec_replicas%7Bcluster%3D%22cluster-1%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "22"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_node_status_allocatable%7Bcluster%3D%22cluster-1%22%2Cnode%21%3D%22%22%2Cresource%21%3D%22%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "8"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_node_status_allocatable%7Bcluster%3D%22cluster-1%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "8"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_container_resource_requests%7Bcluster%3D%22cluster-1%22%2Cnamespace%21%3D%22%22%2Cpod%21%3D%22%22%2Ccontainer%21%3D%22%22%2Cresource%21%3D%22%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "51"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_container_resource_requests%7Bcluster%3D%22cluster-1%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "51"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_container_status_restarts_total%7Bcluster%3D%22cluster-1%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "42"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cnamespace%21%3D%22%22%2Cpod%21%3D%22%22%2Cowner_kind%21%3D%22%22%2Cowner_name%21%3D%22%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "33"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "34"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_status_phase%7Bcluster%3D%22cluster-1%22%2Cnamespace%21%3D%22%22%2Cpod%21%3D%22%22%2Cphase%21%3D%22%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "170"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_status_phase%7Bcluster%3D%22cluster-1%22%2Cphase%3D%22Running%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "34"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_status_phase%7Bcluster%3D%22cluster-1%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "170"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_replicaset_owner%7Bcluster%3D%22cluster-1%22%2Cnamespace%21%3D%22%22%2Creplicaset%21%3D%22%22%2Cowner_kind%21%3D%22%22%2Cowner_name%21%3D%22%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "79"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_replicaset_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22Deployment%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "79"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_replicaset_owner%7Bcluster%3D%22cluster-1%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "79"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_statefulset_replicas%7Bcluster%3D%22cluster-1%22%2Cnamespace%21%3D%22%22%2Cstatefulset%21%3D%22%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "2"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count%28kube_statefulset_replicas%7Bcluster%3D%22cluster-1%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934000,
+        "2"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count+by+%28cluster%2C+cluster_name%2C+cluster_id%2C+k8s_cluster%2C+k8s_cluster_name%2C+kubernetes_cluster%29+%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "cluster": "cluster-1",
+        "k8s_cluster_name": "cluster-1"
+       },
+       "value": [
+        1790934000,
+        "42"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count+by+%28cluster%2C+cluster_name%2C+cluster_id%2C+k8s_cluster%2C+k8s_cluster_name%2C+kubernetes_cluster%29+%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%7D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "cluster": "cluster-1",
+        "k8s_cluster_name": "cluster-1"
+       },
+       "value": [
+        1790934000,
+        "34"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=count+by+%28cluster%2C+cluster_name%2C+cluster_id%2C+k8s_cluster%2C+k8s_cluster_name%2C+kubernetes_cluster%29+%28last_over_time%28kube_node_info%7Bcluster%3D%22cluster-1%22%7D%5B86400s%5D%29%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "cluster": "cluster-1",
+        "k8s_cluster_name": "cluster-1"
+       },
+       "value": [
+        1790934000,
+        "1"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=last_over_time%28kube_node_info%7Bcluster%3D%22cluster-1%22%7D%5B86400s%5D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "__name__": "kube_node_info",
+        "cluster": "cluster-1",
+        "k8s_cluster_name": "cluster-1",
+        "node": "node-1"
+       },
+       "value": [
+        1790934000,
+        "1"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=last_over_time%28kube_node_labels%7Bcluster%3D%22cluster-1%22%7D%5B86400s%5D%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "__name__": "kube_node_labels",
+        "cluster": "cluster-1",
+        "k8s_cluster_name": "cluster-1",
+        "node": "node-1"
+       },
+       "value": [
+        1790934000,
+        "1"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=min%28prometheus_tsdb_lowest_timestamp_seconds%29\u0026time=1790934000": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query?query=vector%281%29": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790934030.467,
+        "1"
+       ]
+      }
+     ],
+     "resultType": "vector"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_limits%7Bcluster%3D%22cluster-1%22%2Cresource%3D%22cpu%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bcluster%3D%22cluster-1%22%2Cphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "container": "container-22",
+        "namespace": "namespace-8",
+        "workload": "workload-19"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.5"
+        ],
+        [
+         1790933580,
+         "0.5"
+        ],
+        [
+         1790933640,
+         "0.5"
+        ],
+        [
+         1790933700,
+         "0.5"
+        ],
+        [
+         1790933760,
+         "0.5"
+        ],
+        [
+         1790933820,
+         "0.5"
+        ],
+        [
+         1790933880,
+         "0.5"
+        ],
+        [
+         1790933940,
+         "0.5"
+        ],
+        [
+         1790934000,
+         "0.5"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-24",
+        "namespace": "namespace-7",
+        "workload": "workload-22"
+       },
+       "values": [
+        [
+         1790933520,
+         "2"
+        ],
+        [
+         1790933580,
+         "2"
+        ],
+        [
+         1790933640,
+         "2"
+        ],
+        [
+         1790933700,
+         "2"
+        ],
+        [
+         1790933760,
+         "2"
+        ],
+        [
+         1790933820,
+         "2"
+        ],
+        [
+         1790933880,
+         "2"
+        ],
+        [
+         1790933940,
+         "2"
+        ],
+        [
+         1790934000,
+         "2"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_limits%7Bcluster%3D%22cluster-1%22%2Cresource%3D%22cpu%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bcluster%3D%22cluster-1%22%2Cphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_limits%7Bcluster%3D%22cluster-1%22%2Cresource%3D%22memory%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bcluster%3D%22cluster-1%22%2Cphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "container": "container-9",
+        "namespace": "namespace-3",
+        "workload": "workload-4"
+       },
+       "values": [
+        [
+         1790933520,
+         "178257920"
+        ],
+        [
+         1790933580,
+         "178257920"
+        ],
+        [
+         1790933640,
+         "178257920"
+        ],
+        [
+         1790933700,
+         "178257920"
+        ],
+        [
+         1790933760,
+         "178257920"
+        ],
+        [
+         1790933820,
+         "178257920"
+        ],
+        [
+         1790933880,
+         "178257920"
+        ],
+        [
+         1790933940,
+         "178257920"
+        ],
+        [
+         1790934000,
+         "178257920"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-13",
+        "namespace": "namespace-7",
+        "workload": "workload-21"
+       },
+       "values": [
+        [
+         1790933520,
+         "268435456"
+        ],
+        [
+         1790933580,
+         "268435456"
+        ],
+        [
+         1790933640,
+         "268435456"
+        ],
+        [
+         1790933700,
+         "268435456"
+        ],
+        [
+         1790933760,
+         "268435456"
+        ],
+        [
+         1790933820,
+         "268435456"
+        ],
+        [
+         1790933880,
+         "268435456"
+        ],
+        [
+         1790933940,
+         "268435456"
+        ],
+        [
+         1790934000,
+         "268435456"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-17",
+        "namespace": "namespace-7",
+        "workload": "workload-15"
+       },
+       "values": [
+        [
+         1790933520,
+         "4294967296"
+        ],
+        [
+         1790933580,
+         "4294967296"
+        ],
+        [
+         1790933640,
+         "4294967296"
+        ],
+        [
+         1790933700,
+         "4294967296"
+        ],
+        [
+         1790933760,
+         "4294967296"
+        ],
+        [
+         1790933820,
+         "4294967296"
+        ],
+        [
+         1790933880,
+         "4294967296"
+        ],
+        [
+         1790933940,
+         "4294967296"
+        ],
+        [
+         1790934000,
+         "4294967296"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-18",
+        "namespace": "namespace-7",
+        "workload": "workload-11"
+       },
+       "values": [
+        [
+         1790933520,
+         "8589934592"
+        ],
+        [
+         1790933580,
+         "8589934592"
+        ],
+        [
+         1790933640,
+         "8589934592"
+        ],
+        [
+         1790933700,
+         "8589934592"
+        ],
+        [
+         1790933760,
+         "8589934592"
+        ],
+        [
+         1790933820,
+         "8589934592"
+        ],
+        [
+         1790933880,
+         "8589934592"
+        ],
+        [
+         1790933940,
+         "8589934592"
+        ],
+        [
+         1790934000,
+         "8589934592"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-19",
+        "namespace": "namespace-7",
+        "workload": "workload-16"
+       },
+       "values": [
+        [
+         1790933520,
+         "268435456"
+        ],
+        [
+         1790933580,
+         "268435456"
+        ],
+        [
+         1790933640,
+         "268435456"
+        ],
+        [
+         1790933700,
+         "268435456"
+        ],
+        [
+         1790933760,
+         "268435456"
+        ],
+        [
+         1790933820,
+         "268435456"
+        ],
+        [
+         1790933880,
+         "268435456"
+        ],
+        [
+         1790933940,
+         "268435456"
+        ],
+        [
+         1790934000,
+         "268435456"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-20",
+        "namespace": "namespace-8",
+        "workload": "workload-17"
+       },
+       "values": [
+        [
+         1790933520,
+         "1073741824"
+        ],
+        [
+         1790933580,
+         "1073741824"
+        ],
+        [
+         1790933640,
+         "1073741824"
+        ],
+        [
+         1790933700,
+         "1073741824"
+        ],
+        [
+         1790933760,
+         "1073741824"
+        ],
+        [
+         1790933820,
+         "1073741824"
+        ],
+        [
+         1790933880,
+         "1073741824"
+        ],
+        [
+         1790933940,
+         "1073741824"
+        ],
+        [
+         1790934000,
+         "1073741824"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-21",
+        "namespace": "namespace-8",
+        "workload": "workload-18"
+       },
+       "values": [
+        [
+         1790933520,
+         "268435456"
+        ],
+        [
+         1790933580,
+         "268435456"
+        ],
+        [
+         1790933640,
+         "268435456"
+        ],
+        [
+         1790933700,
+         "268435456"
+        ],
+        [
+         1790933760,
+         "268435456"
+        ],
+        [
+         1790933820,
+         "268435456"
+        ],
+        [
+         1790933880,
+         "268435456"
+        ],
+        [
+         1790933940,
+         "268435456"
+        ],
+        [
+         1790934000,
+         "268435456"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-22",
+        "namespace": "namespace-8",
+        "workload": "workload-19"
+       },
+       "values": [
+        [
+         1790933520,
+         "268435456"
+        ],
+        [
+         1790933580,
+         "268435456"
+        ],
+        [
+         1790933640,
+         "268435456"
+        ],
+        [
+         1790933700,
+         "268435456"
+        ],
+        [
+         1790933760,
+         "268435456"
+        ],
+        [
+         1790933820,
+         "268435456"
+        ],
+        [
+         1790933880,
+         "268435456"
+        ],
+        [
+         1790933940,
+         "268435456"
+        ],
+        [
+         1790934000,
+         "268435456"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-23",
+        "namespace": "namespace-7",
+        "workload": "workload-21"
+       },
+       "values": [
+        [
+         1790933520,
+         "2147483648"
+        ],
+        [
+         1790933580,
+         "2147483648"
+        ],
+        [
+         1790933640,
+         "2147483648"
+        ],
+        [
+         1790933700,
+         "2147483648"
+        ],
+        [
+         1790933760,
+         "2147483648"
+        ],
+        [
+         1790933820,
+         "2147483648"
+        ],
+        [
+         1790933880,
+         "2147483648"
+        ],
+        [
+         1790933940,
+         "2147483648"
+        ],
+        [
+         1790934000,
+         "2147483648"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-24",
+        "namespace": "namespace-7",
+        "workload": "workload-22"
+       },
+       "values": [
+        [
+         1790933520,
+         "2147483648"
+        ],
+        [
+         1790933580,
+         "2147483648"
+        ],
+        [
+         1790933640,
+         "2147483648"
+        ],
+        [
+         1790933700,
+         "2147483648"
+        ],
+        [
+         1790933760,
+         "2147483648"
+        ],
+        [
+         1790933820,
+         "2147483648"
+        ],
+        [
+         1790933880,
+         "2147483648"
+        ],
+        [
+         1790933940,
+         "2147483648"
+        ],
+        [
+         1790934000,
+         "2147483648"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-25",
+        "namespace": "namespace-7",
+        "workload": "workload-23"
+       },
+       "values": [
+        [
+         1790933520,
+         "4294967296"
+        ],
+        [
+         1790933580,
+         "4294967296"
+        ],
+        [
+         1790933640,
+         "4294967296"
+        ],
+        [
+         1790933700,
+         "4294967296"
+        ],
+        [
+         1790933760,
+         "4294967296"
+        ],
+        [
+         1790933820,
+         "4294967296"
+        ],
+        [
+         1790933880,
+         "4294967296"
+        ],
+        [
+         1790933940,
+         "4294967296"
+        ],
+        [
+         1790934000,
+         "4294967296"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-26",
+        "namespace": "namespace-7",
+        "workload": "workload-24"
+       },
+       "values": [
+        [
+         1790933520,
+         "4294967296"
+        ],
+        [
+         1790933580,
+         "4294967296"
+        ],
+        [
+         1790933640,
+         "4294967296"
+        ],
+        [
+         1790933700,
+         "4294967296"
+        ],
+        [
+         1790933760,
+         "4294967296"
+        ],
+        [
+         1790933820,
+         "4294967296"
+        ],
+        [
+         1790933880,
+         "4294967296"
+        ],
+        [
+         1790933940,
+         "4294967296"
+        ],
+        [
+         1790934000,
+         "4294967296"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-28",
+        "namespace": "namespace-7",
+        "workload": "workload-11"
+       },
+       "values": [
+        [
+         1790933520,
+         "17179869184"
+        ],
+        [
+         1790933580,
+         "17179869184"
+        ],
+        [
+         1790933640,
+         "17179869184"
+        ],
+        [
+         1790933700,
+         "17179869184"
+        ],
+        [
+         1790933760,
+         "17179869184"
+        ],
+        [
+         1790933820,
+         "17179869184"
+        ],
+        [
+         1790933880,
+         "17179869184"
+        ],
+        [
+         1790933940,
+         "17179869184"
+        ],
+        [
+         1790934000,
+         "17179869184"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_limits%7Bcluster%3D%22cluster-1%22%2Cresource%3D%22memory%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bcluster%3D%22cluster-1%22%2Cphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "container": "container-28",
+        "namespace": "namespace-8",
+        "workload": "workload-20"
+       },
+       "values": [
+        [
+         1790933520,
+         "2147483648"
+        ],
+        [
+         1790933580,
+         "2147483648"
+        ],
+        [
+         1790933640,
+         "2147483648"
+        ],
+        [
+         1790933700,
+         "2147483648"
+        ],
+        [
+         1790933760,
+         "2147483648"
+        ],
+        [
+         1790933820,
+         "2147483648"
+        ],
+        [
+         1790933880,
+         "2147483648"
+        ],
+        [
+         1790933940,
+         "2147483648"
+        ],
+        [
+         1790934000,
+         "2147483648"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_requests%7Bcluster%3D%22cluster-1%22%2Cresource%3D%22cpu%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bcluster%3D%22cluster-1%22%2Cphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "container": "container-3",
+        "namespace": "namespace-5",
+        "workload": "workload-14"
+       },
+       "values": [
+        [
+         1790933880,
+         "0.5"
+        ],
+        [
+         1790933940,
+         "0.5"
+        ],
+        [
+         1790934000,
+         "0.5"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-9",
+        "namespace": "namespace-3",
+        "workload": "workload-4"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.1"
+        ],
+        [
+         1790933580,
+         "0.1"
+        ],
+        [
+         1790933640,
+         "0.1"
+        ],
+        [
+         1790933700,
+         "0.1"
+        ],
+        [
+         1790933760,
+         "0.1"
+        ],
+        [
+         1790933820,
+         "0.1"
+        ],
+        [
+         1790933880,
+         "0.1"
+        ],
+        [
+         1790933940,
+         "0.1"
+        ],
+        [
+         1790934000,
+         "0.1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-10",
+        "namespace": "namespace-5",
+        "workload": "workload-10"
+       },
+       "values": [
+        [
+         1790933880,
+         "0.02"
+        ],
+        [
+         1790933940,
+         "0.02"
+        ],
+        [
+         1790934000,
+         "0.02"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-12",
+        "namespace": "namespace-3",
+        "workload": "workload-12"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.1"
+        ],
+        [
+         1790933580,
+         "0.1"
+        ],
+        [
+         1790933640,
+         "0.1"
+        ],
+        [
+         1790933700,
+         "0.1"
+        ],
+        [
+         1790933760,
+         "0.1"
+        ],
+        [
+         1790933820,
+         "0.1"
+        ],
+        [
+         1790933880,
+         "0.1"
+        ],
+        [
+         1790933940,
+         "0.1"
+        ],
+        [
+         1790934000,
+         "0.1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-13",
+        "namespace": "namespace-7",
+        "workload": "workload-21"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.01"
+        ],
+        [
+         1790933580,
+         "0.01"
+        ],
+        [
+         1790933640,
+         "0.01"
+        ],
+        [
+         1790933700,
+         "0.01"
+        ],
+        [
+         1790933760,
+         "0.01"
+        ],
+        [
+         1790933820,
+         "0.01"
+        ],
+        [
+         1790933880,
+         "0.01"
+        ],
+        [
+         1790933940,
+         "0.01"
+        ],
+        [
+         1790934000,
+         "0.01"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-15",
+        "namespace": "namespace-5",
+        "workload": "workload-13"
+       },
+       "values": [
+        [
+         1790933880,
+         "0.05"
+        ],
+        [
+         1790933940,
+         "0.05"
+        ],
+        [
+         1790934000,
+         "0.05"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-15",
+        "namespace": "namespace-6",
+        "workload": "workload-13"
+       },
+       "values": [
+        [
+         1790933580,
+         "0.05"
+        ],
+        [
+         1790933640,
+         "0.05"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-16",
+        "namespace": "namespace-5",
+        "workload": "workload-14"
+       },
+       "values": [
+        [
+         1790933880,
+         "0.1"
+        ],
+        [
+         1790933940,
+         "0.1"
+        ],
+        [
+         1790934000,
+         "0.1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-17",
+        "namespace": "namespace-7",
+        "workload": "workload-15"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.128"
+        ],
+        [
+         1790933580,
+         "0.128"
+        ],
+        [
+         1790933640,
+         "0.128"
+        ],
+        [
+         1790933700,
+         "0.128"
+        ],
+        [
+         1790933760,
+         "0.128"
+        ],
+        [
+         1790933820,
+         "0.128"
+        ],
+        [
+         1790933880,
+         "0.128"
+        ],
+        [
+         1790933940,
+         "0.128"
+        ],
+        [
+         1790934000,
+         "0.128"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-18",
+        "namespace": "namespace-7",
+        "workload": "workload-11"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.016"
+        ],
+        [
+         1790933580,
+         "0.016"
+        ],
+        [
+         1790933640,
+         "0.016"
+        ],
+        [
+         1790933700,
+         "0.016"
+        ],
+        [
+         1790933760,
+         "0.016"
+        ],
+        [
+         1790933820,
+         "0.016"
+        ],
+        [
+         1790933880,
+         "0.016"
+        ],
+        [
+         1790933940,
+         "0.016"
+        ],
+        [
+         1790934000,
+         "0.016"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-19",
+        "namespace": "namespace-7",
+        "workload": "workload-16"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.01"
+        ],
+        [
+         1790933580,
+         "0.01"
+        ],
+        [
+         1790933640,
+         "0.01"
+        ],
+        [
+         1790933700,
+         "0.01"
+        ],
+        [
+         1790933760,
+         "0.01"
+        ],
+        [
+         1790933820,
+         "0.01"
+        ],
+        [
+         1790933880,
+         "0.01"
+        ],
+        [
+         1790933940,
+         "0.01"
+        ],
+        [
+         1790934000,
+         "0.01"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-20",
+        "namespace": "namespace-8",
+        "workload": "workload-17"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.1"
+        ],
+        [
+         1790933580,
+         "0.1"
+        ],
+        [
+         1790933640,
+         "0.1"
+        ],
+        [
+         1790933700,
+         "0.1"
+        ],
+        [
+         1790933760,
+         "0.1"
+        ],
+        [
+         1790933820,
+         "0.1"
+        ],
+        [
+         1790933880,
+         "0.1"
+        ],
+        [
+         1790933940,
+         "0.1"
+        ],
+        [
+         1790934000,
+         "0.1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-21",
+        "namespace": "namespace-8",
+        "workload": "workload-18"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.01"
+        ],
+        [
+         1790933580,
+         "0.01"
+        ],
+        [
+         1790933640,
+         "0.01"
+        ],
+        [
+         1790933700,
+         "0.01"
+        ],
+        [
+         1790933760,
+         "0.01"
+        ],
+        [
+         1790933820,
+         "0.01"
+        ],
+        [
+         1790933880,
+         "0.01"
+        ],
+        [
+         1790933940,
+         "0.01"
+        ],
+        [
+         1790934000,
+         "0.01"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-22",
+        "namespace": "namespace-8",
+        "workload": "workload-19"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.05"
+        ],
+        [
+         1790933580,
+         "0.05"
+        ],
+        [
+         1790933640,
+         "0.05"
+        ],
+        [
+         1790933700,
+         "0.05"
+        ],
+        [
+         1790933760,
+         "0.05"
+        ],
+        [
+         1790933820,
+         "0.05"
+        ],
+        [
+         1790933880,
+         "0.05"
+        ],
+        [
+         1790933940,
+         "0.05"
+        ],
+        [
+         1790934000,
+         "0.05"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-23",
+        "namespace": "namespace-7",
+        "workload": "workload-21"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.1"
+        ],
+        [
+         1790933580,
+         "0.1"
+        ],
+        [
+         1790933640,
+         "0.1"
+        ],
+        [
+         1790933700,
+         "0.1"
+        ],
+        [
+         1790933760,
+         "0.1"
+        ],
+        [
+         1790933820,
+         "0.1"
+        ],
+        [
+         1790933880,
+         "0.1"
+        ],
+        [
+         1790933940,
+         "0.1"
+        ],
+        [
+         1790934000,
+         "0.1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-24",
+        "namespace": "namespace-7",
+        "workload": "workload-22"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-25",
+        "namespace": "namespace-7",
+        "workload": "workload-23"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.1"
+        ],
+        [
+         1790933580,
+         "0.1"
+        ],
+        [
+         1790933640,
+         "0.1"
+        ],
+        [
+         1790933700,
+         "0.1"
+        ],
+        [
+         1790933760,
+         "0.1"
+        ],
+        [
+         1790933820,
+         "0.1"
+        ],
+        [
+         1790933880,
+         "0.1"
+        ],
+        [
+         1790933940,
+         "0.1"
+        ],
+        [
+         1790934000,
+         "0.1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-26",
+        "namespace": "namespace-7",
+        "workload": "workload-24"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.128"
+        ],
+        [
+         1790933580,
+         "0.128"
+        ],
+        [
+         1790933640,
+         "0.128"
+        ],
+        [
+         1790933700,
+         "0.128"
+        ],
+        [
+         1790933760,
+         "0.128"
+        ],
+        [
+         1790933820,
+         "0.128"
+        ],
+        [
+         1790933880,
+         "0.128"
+        ],
+        [
+         1790933940,
+         "0.128"
+        ],
+        [
+         1790934000,
+         "0.128"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-28",
+        "namespace": "namespace-7",
+        "workload": "workload-11"
+       },
+       "values": [
+        [
+         1790933520,
+         "1.024"
+        ],
+        [
+         1790933580,
+         "1.024"
+        ],
+        [
+         1790933640,
+         "1.024"
+        ],
+        [
+         1790933700,
+         "1.024"
+        ],
+        [
+         1790933760,
+         "1.024"
+        ],
+        [
+         1790933820,
+         "1.024"
+        ],
+        [
+         1790933880,
+         "1.024"
+        ],
+        [
+         1790933940,
+         "1.024"
+        ],
+        [
+         1790934000,
+         "1.024"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_requests%7Bcluster%3D%22cluster-1%22%2Cresource%3D%22cpu%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bcluster%3D%22cluster-1%22%2Cphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "container": "container-8",
+        "namespace": "namespace-4",
+        "workload": "workload-7"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.01"
+        ],
+        [
+         1790933580,
+         "0.01"
+        ],
+        [
+         1790933640,
+         "0.01"
+        ],
+        [
+         1790933700,
+         "0.01"
+        ],
+        [
+         1790933760,
+         "0.01"
+        ],
+        [
+         1790933820,
+         "0.01"
+        ],
+        [
+         1790933880,
+         "0.01"
+        ],
+        [
+         1790933940,
+         "0.01"
+        ],
+        [
+         1790934000,
+         "0.01"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-28",
+        "namespace": "namespace-8",
+        "workload": "workload-20"
+       },
+       "values": [
+        [
+         1790933520,
+         "0.25"
+        ],
+        [
+         1790933580,
+         "0.25"
+        ],
+        [
+         1790933640,
+         "0.25"
+        ],
+        [
+         1790933700,
+         "0.25"
+        ],
+        [
+         1790933760,
+         "0.25"
+        ],
+        [
+         1790933820,
+         "0.25"
+        ],
+        [
+         1790933880,
+         "0.25"
+        ],
+        [
+         1790933940,
+         "0.25"
+        ],
+        [
+         1790934000,
+         "0.25"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_requests%7Bcluster%3D%22cluster-1%22%2Cresource%3D%22memory%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bcluster%3D%22cluster-1%22%2Cphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "container": "container-3",
+        "namespace": "namespace-5",
+        "workload": "workload-14"
+       },
+       "values": [
+        [
+         1790933880,
+         "536870912"
+        ],
+        [
+         1790933940,
+         "536870912"
+        ],
+        [
+         1790934000,
+         "536870912"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-9",
+        "namespace": "namespace-3",
+        "workload": "workload-4"
+       },
+       "values": [
+        [
+         1790933520,
+         "73400320"
+        ],
+        [
+         1790933580,
+         "73400320"
+        ],
+        [
+         1790933640,
+         "73400320"
+        ],
+        [
+         1790933700,
+         "73400320"
+        ],
+        [
+         1790933760,
+         "73400320"
+        ],
+        [
+         1790933820,
+         "73400320"
+        ],
+        [
+         1790933880,
+         "73400320"
+        ],
+        [
+         1790933940,
+         "73400320"
+        ],
+        [
+         1790934000,
+         "73400320"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-10",
+        "namespace": "namespace-5",
+        "workload": "workload-10"
+       },
+       "values": [
+        [
+         1790933880,
+         "67108864"
+        ],
+        [
+         1790933940,
+         "67108864"
+        ],
+        [
+         1790934000,
+         "67108864"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-12",
+        "namespace": "namespace-3",
+        "workload": "workload-12"
+       },
+       "values": [
+        [
+         1790933520,
+         "209715200"
+        ],
+        [
+         1790933580,
+         "209715200"
+        ],
+        [
+         1790933640,
+         "209715200"
+        ],
+        [
+         1790933700,
+         "209715200"
+        ],
+        [
+         1790933760,
+         "209715200"
+        ],
+        [
+         1790933820,
+         "209715200"
+        ],
+        [
+         1790933880,
+         "209715200"
+        ],
+        [
+         1790933940,
+         "209715200"
+        ],
+        [
+         1790934000,
+         "209715200"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-13",
+        "namespace": "namespace-7",
+        "workload": "workload-21"
+       },
+       "values": [
+        [
+         1790933520,
+         "33554432"
+        ],
+        [
+         1790933580,
+         "33554432"
+        ],
+        [
+         1790933640,
+         "33554432"
+        ],
+        [
+         1790933700,
+         "33554432"
+        ],
+        [
+         1790933760,
+         "33554432"
+        ],
+        [
+         1790933820,
+         "33554432"
+        ],
+        [
+         1790933880,
+         "33554432"
+        ],
+        [
+         1790933940,
+         "33554432"
+        ],
+        [
+         1790934000,
+         "33554432"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-15",
+        "namespace": "namespace-5",
+        "workload": "workload-13"
+       },
+       "values": [
+        [
+         1790933880,
+         "134217728"
+        ],
+        [
+         1790933940,
+         "134217728"
+        ],
+        [
+         1790934000,
+         "134217728"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-15",
+        "namespace": "namespace-6",
+        "workload": "workload-13"
+       },
+       "values": [
+        [
+         1790933580,
+         "134217728"
+        ],
+        [
+         1790933640,
+         "134217728"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-16",
+        "namespace": "namespace-5",
+        "workload": "workload-14"
+       },
+       "values": [
+        [
+         1790933880,
+         "67108864"
+        ],
+        [
+         1790933940,
+         "67108864"
+        ],
+        [
+         1790934000,
+         "67108864"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-17",
+        "namespace": "namespace-7",
+        "workload": "workload-15"
+       },
+       "values": [
+        [
+         1790933520,
+         "1073741824"
+        ],
+        [
+         1790933580,
+         "1073741824"
+        ],
+        [
+         1790933640,
+         "1073741824"
+        ],
+        [
+         1790933700,
+         "1073741824"
+        ],
+        [
+         1790933760,
+         "1073741824"
+        ],
+        [
+         1790933820,
+         "1073741824"
+        ],
+        [
+         1790933880,
+         "1073741824"
+        ],
+        [
+         1790933940,
+         "1073741824"
+        ],
+        [
+         1790934000,
+         "1073741824"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-18",
+        "namespace": "namespace-7",
+        "workload": "workload-11"
+       },
+       "values": [
+        [
+         1790933520,
+         "134217728"
+        ],
+        [
+         1790933580,
+         "134217728"
+        ],
+        [
+         1790933640,
+         "134217728"
+        ],
+        [
+         1790933700,
+         "134217728"
+        ],
+        [
+         1790933760,
+         "134217728"
+        ],
+        [
+         1790933820,
+         "134217728"
+        ],
+        [
+         1790933880,
+         "134217728"
+        ],
+        [
+         1790933940,
+         "134217728"
+        ],
+        [
+         1790934000,
+         "134217728"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-19",
+        "namespace": "namespace-7",
+        "workload": "workload-16"
+       },
+       "values": [
+        [
+         1790933520,
+         "67108864"
+        ],
+        [
+         1790933580,
+         "67108864"
+        ],
+        [
+         1790933640,
+         "67108864"
+        ],
+        [
+         1790933700,
+         "67108864"
+        ],
+        [
+         1790933760,
+         "67108864"
+        ],
+        [
+         1790933820,
+         "67108864"
+        ],
+        [
+         1790933880,
+         "67108864"
+        ],
+        [
+         1790933940,
+         "67108864"
+        ],
+        [
+         1790934000,
+         "67108864"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-20",
+        "namespace": "namespace-8",
+        "workload": "workload-17"
+       },
+       "values": [
+        [
+         1790933520,
+         "268435456"
+        ],
+        [
+         1790933580,
+         "268435456"
+        ],
+        [
+         1790933640,
+         "268435456"
+        ],
+        [
+         1790933700,
+         "268435456"
+        ],
+        [
+         1790933760,
+         "268435456"
+        ],
+        [
+         1790933820,
+         "268435456"
+        ],
+        [
+         1790933880,
+         "268435456"
+        ],
+        [
+         1790933940,
+         "268435456"
+        ],
+        [
+         1790934000,
+         "268435456"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-21",
+        "namespace": "namespace-8",
+        "workload": "workload-18"
+       },
+       "values": [
+        [
+         1790933520,
+         "67108864"
+        ],
+        [
+         1790933580,
+         "67108864"
+        ],
+        [
+         1790933640,
+         "67108864"
+        ],
+        [
+         1790933700,
+         "67108864"
+        ],
+        [
+         1790933760,
+         "67108864"
+        ],
+        [
+         1790933820,
+         "67108864"
+        ],
+        [
+         1790933880,
+         "67108864"
+        ],
+        [
+         1790933940,
+         "67108864"
+        ],
+        [
+         1790934000,
+         "67108864"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-22",
+        "namespace": "namespace-8",
+        "workload": "workload-19"
+       },
+       "values": [
+        [
+         1790933520,
+         "67108864"
+        ],
+        [
+         1790933580,
+         "67108864"
+        ],
+        [
+         1790933640,
+         "67108864"
+        ],
+        [
+         1790933700,
+         "67108864"
+        ],
+        [
+         1790933760,
+         "67108864"
+        ],
+        [
+         1790933820,
+         "67108864"
+        ],
+        [
+         1790933880,
+         "67108864"
+        ],
+        [
+         1790933940,
+         "67108864"
+        ],
+        [
+         1790934000,
+         "67108864"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-23",
+        "namespace": "namespace-7",
+        "workload": "workload-21"
+       },
+       "values": [
+        [
+         1790933520,
+         "134217728"
+        ],
+        [
+         1790933580,
+         "134217728"
+        ],
+        [
+         1790933640,
+         "134217728"
+        ],
+        [
+         1790933700,
+         "134217728"
+        ],
+        [
+         1790933760,
+         "134217728"
+        ],
+        [
+         1790933820,
+         "134217728"
+        ],
+        [
+         1790933880,
+         "134217728"
+        ],
+        [
+         1790933940,
+         "134217728"
+        ],
+        [
+         1790934000,
+         "134217728"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-24",
+        "namespace": "namespace-7",
+        "workload": "workload-22"
+       },
+       "values": [
+        [
+         1790933520,
+         "268435456"
+        ],
+        [
+         1790933580,
+         "268435456"
+        ],
+        [
+         1790933640,
+         "268435456"
+        ],
+        [
+         1790933700,
+         "268435456"
+        ],
+        [
+         1790933760,
+         "268435456"
+        ],
+        [
+         1790933820,
+         "268435456"
+        ],
+        [
+         1790933880,
+         "268435456"
+        ],
+        [
+         1790933940,
+         "268435456"
+        ],
+        [
+         1790934000,
+         "268435456"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-25",
+        "namespace": "namespace-7",
+        "workload": "workload-23"
+       },
+       "values": [
+        [
+         1790933520,
+         "1073741824"
+        ],
+        [
+         1790933580,
+         "1073741824"
+        ],
+        [
+         1790933640,
+         "1073741824"
+        ],
+        [
+         1790933700,
+         "1073741824"
+        ],
+        [
+         1790933760,
+         "1073741824"
+        ],
+        [
+         1790933820,
+         "1073741824"
+        ],
+        [
+         1790933880,
+         "1073741824"
+        ],
+        [
+         1790933940,
+         "1073741824"
+        ],
+        [
+         1790934000,
+         "1073741824"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-26",
+        "namespace": "namespace-7",
+        "workload": "workload-24"
+       },
+       "values": [
+        [
+         1790933520,
+         "1073741824"
+        ],
+        [
+         1790933580,
+         "1073741824"
+        ],
+        [
+         1790933640,
+         "1073741824"
+        ],
+        [
+         1790933700,
+         "1073741824"
+        ],
+        [
+         1790933760,
+         "1073741824"
+        ],
+        [
+         1790933820,
+         "1073741824"
+        ],
+        [
+         1790933880,
+         "1073741824"
+        ],
+        [
+         1790933940,
+         "1073741824"
+        ],
+        [
+         1790934000,
+         "1073741824"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-28",
+        "namespace": "namespace-7",
+        "workload": "workload-11"
+       },
+       "values": [
+        [
+         1790933520,
+         "3221225472"
+        ],
+        [
+         1790933580,
+         "3221225472"
+        ],
+        [
+         1790933640,
+         "3221225472"
+        ],
+        [
+         1790933700,
+         "3221225472"
+        ],
+        [
+         1790933760,
+         "3221225472"
+        ],
+        [
+         1790933820,
+         "3221225472"
+        ],
+        [
+         1790933880,
+         "3221225472"
+        ],
+        [
+         1790933940,
+         "3221225472"
+        ],
+        [
+         1790934000,
+         "3221225472"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_requests%7Bcluster%3D%22cluster-1%22%2Cresource%3D%22memory%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bcluster%3D%22cluster-1%22%2Cphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "container": "container-8",
+        "namespace": "namespace-4",
+        "workload": "workload-7"
+       },
+       "values": [
+        [
+         1790933520,
+         "52428800"
+        ],
+        [
+         1790933580,
+         "52428800"
+        ],
+        [
+         1790933640,
+         "52428800"
+        ],
+        [
+         1790933700,
+         "52428800"
+        ],
+        [
+         1790933760,
+         "52428800"
+        ],
+        [
+         1790933820,
+         "52428800"
+        ],
+        [
+         1790933880,
+         "52428800"
+        ],
+        [
+         1790933940,
+         "52428800"
+        ],
+        [
+         1790934000,
+         "52428800"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-28",
+        "namespace": "namespace-8",
+        "workload": "workload-20"
+       },
+       "values": [
+        [
+         1790933520,
+         "536870912"
+        ],
+        [
+         1790933580,
+         "536870912"
+        ],
+        [
+         1790933640,
+         "536870912"
+        ],
+        [
+         1790933700,
+         "536870912"
+        ],
+        [
+         1790933760,
+         "536870912"
+        ],
+        [
+         1790933820,
+         "536870912"
+        ],
+        [
+         1790933880,
+         "536870912"
+        ],
+        [
+         1790933940,
+         "536870912"
+        ],
+        [
+         1790934000,
+         "536870912"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%2Ccontainer%21%3D%22%22%2Ccontainer%21%3D%22POD%22%2Cimage%21%3D%22%22%7D%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "container": "container-2",
+        "namespace": "namespace-4",
+        "workload": "workload-8"
+       },
+       "values": [
+        [
+         1790933700,
+         "42496000"
+        ],
+        [
+         1790933760,
+         "39235584"
+        ],
+        [
+         1790933820,
+         "45080576"
+        ],
+        [
+         1790933880,
+         "45707264"
+        ],
+        [
+         1790933940,
+         "43737088"
+        ],
+        [
+         1790934000,
+         "45174784"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-3",
+        "namespace": "namespace-5",
+        "workload": "workload-14"
+       },
+       "values": [
+        [
+         1790933940,
+         "229376"
+        ],
+        [
+         1790934000,
+         "229376"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-4",
+        "namespace": "namespace-1",
+        "workload": "workload-2"
+       },
+       "values": [
+        [
+         1790933700,
+         "38604800"
+        ],
+        [
+         1790933760,
+         "38604800"
+        ],
+        [
+         1790933820,
+         "38604800"
+        ],
+        [
+         1790933880,
+         "32448512"
+        ],
+        [
+         1790933940,
+         "32448512"
+        ],
+        [
+         1790934000,
+         "31596544"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-5",
+        "namespace": "namespace-1",
+        "workload": "workload-1"
+       },
+       "values": [
+        [
+         1790933700,
+         "29220864"
+        ],
+        [
+         1790933760,
+         "29220864"
+        ],
+        [
+         1790933820,
+         "27979776"
+        ],
+        [
+         1790933880,
+         "27975680"
+        ],
+        [
+         1790933940,
+         "28844032"
+        ],
+        [
+         1790934000,
+         "29650944"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-6",
+        "namespace": "namespace-1",
+        "workload": "workload-3"
+       },
+       "values": [
+        [
+         1790933700,
+         "13611008"
+        ],
+        [
+         1790933760,
+         "13611008"
+        ],
+        [
+         1790933820,
+         "13611008"
+        ],
+        [
+         1790933880,
+         "13611008"
+        ],
+        [
+         1790933940,
+         "13611008"
+        ],
+        [
+         1790934000,
+         "13611008"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-7",
+        "namespace": "namespace-2",
+        "workload": "workload-5"
+       },
+       "values": [
+        [
+         1790933700,
+         "72982528"
+        ],
+        [
+         1790933760,
+         "71217152"
+        ],
+        [
+         1790933820,
+         "68530176"
+        ],
+        [
+         1790933880,
+         "68661248"
+        ],
+        [
+         1790933940,
+         "68722688"
+        ],
+        [
+         1790934000,
+         "69623808"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-9",
+        "namespace": "namespace-3",
+        "workload": "workload-4"
+       },
+       "values": [
+        [
+         1790933700,
+         "81993728"
+        ],
+        [
+         1790933760,
+         "81997824"
+        ],
+        [
+         1790933820,
+         "81784832"
+        ],
+        [
+         1790933880,
+         "81833984"
+        ],
+        [
+         1790933940,
+         "82112512"
+        ],
+        [
+         1790934000,
+         "82112512"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-10",
+        "namespace": "namespace-5",
+        "workload": "workload-10"
+       },
+       "values": [
+        [
+         1790933940,
+         "16203776"
+        ],
+        [
+         1790934000,
+         "16355328"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-11",
+        "namespace": "namespace-4",
+        "workload": "workload-9"
+       },
+       "values": [
+        [
+         1790933700,
+         "22888448"
+        ],
+        [
+         1790933760,
+         "22831104"
+        ],
+        [
+         1790933820,
+         "22921216"
+        ],
+        [
+         1790933880,
+         "23564288"
+        ],
+        [
+         1790933940,
+         "24387584"
+        ],
+        [
+         1790934000,
+         "25309184"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-12",
+        "namespace": "namespace-3",
+        "workload": "workload-12"
+       },
+       "values": [
+        [
+         1790933700,
+         "25329664"
+        ],
+        [
+         1790933760,
+         "25374720"
+        ],
+        [
+         1790933820,
+         "25382912"
+        ],
+        [
+         1790933880,
+         "25440256"
+        ],
+        [
+         1790933940,
+         "25448448"
+        ],
+        [
+         1790934000,
+         "25452544"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-13",
+        "namespace": "namespace-7",
+        "workload": "workload-21"
+       },
+       "values": [
+        [
+         1790933700,
+         "7172096"
+        ],
+        [
+         1790933760,
+         "7172096"
+        ],
+        [
+         1790933820,
+         "7172096"
+        ],
+        [
+         1790933880,
+         "7172096"
+        ],
+        [
+         1790933940,
+         "7172096"
+        ],
+        [
+         1790934000,
+         "7172096"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-14",
+        "namespace": "namespace-2",
+        "workload": "workload-6"
+       },
+       "values": [
+        [
+         1790933700,
+         "28950528"
+        ],
+        [
+         1790933760,
+         "28524544"
+        ],
+        [
+         1790933820,
+         "28532736"
+        ],
+        [
+         1790933880,
+         "28610560"
+        ],
+        [
+         1790933940,
+         "28692480"
+        ],
+        [
+         1790934000,
+         "26845184"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-15",
+        "namespace": "namespace-5",
+        "workload": "workload-13"
+       },
+       "values": [
+        [
+         1790933940,
+         "41250816"
+        ],
+        [
+         1790934000,
+         "43581440"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-16",
+        "namespace": "namespace-5",
+        "workload": "workload-14"
+       },
+       "values": [
+        [
+         1790933940,
+         "229376"
+        ],
+        [
+         1790934000,
+         "229376"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-17",
+        "namespace": "namespace-7",
+        "workload": "workload-15"
+       },
+       "values": [
+        [
+         1790933700,
+         "31911936"
+        ],
+        [
+         1790933760,
+         "32190464"
+        ],
+        [
+         1790933820,
+         "32231424"
+        ],
+        [
+         1790933880,
+         "32256000"
+        ],
+        [
+         1790933940,
+         "32256000"
+        ],
+        [
+         1790934000,
+         "32256000"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-18",
+        "namespace": "namespace-7",
+        "workload": "workload-11"
+       },
+       "values": [
+        [
+         1790933700,
+         "10792960"
+        ],
+        [
+         1790933760,
+         "10792960"
+        ],
+        [
+         1790933820,
+         "10661888"
+        ],
+        [
+         1790933880,
+         "10661888"
+        ],
+        [
+         1790933940,
+         "10727424"
+        ],
+        [
+         1790934000,
+         "10727424"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-19",
+        "namespace": "namespace-7",
+        "workload": "workload-16"
+       },
+       "values": [
+        [
+         1790933700,
+         "14045184"
+        ],
+        [
+         1790933760,
+         "13987840"
+        ],
+        [
+         1790933820,
+         "13987840"
+        ],
+        [
+         1790933880,
+         "13996032"
+        ],
+        [
+         1790933940,
+         "13996032"
+        ],
+        [
+         1790934000,
+         "13926400"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-20",
+        "namespace": "namespace-8",
+        "workload": "workload-17"
+       },
+       "values": [
+        [
+         1790933700,
+         "17702912"
+        ],
+        [
+         1790933760,
+         "17702912"
+        ],
+        [
+         1790933820,
+         "17702912"
+        ],
+        [
+         1790933880,
+         "17702912"
+        ],
+        [
+         1790933940,
+         "17702912"
+        ],
+        [
+         1790934000,
+         "17702912"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-21",
+        "namespace": "namespace-8",
+        "workload": "workload-18"
+       },
+       "values": [
+        [
+         1790933700,
+         "14381056"
+        ],
+        [
+         1790933760,
+         "14381056"
+        ],
+        [
+         1790933820,
+         "14381056"
+        ],
+        [
+         1790933880,
+         "14381056"
+        ],
+        [
+         1790933940,
+         "14381056"
+        ],
+        [
+         1790934000,
+         "14381056"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-22",
+        "namespace": "namespace-8",
+        "workload": "workload-19"
+       },
+       "values": [
+        [
+         1790933700,
+         "3469312"
+        ],
+        [
+         1790933760,
+         "3469312"
+        ],
+        [
+         1790933820,
+         "3469312"
+        ],
+        [
+         1790933880,
+         "3469312"
+        ],
+        [
+         1790933940,
+         "3469312"
+        ],
+        [
+         1790934000,
+         "3469312"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-23",
+        "namespace": "namespace-7",
+        "workload": "workload-21"
+       },
+       "values": [
+        [
+         1790933700,
+         "4943872"
+        ],
+        [
+         1790933760,
+         "4943872"
+        ],
+        [
+         1790933820,
+         "4943872"
+        ],
+        [
+         1790933880,
+         "4943872"
+        ],
+        [
+         1790933940,
+         "4943872"
+        ],
+        [
+         1790934000,
+         "4943872"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-24",
+        "namespace": "namespace-7",
+        "workload": "workload-22"
+       },
+       "values": [
+        [
+         1790933700,
+         "299323392"
+        ],
+        [
+         1790933760,
+         "299327488"
+        ],
+        [
+         1790933820,
+         "299327488"
+        ],
+        [
+         1790933880,
+         "299323392"
+        ],
+        [
+         1790933940,
+         "299331584"
+        ],
+        [
+         1790934000,
+         "299327488"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-25",
+        "namespace": "namespace-7",
+        "workload": "workload-23"
+       },
+       "values": [
+        [
+         1790933700,
+         "34871296"
+        ],
+        [
+         1790933760,
+         "34873344"
+        ],
+        [
+         1790933820,
+         "34904064"
+        ],
+        [
+         1790933880,
+         "34902016"
+        ],
+        [
+         1790933940,
+         "34992128"
+        ],
+        [
+         1790934000,
+         "34994176"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-26",
+        "namespace": "namespace-7",
+        "workload": "workload-24"
+       },
+       "values": [
+        [
+         1790933700,
+         "44105728"
+        ],
+        [
+         1790933760,
+         "44105728"
+        ],
+        [
+         1790933820,
+         "44105728"
+        ],
+        [
+         1790933880,
+         "44707840"
+        ],
+        [
+         1790933940,
+         "46579712"
+        ],
+        [
+         1790934000,
+         "43995136"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-27",
+        "namespace": "namespace-7",
+        "workload": "workload-11"
+       },
+       "values": [
+        [
+         1790933700,
+         "507904"
+        ],
+        [
+         1790933760,
+         "495616"
+        ],
+        [
+         1790933820,
+         "495616"
+        ],
+        [
+         1790933880,
+         "499712"
+        ],
+        [
+         1790933940,
+         "503808"
+        ],
+        [
+         1790934000,
+         "499712"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-28",
+        "namespace": "namespace-7",
+        "workload": "workload-11"
+       },
+       "values": [
+        [
+         1790933700,
+         "426131456"
+        ],
+        [
+         1790933760,
+         "427040768"
+        ],
+        [
+         1790933820,
+         "428036096"
+        ],
+        [
+         1790933880,
+         "429314048"
+        ],
+        [
+         1790933940,
+         "415178752"
+        ],
+        [
+         1790934000,
+         "416997376"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28container_memory_working_set_bytes%7Bcluster%3D%22cluster-1%22%2Ccontainer%21%3D%22%22%2Ccontainer%21%3D%22POD%22%2Cimage%21%3D%22%22%7D%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "container": "container-1",
+        "namespace": "namespace-4",
+        "workload": "workload-7"
+       },
+       "values": [
+        [
+         1790933700,
+         "80441344"
+        ],
+        [
+         1790933760,
+         "83038208"
+        ],
+        [
+         1790933820,
+         "84922368"
+        ],
+        [
+         1790933880,
+         "85110784"
+        ],
+        [
+         1790933940,
+         "87412736"
+        ],
+        [
+         1790934000,
+         "87846912"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-8",
+        "namespace": "namespace-4",
+        "workload": "workload-7"
+       },
+       "values": [
+        [
+         1790933700,
+         "7135232"
+        ],
+        [
+         1790933760,
+         "7135232"
+        ],
+        [
+         1790933820,
+         "6950912"
+        ],
+        [
+         1790933880,
+         "6955008"
+        ],
+        [
+         1790933940,
+         "7012352"
+        ],
+        [
+         1790934000,
+         "6836224"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-28",
+        "namespace": "namespace-8",
+        "workload": "workload-20"
+       },
+       "values": [
+        [
+         1790933700,
+         "154656768"
+        ],
+        [
+         1790933760,
+         "154705920"
+        ],
+        [
+         1790933820,
+         "154755072"
+        ],
+        [
+         1790933880,
+         "154804224"
+        ],
+        [
+         1790933940,
+         "154849280"
+        ],
+        [
+         1790934000,
+         "154902528"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28rate%28container_cpu_usage_seconds_total%7Bcluster%3D%22cluster-1%22%2Ccontainer%21%3D%22%22%2Ccontainer%21%3D%22POD%22%2Cimage%21%3D%22%22%7D%5B300s%5D%29%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "container": "container-2",
+        "namespace": "namespace-4",
+        "workload": "workload-8"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.0024640390568742487"
+        ],
+        [
+         1790933820,
+         "0.003430598850761255"
+        ],
+        [
+         1790933880,
+         "0.00491022934352638"
+        ],
+        [
+         1790933940,
+         "0.004927985065297652"
+        ],
+        [
+         1790934000,
+         "0.005025408650941472"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-3",
+        "namespace": "namespace-5",
+        "workload": "workload-14"
+       },
+       "values": [
+        [
+         1790934000,
+         "0"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-4",
+        "namespace": "namespace-1",
+        "workload": "workload-2"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.0005348997886490159"
+        ],
+        [
+         1790933820,
+         "0.0007055816830347932"
+        ],
+        [
+         1790933880,
+         "0.0010938041690740407"
+        ],
+        [
+         1790933940,
+         "0.0010235148514850508"
+        ],
+        [
+         1790934000,
+         "0.0010331206953304486"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-5",
+        "namespace": "namespace-1",
+        "workload": "workload-1"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.0004646385279017765"
+        ],
+        [
+         1790933820,
+         "0.0006629773294612436"
+        ],
+        [
+         1790933880,
+         "0.0009067463734700647"
+        ],
+        [
+         1790933940,
+         "0.0008944069873072026"
+        ],
+        [
+         1790934000,
+         "0.0008889166666667355"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-6",
+        "namespace": "namespace-1",
+        "workload": "workload-3"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.00016772351954332757"
+        ],
+        [
+         1790933820,
+         "0.00024339271248437908"
+        ],
+        [
+         1790933880,
+         "0.0003729443530824341"
+        ],
+        [
+         1790933940,
+         "0.0003592859285929073"
+        ],
+        [
+         1790934000,
+         "0.0003728791666667064"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-7",
+        "namespace": "namespace-2",
+        "workload": "workload-5"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.004105389959579988"
+        ],
+        [
+         1790933820,
+         "0.006065273717694473"
+        ],
+        [
+         1790933880,
+         "0.008625772256544751"
+        ],
+        [
+         1790933940,
+         "0.008467569808773391"
+        ],
+        [
+         1790934000,
+         "0.008326679166666651"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-9",
+        "namespace": "namespace-3",
+        "workload": "workload-4"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.0011878718809924232"
+        ],
+        [
+         1790933820,
+         "0.001551689842499861"
+        ],
+        [
+         1790933880,
+         "0.002209553757945956"
+        ],
+        [
+         1790933940,
+         "0.0023849384938502095"
+        ],
+        [
+         1790934000,
+         "0.0023846583333333154"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-10",
+        "namespace": "namespace-5",
+        "workload": "workload-10"
+       },
+       "values": [
+        [
+         1790934000,
+         "0.00009728931191896305"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-11",
+        "namespace": "namespace-4",
+        "workload": "workload-9"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.0008240040304192013"
+        ],
+        [
+         1790933820,
+         "0.0010176090172777776"
+        ],
+        [
+         1790933880,
+         "0.001462481665851815"
+        ],
+        [
+         1790933940,
+         "0.001479135239650962"
+        ],
+        [
+         1790934000,
+         "0.0014404481647993135"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-12",
+        "namespace": "namespace-3",
+        "workload": "workload-12"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.001668105183012157"
+        ],
+        [
+         1790933820,
+         "0.002217268414817394"
+        ],
+        [
+         1790933880,
+         "0.0032336966787782115"
+        ],
+        [
+         1790933940,
+         "0.003106736118345635"
+        ],
+        [
+         1790934000,
+         "0.003109091666666686"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-13",
+        "namespace": "namespace-7",
+        "workload": "workload-21"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.00013990121593465116"
+        ],
+        [
+         1790933820,
+         "0.00016121991499931974"
+        ],
+        [
+         1790933880,
+         "0.0002405204646847433"
+        ],
+        [
+         1790933940,
+         "0.00022153789738184256"
+        ],
+        [
+         1790934000,
+         "0.00022142083333334857"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-14",
+        "namespace": "namespace-2",
+        "workload": "workload-6"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.0009478535976331283"
+        ],
+        [
+         1790933820,
+         "0.001174900718112074"
+        ],
+        [
+         1790933880,
+         "0.0017932408107026933"
+        ],
+        [
+         1790933940,
+         "0.0017531305083403784"
+        ],
+        [
+         1790934000,
+         "0.0016660013916608737"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-15",
+        "namespace": "namespace-5",
+        "workload": "workload-13"
+       },
+       "values": [
+        [
+         1790934000,
+         "0.000759285730518669"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-16",
+        "namespace": "namespace-5",
+        "workload": "workload-14"
+       },
+       "values": [
+        [
+         1790934000,
+         "0"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-17",
+        "namespace": "namespace-7",
+        "workload": "workload-15"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.0005937622257872478"
+        ],
+        [
+         1790933820,
+         "0.0008134750922618238"
+        ],
+        [
+         1790933880,
+         "0.0011662249926388693"
+        ],
+        [
+         1790933940,
+         "0.0012596903101068067"
+        ],
+        [
+         1790934000,
+         "0.0012607072470531388"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-18",
+        "namespace": "namespace-7",
+        "workload": "workload-11"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.000035435712345190195"
+        ],
+        [
+         1790933820,
+         "0.00007962459168027274"
+        ],
+        [
+         1790933880,
+         "0.0001033268145250746"
+        ],
+        [
+         1790933940,
+         "0.00010496247619602162"
+        ],
+        [
+         1790934000,
+         "0.00010364956812679535"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-19",
+        "namespace": "namespace-7",
+        "workload": "workload-16"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.0003941231308754409"
+        ],
+        [
+         1790933820,
+         "0.0004923681821553433"
+        ],
+        [
+         1790933880,
+         "0.0007411135926753377"
+        ],
+        [
+         1790933940,
+         "0.000684587753877456"
+        ],
+        [
+         1790934000,
+         "0.0006852708333333624"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-20",
+        "namespace": "namespace-8",
+        "workload": "workload-17"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.000954021553795424"
+        ],
+        [
+         1790933820,
+         "0.0012059324236941289"
+        ],
+        [
+         1790933880,
+         "0.0017180041335168473"
+        ],
+        [
+         1790933940,
+         "0.0016995882887309531"
+        ],
+        [
+         1790934000,
+         "0.001726254166666763"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-21",
+        "namespace": "namespace-8",
+        "workload": "workload-18"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.00045735065502194356"
+        ],
+        [
+         1790933820,
+         "0.0005401927789908013"
+        ],
+        [
+         1790933880,
+         "0.0007990777521598285"
+        ],
+        [
+         1790933940,
+         "0.0007587632302691607"
+        ],
+        [
+         1790934000,
+         "0.0007356677680509349"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-22",
+        "namespace": "namespace-8",
+        "workload": "workload-19"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.00009483024785401253"
+        ],
+        [
+         1790933820,
+         "0.00010779048925408407"
+        ],
+        [
+         1790933880,
+         "0.00015244010844928454"
+        ],
+        [
+         1790933940,
+         "0.00014538893310610729"
+        ],
+        [
+         1790934000,
+         "0.00013177499999998213"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-23",
+        "namespace": "namespace-7",
+        "workload": "workload-21"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.002609865567009721"
+        ],
+        [
+         1790933820,
+         "0.0036563204914832914"
+        ],
+        [
+         1790933880,
+         "0.005143007939021507"
+        ],
+        [
+         1790933940,
+         "0.004941473801765045"
+        ],
+        [
+         1790934000,
+         "0.005037545833332994"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-24",
+        "namespace": "namespace-7",
+        "workload": "workload-22"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.001728972876239563"
+        ],
+        [
+         1790933820,
+         "0.002369377744329238"
+        ],
+        [
+         1790933880,
+         "0.0035602064570613647"
+        ],
+        [
+         1790933940,
+         "0.0034492745168308646"
+        ],
+        [
+         1790934000,
+         "0.003454587500000154"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-25",
+        "namespace": "namespace-7",
+        "workload": "workload-23"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.001869131836789012"
+        ],
+        [
+         1790933820,
+         "0.0024076641655767254"
+        ],
+        [
+         1790933880,
+         "0.0035711286313314557"
+        ],
+        [
+         1790933940,
+         "0.003515859787147376"
+        ],
+        [
+         1790934000,
+         "0.0034368506738254694"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-26",
+        "namespace": "namespace-7",
+        "workload": "workload-24"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.006372100978399028"
+        ],
+        [
+         1790933820,
+         "0.008746827794572115"
+        ],
+        [
+         1790933880,
+         "0.012927394041079147"
+        ],
+        [
+         1790933940,
+         "0.012779312615112512"
+        ],
+        [
+         1790934000,
+         "0.012964591666667502"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-27",
+        "namespace": "namespace-7",
+        "workload": "workload-11"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.000020598509233948763"
+        ],
+        [
+         1790933820,
+         "0.000025182913965320995"
+        ],
+        [
+         1790933880,
+         "0.000044585810322795417"
+        ],
+        [
+         1790933940,
+         "0.00004211236910203318"
+        ],
+        [
+         1790934000,
+         "0.00004658730588622037"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-28",
+        "namespace": "namespace-7",
+        "workload": "workload-11"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.00515086281054946"
+        ],
+        [
+         1790933820,
+         "0.006860019105110846"
+        ],
+        [
+         1790933880,
+         "0.010377600115561329"
+        ],
+        [
+         1790933940,
+         "0.010641842168865967"
+        ],
+        [
+         1790934000,
+         "0.010724350721051051"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28rate%28container_cpu_usage_seconds_total%7Bcluster%3D%22cluster-1%22%2Ccontainer%21%3D%22%22%2Ccontainer%21%3D%22POD%22%2Cimage%21%3D%22%22%7D%5B300s%5D%29%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "container": "container-1",
+        "namespace": "namespace-4",
+        "workload": "workload-7"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.003173156018689824"
+        ],
+        [
+         1790933820,
+         "0.004257192286085303"
+        ],
+        [
+         1790933880,
+         "0.006385797462165826"
+        ],
+        [
+         1790933940,
+         "0.006262191590167555"
+        ],
+        [
+         1790934000,
+         "0.006302955808701595"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-8",
+        "namespace": "namespace-4",
+        "workload": "workload-7"
+       },
+       "values": [
+        [
+         1790933760,
+         "2.992459874331059e-07"
+        ],
+        [
+         1790933820,
+         "0.000019674557525380888"
+        ],
+        [
+         1790933880,
+         "0.00002289495322118269"
+        ],
+        [
+         1790933940,
+         "0.00003486123843653638"
+        ],
+        [
+         1790934000,
+         "0.00003642068158049343"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "container-28",
+        "namespace": "namespace-8",
+        "workload": "workload-20"
+       },
+       "values": [
+        [
+         1790933760,
+         "0.0024207482291845554"
+        ],
+        [
+         1790933820,
+         "0.0035575731424439595"
+        ],
+        [
+         1790933880,
+         "0.005437686119383173"
+        ],
+        [
+         1790933940,
+         "0.005226516597354112"
+        ],
+        [
+         1790934000,
+         "0.0052698458333338746"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=max+by+%28namespace%2C+workload%29+%28label_replace%28kube_deployment_spec_replicas%7Bcluster%3D%22cluster-1%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22deployment%22%2C+%22%28.%2B%29%22%29%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "namespace": "namespace-1",
+        "workload": "workload-1"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-1",
+        "workload": "workload-2"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-1",
+        "workload": "workload-3"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-2",
+        "workload": "workload-5"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-2",
+        "workload": "workload-6"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-3",
+        "workload": "workload-4"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-3",
+        "workload": "workload-12"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-4",
+        "workload": "workload-8"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-4",
+        "workload": "workload-9"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-5",
+        "workload": "workload-10"
+       },
+       "values": [
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-5",
+        "workload": "workload-13"
+       },
+       "values": [
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-5",
+        "workload": "workload-14"
+       },
+       "values": [
+        [
+         1790933880,
+         "2"
+        ],
+        [
+         1790933940,
+         "2"
+        ],
+        [
+         1790934000,
+         "2"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-6",
+        "workload": "workload-13"
+       },
+       "values": [
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-7",
+        "workload": "workload-11"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-7",
+        "workload": "workload-15"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-7",
+        "workload": "workload-16"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-7",
+        "workload": "workload-21"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-7",
+        "workload": "workload-22"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-7",
+        "workload": "workload-23"
+       },
+       "values": [
+        [
+         1790933520,
+         "2"
+        ],
+        [
+         1790933580,
+         "2"
+        ],
+        [
+         1790933640,
+         "2"
+        ],
+        [
+         1790933700,
+         "2"
+        ],
+        [
+         1790933760,
+         "2"
+        ],
+        [
+         1790933820,
+         "2"
+        ],
+        [
+         1790933880,
+         "2"
+        ],
+        [
+         1790933940,
+         "2"
+        ],
+        [
+         1790934000,
+         "2"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-7",
+        "workload": "workload-24"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-8",
+        "workload": "workload-17"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-8",
+        "workload": "workload-18"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-8",
+        "workload": "workload-19"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=max+by+%28namespace%2C+workload%29+%28label_replace%28kube_statefulset_replicas%7Bcluster%3D%22cluster-1%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22statefulset%22%2C+%22%28.%2B%29%22%29%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "namespace": "namespace-4",
+        "workload": "workload-7"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "namespace-8",
+        "workload": "workload-20"
+       },
+       "values": [
+        [
+         1790933520,
+         "1"
+        ],
+        [
+         1790933580,
+         "1"
+        ],
+        [
+         1790933640,
+         "1"
+        ],
+        [
+         1790933700,
+         "1"
+        ],
+        [
+         1790933760,
+         "1"
+        ],
+        [
+         1790933820,
+         "1"
+        ],
+        [
+         1790933880,
+         "1"
+        ],
+        [
+         1790933940,
+         "1"
+        ],
+        [
+         1790934000,
+         "1"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=max+by+%28node%29+%28kube_node_status_allocatable%7Bcluster%3D%22cluster-1%22%2Cresource%3D%22cpu%22%7D%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "node": "node-1"
+       },
+       "values": [
+        [
+         1790933520,
+         "8"
+        ],
+        [
+         1790933580,
+         "8"
+        ],
+        [
+         1790933640,
+         "8"
+        ],
+        [
+         1790933700,
+         "8"
+        ],
+        [
+         1790933760,
+         "8"
+        ],
+        [
+         1790933820,
+         "8"
+        ],
+        [
+         1790933880,
+         "8"
+        ],
+        [
+         1790933940,
+         "8"
+        ],
+        [
+         1790934000,
+         "8"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=max+by+%28node%29+%28kube_node_status_allocatable%7Bcluster%3D%22cluster-1%22%2Cresource%3D%22memory%22%7D%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [
+      {
+       "metric": {
+        "node": "node-1"
+       },
+       "values": [
+        [
+         1790933520,
+         "20927549440"
+        ],
+        [
+         1790933580,
+         "20927549440"
+        ],
+        [
+         1790933640,
+         "20927549440"
+        ],
+        [
+         1790933700,
+         "20927549440"
+        ],
+        [
+         1790933760,
+         "20927549440"
+        ],
+        [
+         1790933820,
+         "20927549440"
+        ],
+        [
+         1790933880,
+         "20927549440"
+        ],
+        [
+         1790933940,
+         "20927549440"
+        ],
+        [
+         1790934000,
+         "20927549440"
+        ]
+       ]
+      }
+     ],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=sum+by+%28namespace%2C+workload%2C+container%29+%28%0A++%28max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_status_restarts_total%7Bcluster%3D%22cluster-1%22%7D%29+-+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_status_restarts_total%7Bcluster%3D%22cluster-1%22%7D+offset+60s%29+%3E+0%29%0A++%2A+on+%28namespace%2C+pod%2C+container%29+group_left+%28%29+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_status_last_terminated_reason%7Bcluster%3D%22cluster-1%22%2Creason%3D%22OOMKilled%22%7D%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/query_range?end=1790934000\u0026query=sum+by+%28namespace%2C+workload%2C+container%29+%28%0A++%28max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_status_restarts_total%7Bcluster%3D%22cluster-1%22%7D%29+-+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_status_restarts_total%7Bcluster%3D%22cluster-1%22%7D+offset+60s%29+%3E+0%29%0A++%2A+on+%28namespace%2C+pod%2C+container%29+group_left+%28%29+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_status_last_terminated_reason%7Bcluster%3D%22cluster-1%22%2Creason%3D%22OOMKilled%22%7D%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bcluster%3D%22cluster-1%22%2Cowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790931300\u0026step=60": {
+   "status": 200,
+   "body": {
+    "data": {
+     "result": [],
+     "resultType": "matrix"
+    },
+    "status": "success"
+   }
+  },
+  "/api/v1/status/buildinfo?": {
+   "status": 200,
+   "body": {
+    "data": {
+     "application": "Grafana Mimir",
+     "branch": "weekly-r412",
+     "features": {
+      "alertmanager_config_api": "true",
+      "federated_rules": "false",
+      "ingest_storage": "true",
+      "query_sharding": "true",
+      "ruler_config_api": "true"
+     },
+     "goVersion": "go1.26.7",
+     "revision": "b464e5d6",
+     "version": "r412-c1b41a75"
+    },
+    "status": "success"
+   }
+  }
+ }
+}
