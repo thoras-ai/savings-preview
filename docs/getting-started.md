@@ -4,8 +4,8 @@ Savings Preview runs on your machine with your existing kubeconfig. It reads the
 
 > **What this reads and writes**
 >
-> - Reads only: queries to your metrics store or Datadog, `list` on services to find a store, and, when it polls, `list` on pods, ReplicaSets, Deployments, StatefulSets, nodes and metrics-server usage. Never Secrets, ConfigMaps or logs.
-> - Writes nothing in the cluster. On your machine it writes the data file, a compact copy and `savings-preview.zip`.
+> - Reads only: queries to your metrics store or Datadog, `list` on services and Prometheus Operator resources to find a store, `get` on `services/proxy` to query it, and, when it polls, `list` on pods, ReplicaSets, Deployments, StatefulSets, nodes and metrics-server usage. Never Secrets, ConfigMaps or logs.
+> - Writes nothing in the cluster. On your machine it writes the data file, a compact copy, `savings-preview.zip` and, when it polls, a `savings-preview.otlp.json.readings/` directory.
 > - Sends nothing anywhere except requests to your API server, the store you name with `--url`, or the Datadog API when you give it keys.
 >
 > [security.md](security.md) lists every request and what the output contains. [deploy/rbac/](../deploy/rbac/) has read-only ServiceAccounts for each source if you would rather not use your own credentials.
@@ -21,11 +21,9 @@ Check the download and unpack it:
     cd savings-preview_*_darwin_arm64
     ./savings-preview --version
 
-On macOS, a binary downloaded with a browser carries the quarantine attribute, and because it is not notarized, macOS refuses to open it. Remove the attribute before the first run:
+Unpacked with `tar` as above, the binary runs as is. If the archive was opened in Finder instead, macOS may refuse to run the binary because it is not notarized. Remove the quarantine attribute Finder copied onto it:
 
     xattr -d com.apple.quarantine savings-preview
-
-Files fetched with `curl` do not get the attribute.
 
 The commands below assume `savings-preview` is on your `PATH`. Move it to a directory such as `/usr/local/bin`, or run it as `./savings-preview`.
 
@@ -95,7 +93,7 @@ Pass the store's URL. Credentials are read from a file or the environment, never
 
 ### Datadog
 
-Give `run` an API key and an application key scoped to `timeseries_query`. It needs no Kubernetes access for this.
+Give `run` an API key and an application key scoped to `timeseries_query`. If Datadog has no usable data, `run` says why and goes on to the cluster; with `--source datadog` it stops instead and needs no Kubernetes access.
 
     K=~/.config/savings-preview
     savings-preview datadog --site us1 --api-key-file $K/dd-api-key --app-key-file $K/dd-app-key --list
@@ -113,13 +111,13 @@ The report opens on the summary:
 - **CPU and memory that could be freed**: the requests above the target, against the total requested.
 - **Confidence**: how much the history supports the figure. Under 7 days the figures are marked provisional, rounded and shown with `~`. 7 days at 5-minute steps give good confidence, and 14 days at 1-minute steps give high confidence.
 
-The target for each workload is 1.1 times its highest use in any 15 minutes. Waste is the request above the target. Prices come from your node types when they are known, and from a 4-core, 16 GiB, $0.192 per hour node otherwise.
+The target for each workload is 1.1 times its highest use in any 15 minutes. Waste is the request above the target. Prices come from AWS on-demand list prices (us-east-1) for known instance types, and from a 4-core, 16 GiB, $0.192 per hour node otherwise.
 
-**Workloads** lists each Deployment and StatefulSet with its spend, savings and the CPU and memory to free. **Assumptions** has the settings: prices, headroom, peak window, namespaces and time range. Changing one recomputes every section, and the page address keeps the settings, so a copied link opens the same view. **Data and method** lists the workloads left out of the totals and why. DaemonSets and bare pods are not counted.
+**Workloads** lists each Deployment and StatefulSet with its spend, savings and the CPU and memory to free. **Assumptions** lists the settings every figure uses: pricing, headroom, peak window, namespaces and time range. The page address keeps them, so a copied link opens the same view. **Data and method** lists the workloads left out of the totals and why. DaemonSets and bare pods are not counted.
 
 ## Share the results
 
-Send `savings-preview.zip` to Thoras. It holds `summary.json` (cluster name, time span, confidence tier and totals) and `report.html`, which opens from disk in any browser and carries a 15-minute copy of the data. Open both before sending if you want to see exactly what leaves your machine.
+Send `savings-preview.zip` to Thoras. It holds `summary.json` (cluster name, time span, confidence tier, totals, the full file's name and size, the tool version and when it was written) and `report.html`, which opens from disk in any browser and carries a 15-minute copy of the data. Open both before sending if you want to see exactly what leaves your machine.
 
 The full-resolution file, `savings-preview.otlp.json`, stays on your machine and is not in the zip. The cluster name on EKS is often the cluster ARN, which includes the AWS account ID; set `--cluster-name` to use another name.
 
