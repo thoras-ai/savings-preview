@@ -12,8 +12,8 @@ Or build for this machine only with `go build -o bin/savings-preview ./cmd/savin
 `savings-preview run` (also what runs with no command) uses the current kubeconfig context, or `--context`, and prints what it will read before reading anything. It never changes the cluster. It then:
 
 1. Looks for a Prometheus-compatible store and pulls 14 days of usage from it (`--days`, `--step`, `--target` to name the store).
-2. If there is no store, none answers, or the store lacks the per-container usage and request series, it says why and polls metrics-server instead, every `--interval` until `--duration` passes or Ctrl-C. Fewer than 7 days of readings give a tier 3 (limited history) report. `--source prometheus` or `--source poll` skips the choice.
-3. Writes `savings-preview.otlp.json` (`--out`) and checks it against the contract.
+2. If there is no store, none answers, or the store lacks the per-container usage and request series, it says why and polls metrics-server instead, every `--interval` until `--duration` passes or Ctrl-C. It takes the same `--keep-raw`, `--rollup` and `--write-every` flags as `poll`. Fewer than 7 days of readings give a tier 3 (limited history) report. `--source prometheus` or `--source poll` skips the choice.
+3. Writes `savings-preview.otlp.json` (`--out` or `-o`) and checks it against the contract.
 4. Serves the report on 127.0.0.1 on a random port and opens the browser; `--no-open` only prints the address. Ctrl-C stops the server.
 5. Writes `savings-preview.zip` next to the file: the contract file, `summary.json` (cluster, time span, tier, totals) and `report.html`, a copy of the report with the data inside that opens from disk. Send the zip to Thoras or attach it to an email. Nothing is uploaded.
 

@@ -160,7 +160,7 @@ func TestRunFlags(t *testing.T) {
 		t.Fatalf("parsed %+v", o)
 	}
 	for _, bad := range [][]string{
-		{"--source", "datadog"}, {"--interval", "1500ms"}, {"--duration", "-1m"}, {"--target", "nonsense"}, {"extra"},
+		{"--source", "datadog"}, {"--interval", "1500ms"}, {"--interval", "10s"}, {"--rollup", "0"}, {"--keep-raw", "-1h"}, {"--write-every", "0"}, {"--duration", "-1m"}, {"--target", "nonsense"}, {"extra"},
 	} {
 		if _, err := runFlags(bad); err == nil {
 			t.Errorf("%v: want an error", bad)
@@ -219,5 +219,35 @@ func TestPollMustWriteAFreshFile(t *testing.T) {
 	}
 	if err := pollWithProgress(context.Background(), nil, "c", o); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRunFlagsMatchPoll(t *testing.T) {
+	o, err := runFlags([]string{"-o", "x.otlp.json", "--keep-raw", "336h", "--rollup", "1m", "--write-every", "1m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.out != "x.otlp.json" || o.keepRaw != 336*time.Hour || o.rollup != time.Minute || o.writeEvery != time.Minute {
+		t.Fatalf("parsed %+v", o)
+	}
+}
+
+func TestPollStep(t *testing.T) {
+	base := runOptions{interval: time.Minute, keepRaw: 48 * time.Hour, rollup: 5 * time.Minute}
+	cases := []struct {
+		duration, keepRaw time.Duration
+		want              time.Duration
+	}{
+		{3 * time.Minute, 48 * time.Hour, time.Minute},
+		{7 * 24 * time.Hour, 48 * time.Hour, 5 * time.Minute},
+		{14 * 24 * time.Hour, 0, time.Minute},
+		{14 * 24 * time.Hour, 336 * time.Hour, time.Minute},
+	}
+	for _, c := range cases {
+		o := base
+		o.duration, o.keepRaw = c.duration, c.keepRaw
+		if got := pollStep(&o); got != c.want {
+			t.Errorf("duration %s keep-raw %s: step %s, want %s", c.duration, c.keepRaw, got, c.want)
+		}
 	}
 }

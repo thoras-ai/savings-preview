@@ -18,6 +18,7 @@ import (
 	"time"
 
 	savingspreview "github.com/thoras-ai/savings-preview"
+	"github.com/thoras-ai/savings-preview/internal/adapters/polling"
 	"github.com/thoras-ai/savings-preview/internal/adapters/prometheus"
 	"github.com/thoras-ai/savings-preview/internal/contract"
 	"github.com/thoras-ai/savings-preview/internal/kube"
@@ -34,6 +35,7 @@ type runOptions struct {
 	days                         int
 	step                         time.Duration
 	duration, interval           time.Duration
+	writeEvery, keepRaw, rollup  time.Duration
 	noOpen                       bool
 }
 
@@ -44,12 +46,16 @@ func runFlags(args []string) (*runOptions, error) {
 	fs.StringVar(&o.context, "context", "", "kubeconfig context (default: the current context)")
 	fs.StringVar(&o.cluster, "cluster-name", "", "cluster name recorded in the file (default: the kubeconfig cluster name)")
 	fs.StringVar(&o.out, "out", report.DataName, "contract file to write; the zip is written next to it")
+	fs.StringVar(&o.out, "o", report.DataName, "same as --out")
 	fs.StringVar(&o.source, "source", "auto", "where to read usage: auto (a store, else polling), prometheus or poll")
 	target := fs.String("target", "", "store to use as [scheme:]namespace/service:port[/path-prefix], skipping discovery")
 	fs.IntVar(&o.days, "days", 14, "days of history to pull from a store")
 	fs.DurationVar(&o.step, "step", time.Minute, "resolution of the series pulled from a store")
 	fs.DurationVar(&o.duration, "duration", 0, "how long to poll when there is no store (default: until Ctrl-C)")
 	fs.DurationVar(&o.interval, "interval", time.Minute, "time between readings when polling")
+	fs.DurationVar(&o.writeEvery, "write-every", 10*time.Minute, "when polling, rewrite the contract file this often")
+	fs.DurationVar(&o.keepRaw, "keep-raw", 48*time.Hour, "when polling, keep readings at --interval for this long, then roll them up to --rollup (0: never roll up)")
+	fs.DurationVar(&o.rollup, "rollup", 5*time.Minute, "when polling, step of rolled-up readings, which keep the mean and the peak")
 	fs.BoolVar(&o.noOpen, "no-open", false, "print the report URL instead of opening a browser")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `usage: savings-preview [run] [flags]
@@ -87,11 +93,14 @@ Everything is read-only; nothing is uploaded.
 	if o.step < time.Second || o.step%time.Second != 0 {
 		return nil, errors.New("--step must be a whole number of seconds")
 	}
-	if o.interval < time.Second || o.interval%time.Second != 0 {
-		return nil, errors.New("--interval must be a whole number of seconds")
+	if o.interval < polling.MinInterval || o.interval%time.Second != 0 {
+		return nil, fmt.Errorf("--interval must be a whole number of seconds and at least %s", polling.MinInterval)
 	}
-	if o.duration < 0 {
-		return nil, errors.New("--duration must not be negative")
+	if o.rollup <= 0 || o.rollup%time.Second != 0 {
+		return nil, errors.New("--rollup must be a positive whole number of seconds")
+	}
+	if o.duration < 0 || o.keepRaw < 0 || o.writeEvery <= 0 {
+		return nil, errors.New("--duration and --keep-raw must not be negative, and --write-every must be positive")
 	}
 	return o, nil
 }
@@ -233,14 +242,13 @@ func printAccess(w io.Writer, conn *kube.Conn, o *runOptions) {
 // pollWithProgress polls until o.duration passes or the user presses Ctrl-C,
 // printing what the result will support and how far along it is.
 func pollWithProgress(ctx context.Context, conn *kube.Conn, cluster string, o *runOptions) error {
-	step := int(o.interval / time.Second)
 	if o.duration > 0 {
-		tier := contract.TierFor(step, int64(o.duration/time.Second))
+		tier := contract.TierFor(int(pollStep(o)/time.Second), int64(o.duration/time.Second))
 		fmt.Fprintf(os.Stderr, "Polling every %s for %s (Ctrl-C stops early and builds the report from what was read).\n", shortDur(o.interval), shortDur(o.duration))
 		fmt.Fprintf(os.Stderr, "Accuracy: %s of readings gives tier %d (%s).\n", spanText(o.duration), tier, tierText(tier))
 	} else {
 		fmt.Fprintf(os.Stderr, "Polling every %s until Ctrl-C, which stops and builds the report.\n", shortDur(o.interval))
-		fmt.Fprintln(os.Stderr, "Accuracy: under 7 days of readings gives tier 3 (limited history); 7 days at 5-minute steps or finer gives tier 2.")
+		fmt.Fprintln(os.Stderr, "Accuracy: under 7 days of readings gives tier 3 (limited history); 7 days with --rollup of 5m or less gives tier 2.")
 	}
 	fmt.Fprintln(os.Stderr, "Longer runs capture more peaks, so the target and the savings come out more reliable.")
 
@@ -267,7 +275,8 @@ func pollWithProgress(ctx context.Context, conn *kube.Conn, cluster string, o *r
 			}
 		}
 	}()
-	err := poll(ctx, conn, pollOptions{Cluster: cluster, Out: o.out, Interval: o.interval, Duration: o.duration}, os.Stderr)
+	err := poll(ctx, conn, pollOptions{Cluster: cluster, Out: o.out, Interval: o.interval, Duration: o.duration,
+		WriteEvery: o.writeEvery, KeepRaw: o.keepRaw, Rollup: o.rollup}, os.Stderr)
 	if err != nil && ctx.Err() == nil {
 		return err
 	}
@@ -280,6 +289,15 @@ func pollWithProgress(ctx context.Context, conn *kube.Conn, cluster string, o *r
 		return fmt.Errorf("polling stopped before it wrote %s", o.out)
 	}
 	return nil
+}
+
+// pollStep is the coarsest step the polled file will have: readings older
+// than --keep-raw are rolled up, and the tier follows the coarsest step.
+func pollStep(o *runOptions) time.Duration {
+	if o.keepRaw > 0 && o.duration > o.keepRaw && o.rollup > o.interval {
+		return o.rollup
+	}
+	return o.interval
 }
 
 func progressEvery(interval time.Duration) time.Duration {
