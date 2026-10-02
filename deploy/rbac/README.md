@@ -39,6 +39,7 @@ Run this with the kubeconfig context of the target cluster selected. It writes `
     rm ca.crt
 
     kubectl --kubeconfig $KC auth can-i --list
+    savings-preview check --kubeconfig $KC
     savings-preview poll --kubeconfig $KC
 
 The token from `kubectl create token` expires after `--duration`, and some clusters cap it lower. A `poll` that runs for days needs a token that outlives it. Apply `token-secret.yaml` and use its token instead:

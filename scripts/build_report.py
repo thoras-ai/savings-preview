@@ -22,6 +22,8 @@ SCRIPTS = [
     "src/js/model.js",
     "src/js/files.js",
     "src/js/state.js",
+    "src/js/prices.js",
+    "src/js/levers.js",
     "src/js/components.js",
     "src/js/chart.js",
     "src/js/sections.js",
@@ -32,6 +34,7 @@ SCRIPTS = [
     "src/js/section-cluster.js",
     "src/js/section-assumptions.js",
     "src/js/section-method.js",
+    "src/js/print.js",
     "src/js/app.js",
 ]
 STYLES = ["design/zinc.css", "design/primitives.css", "design/semantic.css", "design/elevation.css", "src/styles/report.css"]

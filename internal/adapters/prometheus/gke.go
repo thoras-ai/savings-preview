@@ -285,8 +285,18 @@ func takeMatchers(sel, label string) (string, []labelMatcher) {
 	return strings.Join(rest, ","), taken
 }
 
-// runGKE pulls GKE system metrics from the Cloud Monitoring PromQL API.
-func runGKE(ctx context.Context, o Options, rep *Report) (*contract.File, *Report, error) {
+// gkePlan is what prepareGKE found that pullGKE needs.
+type gkePlan struct {
+	sys, ksm                 *Client
+	nsMatchers               []labelMatcher
+	hasRequests, hasReplicas bool
+	// now is when the pull ends, GKERequestLag before the asked-for end.
+	now time.Time
+}
+
+// prepareGKE makes the checks before a pull of GKE system metrics from the
+// Cloud Monitoring PromQL API.
+func prepareGKE(ctx context.Context, o Options, rep *Report) (*plan, *Report, error) {
 	sys := gkeClient(o.Client, "cluster_name")
 	// Namespace matchers on kube-state-metrics series are applied after the
 	// query, so that they see the namespace GKEReplicas takes from
@@ -341,7 +351,14 @@ func runGKE(ctx context.Context, o Options, rep *Report) (*contract.File, *Repor
 	if w := downsampledWarning(o.Now.Sub(earliest), o.Step); w != "" {
 		rep.Warnings = append(rep.Warnings, w)
 	}
+	rep.NoRequests = !hasRequests
+	return &plan{gke: &gkePlan{sys: sys, ksm: ksm, nsMatchers: nsMatchers, hasRequests: hasRequests, hasReplicas: hasReplicas, now: o.Now}}, rep, nil
+}
 
+// pullGKE pulls GKE system metrics and assembles the contract file.
+func pullGKE(ctx context.Context, o Options, g *gkePlan, rep *Report) (*contract.File, *Report, error) {
+	sys, ksm, nsMatchers, hasRequests, hasReplicas := g.sys, g.ksm, g.nsMatchers, g.hasRequests, g.hasReplicas
+	o.Now = g.now
 	p := newPulled()
 	p.gke, p.gkeNodes = true, map[string]*contract.Node{}
 	var jobs []job

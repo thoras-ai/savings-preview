@@ -2,7 +2,7 @@
 # Build and package the savings-preview release binaries.
 #
 #   scripts/release.sh build VERSION     binaries in dist/release/bin/
-#   scripts/release.sh package VERSION   archives and checksums.txt in dist/release/
+#   scripts/release.sh package VERSION   archives, install.sh and checksums.txt in dist/release/
 #
 # The two steps are separate so the binaries can be signed in between.
 set -euo pipefail
@@ -28,7 +28,7 @@ build)
 	done
 	;;
 package)
-	rm -f "$OUT"/*.tar.gz "$OUT/checksums.txt"
+	rm -f "$OUT"/*.tar.gz "$OUT/install.sh" "$OUT/checksums.txt"
 	stage=$(mktemp -d)
 	trap 'rm -rf "$stage"' EXIT
 	for p in $PLATFORMS; do
@@ -42,6 +42,7 @@ package)
 		tar -C "$stage" -czf "$OUT/$name.tar.gz" "$name"
 	done
 	(cd "$OUT" && shasum -a 256 -- *.tar.gz > checksums.txt)
+	cp scripts/install.sh "$OUT/install.sh"
 	cat "$OUT/checksums.txt"
 	;;
 *)

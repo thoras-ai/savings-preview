@@ -10,6 +10,8 @@
 <header class="top">
   <div class="brand"><span class="wordmark" role="img" aria-label="Thoras"><!--{{WORDMARK}}--></span><span class="product">Savings Preview</span><span id="context" class="context"></span></div>
   <div class="top-tools">
+    <button id="copy-link" type="button" class="top-button" hidden>Copy link</button>
+    <button id="print-summary" type="button" class="top-button" hidden>Print summary</button>
     <button id="open-another" type="button" class="top-button" hidden>Open another file</button>
     <div id="theme" class="theme" role="radiogroup" aria-label="Theme">
       <button type="button" role="radio" data-theme-choice="auto">Auto</button>
@@ -24,6 +26,7 @@
   <section id="start" hidden></section>
   <div id="report" hidden></div>
 </main>
+<div id="print" class="print" data-theme="light"></div>
 <script>/*{{JS}}*/</script>
 </body>
 </html>

@@ -51,6 +51,10 @@
     $('report').hidden = which !== 'report';
     $('secbar').hidden = which !== 'report';
     $('open-another').hidden = which !== 'report';
+    $('copy-link').hidden = which !== 'report';
+    $('print-summary').hidden = which !== 'report';
+    // Printing shows the summary layout only while a report is open.
+    document.body.classList.toggle('has-print', which === 'report');
     if (which !== 'report') $('context').textContent = '';
   }
 
@@ -62,6 +66,7 @@
   function writeHash(st) {
     var h = state.serialize(st);
     try { history.replaceState(null, '', location.pathname + location.search + (h ? '#' + h : '')); } catch (e) { /* not allowed here */ }
+    Array.prototype.forEach.call(document.querySelectorAll('[data-current-link]'), function (el) { el.textContent = location.href; });
     // Each section link carries the settings, so it opens the same view in a new tab.
     Array.prototype.forEach.call($('secbar').querySelectorAll('a[data-section]'), function (a) {
       a.setAttribute('href', '#' + state.serialize(Object.assign({}, st, { section: a.getAttribute('data-section') })));
@@ -242,6 +247,12 @@
       });
     });
     $('open-another').addEventListener('click', function () { showError(''); window.scrollTo(0, 0); });
+    $('copy-link').addEventListener('click', copyLink);
+    $('print-summary').addEventListener('click', function () { window.print(); });
+    // The print layout is drawn only when it is needed, so lever changes do not pay for it.
+    window.addEventListener('beforeprint', function () {
+      if (page.result && !$('report').hidden) SP.print.render($('print'), context());
+    });
     $('theme').addEventListener('click', function (e) {
       var b = e.target.closest('button[data-theme-choice]');
       if (b) setTheme(b.getAttribute('data-theme-choice'));
@@ -259,6 +270,28 @@
       var mq = window.matchMedia('(prefers-color-scheme: dark)');
       if (mq.addEventListener) mq.addEventListener('change', applyTheme);
     }
+  }
+
+  // The link carries the settings in its hash. The clipboard API needs a
+  // secure context, so a page served over plain HTTP falls back to a selection.
+  function copyLink() {
+    var b = $('copy-link'), url = location.href;
+    function done(ok) {
+      b.textContent = ok ? 'Copied' : 'Copy failed';
+      clearTimeout(copyLink.timer);
+      copyLink.timer = setTimeout(function () { b.textContent = 'Copy link'; }, 1500);
+    }
+    function fallback() {
+      var t = document.createElement('textarea');
+      t.value = url; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { /* not supported */ }
+      document.body.removeChild(t);
+      done(ok);
+    }
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(url).then(function () { done(true); }, fallback);
+    else fallback();
   }
 
   // A copy saved for sharing carries the contract file in the page itself.

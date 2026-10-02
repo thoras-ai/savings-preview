@@ -1,10 +1,10 @@
 # Security
 
-Savings Preview is a command-line program that runs on your machine with a kubeconfig you choose. It installs nothing in the cluster, changes nothing in it, and sends nothing anywhere except requests to your Kubernetes API server (or to a metrics store URL you pass with `--url`, to Google Cloud Monitoring for a project you pass with `--project`, or to the Datadog API with `savings-preview datadog`), apart from any credential plugin your kubeconfig runs, such as `aws eks get-token`. A kubeconfig for the ServiceAccount in `deploy/rbac/` holds a token and runs no plugin. Everything it produces stays in local files.
+Savings Preview is a command-line program that runs on your machine with a kubeconfig you choose. It installs nothing in the cluster, changes nothing in it, and sends nothing anywhere except requests to your Kubernetes API server (or to a metrics store URL you pass with `--url`, to Google Cloud Monitoring for a project you pass with `--project`, or to the Datadog API when Datadog keys are given), apart from any credential plugin your kubeconfig runs, such as `aws eks get-token`. A kubeconfig for the ServiceAccount in `deploy/rbac/` holds a token and runs no plugin. Everything it produces stays in local files.
 
 ## What it reads
 
-The program sends only reads: `list` on resources, and HTTP `GET` requests to four endpoints of a metrics store through the API server's service proxy. The access a role grants can be wider than what the program uses; the service proxy section below explains where. [`deploy/rbac/`](../deploy/rbac/) has a ServiceAccount and role for each case.
+The program sends only reads: `list` on resources, and HTTP `GET` requests to four endpoints of a metrics store through the API server's service proxy. The one exception is `savings-preview check`, which also asks the API server who the identity is and what it may do; see its section below. The access a role grants can be wider than what the program uses; the service proxy section below explains where. [`deploy/rbac/`](../deploy/rbac/) has a ServiceAccount and role for each case.
 
 ### `savings-preview prometheus`
 
@@ -50,6 +50,23 @@ A `list` on pods returns whole pod objects: container images, commands and argum
 
 The default command. It needs the access of `prometheus` (without `--target`, discovery) and, when it falls back to polling, the access of `poll`; `poll-and-prometheus.yaml` grants both. With `--source poll` it needs only `poll.yaml`, and with `--source prometheus` only the `prometheus` roles. With `--url` it needs no Kubernetes access, and reads the kubeconfig only for the cluster name when `--cluster-name` is not given. When Datadog keys are given it first makes the requests of `datadog`; with `--source datadog` it makes only those and needs no Kubernetes access. When a request is forbidden during discovery, it reports why and polls instead. Before reading anything it prints which of these reads it will make.
 
+### `savings-preview check`
+
+Answers, before a run, whether `run` with the same flags can read usage data. It makes the requests below only for the sources `run` would try with those flags: none to the cluster with `--url` or `--source datadog`, and none to Datadog without keys.
+
+| API group | Resource | Verb | Why |
+| --- | --- | --- | --- |
+| `authentication.k8s.io` | `selfsubjectreviews` | `create` | The user and groups the API server sees, as `kubectl auth whoami`. Servers before Kubernetes 1.28 may not answer; the kubeconfig user is shown instead. |
+| `authorization.k8s.io` | `selfsubjectaccessreviews` | `create` | Whether the identity may make each request in the `prometheus` and `poll` tables above, as `kubectl auth can-i`. |
+| core | `services` | `list`, all namespaces | Find stores, as `run` does. Skipped with `--target`. |
+| `monitoring.coreos.com` | `prometheuses`, `prometheusagents` | `list`, all namespaces | Optional, as for `prometheus`. |
+| core | `services/proxy` | `get` | Ask each store found whether it answers and how far back its data goes. |
+| `metrics.k8s.io` | `pods` | `list`, all namespaces | Whether metrics-server answers. It asks for one pod; metrics-server may return them all. |
+
+The two reviews are `create` requests in name only: the API server evaluates them and stores nothing, and the default `system:basic-user` role allows them for every authenticated user, so the roles in `deploy/rbac/` need no extra rule. A row the identity is denied shows as `no`; the check itself goes on.
+
+Each store gets instant queries only (`/api/v1/query`, `/api/v1/status/buildinfo`, and `/api/v1/status/config` when it may run in agent mode), the same checks `prometheus` makes before it pulls, plus a search for the oldest sample of container usage. It never calls `/api/v1/query_range`. With Datadog keys it calls only `GET /api/v2/validate_keys`. It writes nothing, locally or in the cluster.
+
 ### `savings-preview datadog`
 
 Reads usage history from the Datadog metrics query API and needs no Kubernetes access. It sends an API key and an application key, read from files or environment variables, to the Datadog site you choose, and calls only `GET /api/v2/validate_keys` and `POST /api/v2/query/timeseries`. An application key scoped to `timeseries_query` is enough; [datadog-adapter.md](datadog-adapter.md#keys) shows how to create one. The metric queries are in `internal/adapters/datadog/metrics.go`. The keys are not printed or logged.
@@ -81,6 +98,6 @@ Nowhere, unless you send it. The program makes no network requests other than to
 
 1. Build from source: `go build -o bin/savings-preview ./cmd/savings-preview`. The Kubernetes calls are in `internal/kube`, `internal/adapters/prometheus/discover.go` and `internal/adapters/polling/run.go`.
 2. Create the read-only ServiceAccount from [`deploy/rbac/`](../deploy/rbac/) and a kubeconfig for it, as its README describes, and run the program with `--kubeconfig` pointing at that file. A request outside the role fails with a `forbidden` error.
-3. List what the identity can do: `kubectl --kubeconfig savings-preview.kubeconfig auth can-i --list`.
+3. List what the identity can do: `kubectl --kubeconfig savings-preview.kubeconfig auth can-i --list`, or only what the program uses: `savings-preview check --kubeconfig savings-preview.kubeconfig`.
 4. Add `-v` to `savings-preview prometheus` to log each pull by name, with its series count and duration. The PromQL behind each name is in `internal/adapters/prometheus/queries.go`.
 5. Read the output file before sharing it.

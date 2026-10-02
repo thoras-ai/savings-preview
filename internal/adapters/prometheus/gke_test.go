@@ -500,3 +500,19 @@ func TestTakeMatchers(t *testing.T) {
 		}
 	}
 }
+
+func TestGKEProbeMatchesRun(t *testing.T) {
+	f := &fakeStore{handle: gkeStore(gkeOpts{})}
+	c := f.client(t)
+	rep, err := Probe(context.Background(), Options{Client: c, Cluster: "shop-prod-1", Days: 7, Step: 5 * time.Minute,
+		Now: time.Unix(t0, 0), GKE: GKEAuto})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.GKESystemMetrics || rep.NoRequests || rep.Start.IsZero() {
+		t.Errorf("probe report: %+v", rep)
+	}
+	if want := time.Unix(t0, 0).Add(-GKERequestLag); !rep.End.Equal(want) {
+		t.Errorf("probe end %s, want %s", rep.End, want)
+	}
+}

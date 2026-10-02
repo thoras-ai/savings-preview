@@ -43,11 +43,14 @@ type Report struct {
 	UsageFromPods bool
 	// GKESystemMetrics is set when the data came from GKE system metrics.
 	GKESystemMetrics bool
-	Containers       int
-	Workloads        int
-	Nodes            int
-	OOMKills         int
-	Warnings         []string
+	// NoRequests is set when the store's requests cannot be used, so every
+	// container lacks them and no savings can be computed from the file.
+	NoRequests bool
+	Containers int
+	Workloads  int
+	Nodes      int
+	OOMKills   int
+	Warnings   []string
 }
 
 // ClusterError reports a store that holds more than one cluster.
@@ -97,6 +100,36 @@ type pulled struct {
 
 // Run pulls the history from the store and assembles the contract file.
 func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
+	o.defaults()
+	pl, rep, err := prepare(ctx, o)
+	if err != nil {
+		return nil, rep, err
+	}
+	if pl.gke != nil {
+		return pullGKE(ctx, o, pl.gke, rep)
+	}
+	o.Client = pl.client
+	p, err := pull(ctx, o, rep.Start, pl.src, pl.kinds)
+	if err != nil {
+		return nil, rep, err
+	}
+	f, err := assemble(ctx, o, p, pl.src.requests, rep)
+	if err != nil {
+		return nil, rep, err
+	}
+	return f, rep, nil
+}
+
+// Probe makes the checks Run makes before it pulls the history: the store
+// answers, holds one cluster and the series the savings math needs, and how
+// far back its data goes. The report has no counts.
+func Probe(ctx context.Context, o Options) (*Report, error) {
+	o.defaults()
+	_, rep, err := prepare(ctx, o)
+	return rep, err
+}
+
+func (o *Options) defaults() {
 	if o.Log == nil {
 		o.Log = func(string, ...any) {}
 	}
@@ -106,6 +139,20 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 	if o.Now.IsZero() {
 		o.Now = time.Now()
 	}
+}
+
+// plan is what prepare found that the pull needs.
+type plan struct {
+	src   sources
+	kinds []string
+	// client is the client the pull uses: o.Client, or for Managed
+	// Prometheus a copy that maps the cluster label.
+	client *Client
+	// gke is set when the pull reads GKE system metrics instead.
+	gke *gkePlan
+}
+
+func prepare(ctx context.Context, o Options) (*plan, *Report, error) {
 	c := o.Client
 	rep := &Report{Version: c.Build(ctx), End: o.Now}
 
@@ -118,7 +165,7 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 			return nil, rep, err
 		}
 		if mode == GKESystem {
-			return runGKE(ctx, o, rep)
+			return prepareGKE(ctx, o, rep)
 		}
 		c = gkeClient(c, "cluster")
 		o.Client = c
@@ -210,15 +257,8 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 		}
 	}
 
-	p, err := pull(ctx, o, rep.Start, sources{requests: hasRequests, podUsage: rep.UsageFromPods, oom: hasRestarts}, kinds)
-	if err != nil {
-		return nil, rep, err
-	}
-	f, err := assemble(ctx, o, p, hasRequests, rep)
-	if err != nil {
-		return nil, rep, err
-	}
-	return f, rep, nil
+	rep.NoRequests = !hasRequests
+	return &plan{src: sources{requests: hasRequests, podUsage: rep.UsageFromPods, oom: hasRestarts}, kinds: kinds, client: c}, rep, nil
 }
 
 func spanText(d time.Duration) string {
