@@ -461,10 +461,14 @@ type jsResult struct {
 	Totals map[string]float64 `json:"totals"`
 }
 
+// The page loads a file once and recomputes it whenever a lever changes, so
+// the script computes with other levers first and then with the defaults.
 const nodeScript = `const fs = require('fs');
 const model = require(process.argv[2]);
 const out = process.argv.slice(3).map(f => {
-  const r = model.analyze(JSON.parse(fs.readFileSync(f, 'utf8')));
+  const data = model.prepare(JSON.parse(fs.readFileSync(f, 'utf8')));
+  model.compute(data, { headroom: 1.5, peakWindow: 3600, rates: { perCore: 1, perGiB: 1 } });
+  const r = model.compute(data, model.defaultLevers);
   return { cluster: r.cluster, fidelity: r.fidelity, basis: r.pricing.basis, totals: r.totals };
 });
 process.stdout.write(JSON.stringify(out));

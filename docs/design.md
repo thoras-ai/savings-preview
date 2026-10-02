@@ -98,9 +98,23 @@ Measured on the token values:
 
 ## Components
 
+### Section bar
+
+The report's sections are listed in a bar that sticks to the top of the page under the header, on `--surface-base` with a `--border-lighter` rule. Each item is the section number in Roboto Mono 12px `--text-lighter`, then its title in weight 500. The section in view is `--text-default` with a 2px brand-600 underline (brand-300 in dark); the others are `--text-light`. On narrow screens the bar scrolls sideways. Sections below the summary open with the same number and title at `--primitive-text-xl`.
+
 ### KPI tile
 
 A card with a label, a value and a line of context. Label `--primitive-text-sm`, weight 500, `--text-light`; value `--primitive-text-2xl`, weight 500, tabular numbers; context `--text-light`. Tiles sit in an equal-width grid with 16px gaps and `--primitive-radius-16`. Keep a row to four tiles.
+
+Variants: default; hero, for the headline figure, with the value in `--text-brand` (brand-300 in dark); provisional, for figures from too little history, with a 1px dashed mango-400 edge, no shadow, and the hero value in `--text-caution`. Provisional figures are rounded to two significant figures and marked with ~: "~$2,400".
+
+### Confidence pill
+
+A pill that says how far the data can be trusted: High confidence (brand) for tier 1, Good confidence (azure-50) for tier 2, Provisional (mango) for tier 3 and for a single snapshot.
+
+### Banner
+
+A notice across the content: `--surface-caution` with `--text-on-caution` and a mango-300 border for caution, `--surface-info` with azure-300 for information, `--surface-danger` with ruby-300 for danger. `--primitive-radius-4`. A bold lead word or phrase ("Provisional.") may come first, then one or two sentences. Danger banners are announced at once (`role="alert"`); the others politely (`role="status"`).
 
 ### Table
 
@@ -120,4 +134,4 @@ A row of options in a fully rounded track (`--surface-inset` with a `--border-li
 
 ### Alert
 
-A one-sentence notice on `--surface-caution` with `--text-on-caution`, a 1px mango-300 border and `--primitive-radius-4`. Put the count first, in bold, so the scope is clear: "**1 of 4 workloads** have too little data for a savings figure and are not in the totals."
+A caution banner with one sentence. Put the count first, in bold, so the scope is clear: "**1 of 4 workloads** have too little data for a savings figure and are not in the totals."

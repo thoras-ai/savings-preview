@@ -335,3 +335,86 @@ test('the cluster peak adds each workload highest point in a bucket', () => {
   assert.strictEqual(r.series.peakCpu[0], 3 + 1);
   assert.ok(r.series.useCpu[0] < r.series.peakCpu[0]);
 });
+
+function fixture() {
+  return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'savings-preview.otlp.json'), 'utf8'));
+}
+
+const TOTALS = ['spend', 'savings', 'cores', 'gib', 'reqCores', 'reqGiB', 'workloads', 'counted'];
+
+test('compute with the default levers is analyze, however often the levers changed', () => {
+  const doc = fixture();
+  const want = model.analyze(doc).totals;
+  const data = model.prepare(doc);
+  model.compute(data, { headroom: 1.4, peakWindow: 3600, namespaces: ['shop'], range: [0, 1], rates: { perCore: 1, perGiB: 1 } });
+  const got = model.compute(data, model.defaultLevers).totals;
+  for (const k of TOTALS) assert.strictEqual(got[k], want[k], k);
+  assert.deepStrictEqual(model.compute(data).totals, got);
+});
+
+test('headroom and the peak window move the target', () => {
+  const data = model.prepare(fixture());
+  const base = model.compute(data).totals;
+  const more = model.compute(data, { headroom: 1.5 }).totals;
+  const longer = model.compute(data, { peakWindow: 4 * 3600 }).totals;
+  assert.ok(more.savings < base.savings);
+  assert.ok(longer.savings < base.savings);
+  assert.strictEqual(more.spend, base.spend);
+  assert.strictEqual(more.reqCores, base.reqCores);
+});
+
+test('set rates price the requests instead of the nodes', () => {
+  const data = model.prepare(fixture());
+  const base = model.compute(data);
+  const r = model.compute(data, { rates: { perCore: base.pricing.perCore * 2, perGiB: base.pricing.perGiB * 2 } });
+  assert.ok(Math.abs(r.totals.spend - 2 * base.totals.spend) < 1e-6);
+  assert.strictEqual(r.pricing.custom, true);
+  assert.match(r.pricing.basis, /per core-hour and .* per GiB-hour/);
+  assert.strictEqual(model.compute(data).pricing.basis, base.pricing.basis);
+});
+
+test('a namespace scope counts only its workloads', () => {
+  const data = model.prepare(fixture());
+  const all = model.compute(data);
+  const shop = model.compute(data, { namespaces: ['shop'] });
+  assert.deepStrictEqual(shop.workloads.map(w => w.ns), ['shop']);
+  assert.strictEqual(shop.totals.workloads, 1);
+  const w = all.workloads.find(x => x.ns === 'shop');
+  assert.strictEqual(shop.totals.savings, w.annualSavings);
+  assert.deepStrictEqual(shop.namespaces, all.namespaces);
+});
+
+test('a time range averages only its points and clips the cluster series', () => {
+  const data = model.prepare(fixture());
+  const all = model.compute(data);
+  const t = all.series.t;
+  const from = t[100], to = t[400];
+  const r = model.compute(data, { range: [from, to] });
+  assert.strictEqual(r.series.t[0], from);
+  assert.strictEqual(r.series.t[r.series.t.length - 1], to);
+  assert.notStrictEqual(r.totals.savings, all.totals.savings);
+  const outside = model.compute(data, { range: [1, 2] });
+  assert.strictEqual(outside.totals.counted, 0);
+  assert.ok(outside.workloads.every(w => w.status === 'excluded'));
+  assert.ok(outside.workloads.some(w => w.reason === 'No data in the selected time range'));
+});
+
+test('a range covering the whole file gives the same totals as no range', () => {
+  const data = model.prepare(fixture());
+  const all = model.compute(data);
+  const t = all.series.t;
+  for (const range of [[t[0], t[t.length - 1]], [data.fidelity.start, data.fidelity.end], [0, 4e9]]) {
+    const r = model.compute(data, { range });
+    for (const k of TOTALS) assert.strictEqual(r.totals[k], all.totals[k], k + ' ' + range);
+  }
+});
+
+test('a range clips each workload series as well as the cluster series', () => {
+  const data = model.prepare(fixture());
+  const t = model.compute(data).series.t;
+  const r = model.compute(data, { range: [t[10], t[20]] });
+  for (const w of r.workloads.filter(x => x.series)) {
+    assert.strictEqual(w.series.t[0], t[10]);
+    assert.strictEqual(w.series.t[w.series.t.length - 1], t[20]);
+  }
+});

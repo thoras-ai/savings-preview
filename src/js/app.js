@@ -1,16 +1,15 @@
-/* Page wiring: loads the contract file, runs the model, renders tiles, chart and table. */
+/* Page wiring: loads the contract file once, keeps the shared state in the URL
+ * hash, recomputes the figures when a lever changes and renders each section. */
 (function () {
   'use strict';
 
-  var model = SP.model, chart = SP.chart, files = SP.files;
+  var model = SP.model, files = SP.files, state = SP.state, ui = SP.ui, sections = SP.sections.list, start = SP.start;
   var DATA_URL = new URLSearchParams(location.search).get('data') || 'savings-preview.otlp.json';
   var THEME_KEY = 'savings-preview-theme';
-  var state = { result: null, selected: null, mode: 'spend', sort: { key: 'annualSavings', dir: -1 }, theme: 'auto' };
+  var store = state.store(state.parse(location.hash));
+  var page = { data: null, result: null, theme: 'auto', samples: null };
 
   function $(id) { return document.getElementById(id); }
-  function esc(s) {
-    return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
-  }
 
   // Storage can be missing or blocked (private windows, pages opened from disk).
   function storedTheme() {
@@ -21,7 +20,7 @@
   }
 
   function setTheme(choice) {
-    state.theme = choice;
+    page.theme = choice;
     try {
       if (choice === 'auto') localStorage.removeItem(THEME_KEY);
       else localStorage.setItem(THEME_KEY, choice);
@@ -30,11 +29,11 @@
   }
 
   function applyTheme() {
-    var dark = state.theme === 'dark' ||
-      (state.theme === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var dark = page.theme === 'dark' ||
+      (page.theme === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     Array.prototype.forEach.call(document.querySelectorAll('[data-theme-choice]'), function (b) {
-      b.setAttribute('aria-checked', String(b.getAttribute('data-theme-choice') === state.theme));
+      b.setAttribute('aria-checked', String(b.getAttribute('data-theme-choice') === page.theme));
     });
   }
 
@@ -46,61 +45,162 @@
     try { return JSON.parse(raw); } catch (e) { return null; }
   }
 
-  function money(v) {
-    if (Math.abs(v) >= 1e6) return '$' + (v / 1e6).toFixed(2) + 'M';
-    return '$' + Math.round(v).toLocaleString('en-US');
-  }
-
-  function num(v, digits) {
-    return v.toLocaleString('en-US', { maximumFractionDigits: digits === undefined ? 1 : digits });
+  function show(which) {
+    $('loading').hidden = which !== 'loading';
+    $('start').hidden = which !== 'start';
+    $('report').hidden = which !== 'report';
+    $('secbar').hidden = which !== 'report';
+    $('open-another').hidden = which !== 'report';
+    if (which !== 'report') $('context').textContent = '';
   }
 
   function showError(message) {
-    $('loading').hidden = true;
-    $('report').hidden = true;
-    $('open-another').hidden = true;
-    $('start').hidden = false;
-    $('error').textContent = message || '';
-    $('error').hidden = !message;
-    $('file').value = '';
+    show('start');
+    start.showError($('start'), message);
   }
 
-  function showLoading() {
-    $('start').hidden = true;
-    $('report').hidden = true;
-    $('open-another').hidden = true;
-    $('loading').hidden = false;
-  }
-
-  function load(doc) {
-    var result;
-    try { result = model.analyze(doc); } catch (e) { showError(e.message); return; }
-    state.result = result;
-    state.selected = null;
-    $('loading').hidden = true;
-    $('start').hidden = true;
-    $('report').hidden = false;
-    $('open-another').hidden = false;
-    renderAll();
-  }
-
-  function fetchData() {
-    $('loading').hidden = false;
-    fetch(DATA_URL).then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    }).then(load).catch(function () {
-      showError('');
+  function writeHash(st) {
+    var h = state.serialize(st);
+    try { history.replaceState(null, '', location.pathname + location.search + (h ? '#' + h : '')); } catch (e) { /* not allowed here */ }
+    // Each section link carries the settings, so it opens the same view in a new tab.
+    Array.prototype.forEach.call($('secbar').querySelectorAll('a[data-section]'), function (a) {
+      a.setAttribute('href', '#' + state.serialize(Object.assign({}, st, { section: a.getAttribute('data-section') })));
     });
   }
 
+  // Settings from a link made for another file: namespaces and a workload
+  // this file does not have are dropped.
+  function fitToData(st, data) {
+    var patch = {};
+    if (st.namespaces) {
+      var known = st.namespaces.filter(function (n) { return data.namespaces.indexOf(n) >= 0; });
+      if (known.length !== st.namespaces.length) patch.namespaces = known.length ? known : null;
+    }
+    if (st.workload && !data.workloads.some(function (w) { return w.id === st.workload; })) patch.workload = null;
+    return patch;
+  }
+
+  function context() {
+    return {
+      data: page.data, result: page.result, state: store.get(), changed: null, set: store.set, go: go,
+      approx: ui.confidenceLevel(page.result.fidelity) === 'provisional'
+    };
+  }
+
+  function recompute() {
+    var t0 = performance.now();
+    page.result = model.compute(page.data, state.levers(store.get()));
+    page.timing.compute = performance.now() - t0;
+  }
+
+  function renderSections(changed) {
+    var t0 = performance.now(), ctx = context();
+    ctx.changed = changed;
+    sections.forEach(function (s) { s.render($('section-' + s.id).querySelector('.section-body'), ctx); });
+    page.timing.render = performance.now() - t0;
+  }
+
+  function buildLayout() {
+    $('secbar').querySelector('ol').innerHTML = sections.map(function (s) {
+      return '<li><a href="#section=' + s.id + '" data-section="' + s.id + '"><span class="step">' + s.number + '</span>' + ui.esc(s.title) + '</a></li>';
+    }).join('');
+    $('report').innerHTML = sections.map(function (s) {
+      // The summary opens with the cluster name, so its title is for screen readers only.
+      var head = s.id === 'summary' ? '<h2 class="visually-hidden">' + ui.esc(s.title) + '</h2>' :
+        '<header class="section-head"><span class="step">' + s.number + '</span><h2>' + ui.esc(s.title) + '</h2></header>';
+      return '<section id="section-' + s.id + '" class="section' + (s.placeholder ? ' section-placeholder' : '') + '" data-section="' + s.id + '">' +
+        head + '<div class="section-body"></div></section>';
+    }).join('');
+  }
+
+  function markActive(id) {
+    Array.prototype.forEach.call($('secbar').querySelectorAll('a[data-section]'), function (a) {
+      var on = a.getAttribute('data-section') === id;
+      a.classList.toggle('active', on);
+      if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+    });
+  }
+
+  var scrolling = null;
+  function go(id, instant) {
+    var el = $('section-' + id);
+    if (!el) return;
+    scrolling = id;
+    store.set({ section: id });
+    markActive(id);
+    var behavior = instant ? 'auto' : 'smooth';
+    if (id === sections[0].id) window.scrollTo({ top: 0, behavior: behavior });
+    else el.scrollIntoView({ behavior: behavior, block: 'start' });
+    settle();
+  }
+
+  // A smooth scroll sends scroll events until it ends; the clicked section
+  // stays marked until they stop.
+  var settleTimer;
+  function settle() {
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(function () { scrolling = null; }, 200);
+  }
+
+  // The section in view is the last one whose top has passed under the bar,
+  // or the last section once the page is scrolled to the end.
+  function sectionInView() {
+    var bar = $('secbar').getBoundingClientRect().bottom, id = sections[0].id;
+    sections.forEach(function (s) {
+      if ($('section-' + s.id).getBoundingClientRect().top <= bar + 16) id = s.id;
+    });
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) id = sections[sections.length - 1].id;
+    return id;
+  }
+
+  var ticking = false;
+  function onScroll() {
+    if (ticking || $('report').hidden) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      ticking = false;
+      if (scrolling) { settle(); return; }
+      var id = sectionInView();
+      markActive(id);
+      store.set({ section: id });
+    });
+  }
+
+  function load(doc) {
+    var t0 = performance.now(), data;
+    try { data = model.prepare(doc); } catch (e) { showError(e.message); return; }
+    // Cleared first, so the store does not recompute the previous file.
+    page.data = null;
+    store.set(fitToData(store.get(), data));
+    writeHash(store.get());
+    page.data = data;
+    page.timing = { prepare: performance.now() - t0 };
+    recompute();
+    show('report');
+    $('context').textContent = (data.cluster || 'Unnamed cluster') + ' · ' + data.fidelity.label;
+    renderSections(null);
+    var id = store.get().section;
+    markActive(id);
+    if (id !== state.DEFAULTS.section) go(id, true); else window.scrollTo(0, 0);
+    page.timing.total = performance.now() - t0;
+    page.timing.sinceOpen = performance.now();
+  }
+
+  function fetchData() {
+    show('loading');
+    fetch(DATA_URL).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(load).catch(function () { showError(''); });
+  }
+
   function readFile(file) {
-    showLoading();
+    show('loading');
     files.read(file).then(load, function (e) { showError(e.message); });
   }
 
   function openSample(url) {
-    showLoading();
+    show('loading');
     fetch(url).then(function (r) {
       if (!r.ok) throw new Error('The sample did not load (HTTP ' + r.status + ').');
       return r.arrayBuffer();
@@ -108,179 +208,40 @@
       .then(load, function (e) { showError(e.message); });
   }
 
-  function renderSamples(list) {
-    $('sample-list').innerHTML = list.map(function (s) {
-      return '<li><button type="button" class="sample" data-sample="' + esc(s.url) + '"><span class="sample-name">' + esc(s.name) +
-        '</span><span class="sample-detail">' + esc(s.detail) + '</span></button></li>';
-    }).join('');
-    $('samples').hidden = false;
-  }
-
-  function renderAll() {
-    var r = state.result;
-    $('cluster').textContent = r.cluster || 'Unnamed cluster';
-    renderFidelity();
-    renderTiles();
-    renderNotes();
-    renderChart();
-    renderTable();
-  }
-
-  function renderFidelity() {
-    var f = state.result.fidelity;
-    var tierText = { 1: 'Full history', 2: 'Reduced resolution', 3: 'Limited history' }[f.tier] || '';
-    $('fidelity').innerHTML = '<span class="badge tier-' + f.tier + '">Tier ' + f.tier + '</span> ' +
-      '<span class="fidelity-label">' + esc(f.label) + '</span>' +
-      '<span class="fidelity-detail">' + esc(tierText) + (f.source ? ' · ' + esc(f.source) : '') + '</span>' +
-      f.notes.map(function (n) { return '<span class="fidelity-note">' + esc(n) + '</span>'; }).join('');
-  }
-
-  function workloadNotes(w) {
-    return w.notes.map(function (n) { return '<div class="wl-note">' + esc(model.notes[n].workload) + '</div>'; }).join('');
-  }
-
-  function tile(label, value, sub) {
-    return '<div class="tile"><div class="tile-label">' + esc(label) + '</div><div class="tile-value">' + esc(value) +
-      '</div><div class="tile-sub">' + esc(sub) + '</div></div>';
-  }
-
-  function renderTiles() {
-    var t = state.result.totals;
-    var pct = t.spend > 0 ? Math.round(t.savings / t.spend * 100) : 0;
-    $('tiles').innerHTML =
-      tile('Projected annual spend', money(t.spend), 'Priced from current requests') +
-      tile('Annual savings opportunity', money(t.savings), pct + '% of projected spend') +
-      tile('CPU cores that could be freed', num(t.cores), 'of ' + num(t.reqCores) + ' requested') +
-      tile('Memory that could be freed', num(t.gib) + ' GiB', 'of ' + num(t.reqGiB) + ' GiB requested');
-  }
-
-  function renderNotes() {
-    var r = state.result, t = r.totals, notes = [];
-    if (t.counted < t.workloads) {
-      var left = r.workloads.filter(function (w) { return !w.series; }).length;
-      notes.push('<strong>' + left + ' of ' + t.workloads + ' workloads</strong> have too little data for a savings figure and are not in the totals.');
-    }
-    var partial = r.workloads.filter(function (w) { return w.status === 'partial'; }).length;
-    if (partial) notes.push('<strong>' + partial + '</strong> ' + (partial === 1 ? 'workload has' : 'workloads have') + ' containers with missing data. Those containers are left out of the workload figures.');
-    $('notes').innerHTML = notes.map(function (n) { return '<p>' + n + '</p>'; }).join('');
-    $('notes').hidden = !notes.length;
-    $('basis').textContent = 'Priced with ' + r.pricing.basis + '. Target is 1.1 times the highest usage in any 15-minute window. Waste is the amount requested above the target.';
-  }
-
-  function selectedWorkload() {
-    if (!state.selected) return null;
-    return state.result.workloads.filter(function (w) { return w.id === state.selected; })[0] || null;
-  }
-
-  function renderChart() {
-    var w = selectedWorkload();
-    var r = state.result;
-    var series = w ? w.series : r.series;
-    $('chart-title').textContent = w ? w.name : 'Whole cluster';
-    $('chart-sub').textContent = w ? w.ns + ' · ' + w.kind : r.totals.counted + ' workloads';
-    $('back').hidden = !w;
-    var tabs = $('tabs');
-    tabs.innerHTML = Object.keys(chart.modes).map(function (k) {
-      return '<button type="button" role="tab" aria-selected="' + (k === state.mode) + '" data-mode="' + k + '">' + chart.modes[k].label + '</button>';
-    }).join('');
-    $('legend').innerHTML = chart.legend(state.mode).map(function (item) {
-      return '<span><i class="swatch swatch-' + item.kind + '"></i>' + esc(item.name) + '</span>';
-    }).join('');
-    var host = $('chart');
-    if (!series) { host.innerHTML = '<p class="empty">No workload has enough data to chart.</p>'; return; }
-    chart.render(host, series, state.mode, { title: w ? w.name : 'Whole cluster' });
-  }
-
-  function cmp(a, b, key, dir) {
-    var av = a[key], bv = b[key];
-    if (typeof av === 'string') return dir * av.localeCompare(bv);
-    return dir * (av - bv);
-  }
-
-  var COLUMNS = [
-    { key: 'name', label: 'Workload', num: false },
-    { key: 'annualSpend', label: 'Annual spend', num: true },
-    { key: 'annualSavings', label: 'Annual savings', num: true },
-    { key: 'savingsPct', label: 'Waste', num: true },
-    { key: 'wasteCores', label: 'CPU to free', num: true },
-    { key: 'wasteGiB', label: 'Memory to free', num: true }
-  ];
-
-  function renderTable() {
-    var s = state.sort;
-    var rows = state.result.workloads.slice();
-    var ok = rows.filter(function (w) { return w.series; }).sort(function (a, b) { return cmp(a, b, s.key, s.dir) || a.name.localeCompare(b.name); });
-    var rest = rows.filter(function (w) { return !w.series; }).sort(function (a, b) { return a.name.localeCompare(b.name); });
-    var head = COLUMNS.map(function (c) {
-      var active = s.key === c.key;
-      return '<th scope="col" class="' + (c.num ? 'num' : '') + '" aria-sort="' + (active ? (s.dir < 0 ? 'descending' : 'ascending') : 'none') + '">' +
-        '<button type="button" data-sort="' + c.key + '">' + c.label + (active ? (s.dir < 0 ? ' ↓' : ' ↑') : '') + '</button></th>';
-    }).join('');
-    var maxPct = Math.max.apply(null, [0.0001].concat(ok.map(function (w) { return w.savingsPct; })));
-    var body = ok.map(function (w) {
-      var label = esc(w.name) + (w.status === 'partial' ? ' <span class="chip" title="' + esc(w.reason) + '">Partial data</span>' : '');
-      return '<tr class="' + (w.id === state.selected ? 'selected' : '') + '" data-id="' + esc(w.id) + '" tabindex="0" aria-label="Show chart for ' + esc(w.name) + '">' +
-        '<td><div class="wl-name">' + label + '</div><div class="wl-sub">' + esc(w.ns) + ' · ' + esc(w.kind) + '</div>' + workloadNotes(w) + '</td>' +
-        '<td class="num">' + money(w.annualSpend) + '</td>' +
-        '<td class="num strong">' + money(w.annualSavings) + '</td>' +
-        '<td class="num"><span class="bar"><i style="width:' + Math.round(w.savingsPct / maxPct * 100) + '%"></i></span>' + Math.round(w.savingsPct * 100) + '%</td>' +
-        '<td class="num">' + num(w.wasteCores, 2) + '</td>' +
-        '<td class="num">' + num(w.wasteGiB, 2) + ' GiB</td></tr>';
-    }).join('');
-    body += rest.map(function (w) {
-      return '<tr class="excluded" data-id="' + esc(w.id) + '"><td><div class="wl-name">' + esc(w.name) + '</div><div class="wl-sub">' + esc(w.ns) + ' · ' + esc(w.kind) + '</div></td>' +
-        '<td colspan="5" class="muted"><span class="chip warn">No estimate</span> ' + esc(w.reason) + '</td></tr>';
-    }).join('');
-    $('table').innerHTML = '<thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody>';
-  }
-
-  function select(id) {
-    state.selected = id;
-    renderChart();
-    renderTable();
-    $('chart-card').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }
-
   function bind() {
-    $('tabs').addEventListener('click', function (e) {
-      var b = e.target.closest('button[data-mode]');
-      if (!b) return;
-      state.mode = b.getAttribute('data-mode');
-      renderChart();
+    store.subscribe(function (st, changed) {
+      writeHash(st);
+      if (!page.data || (changed.length === 1 && changed[0] === 'section')) return;
+      if (state.affectsFigures(changed)) recompute();
+      renderSections(changed);
     });
-    $('back').addEventListener('click', function () { select(null); });
-    $('table').addEventListener('click', function (e) {
-      var sortBtn = e.target.closest('button[data-sort]');
-      if (sortBtn) {
-        var key = sortBtn.getAttribute('data-sort');
-        state.sort = { key: key, dir: state.sort.key === key ? -state.sort.dir : (key === 'name' ? 1 : -1) };
-        renderTable();
-        return;
-      }
-      var tr = e.target.closest('tr[data-id]');
-      if (tr && !tr.classList.contains('excluded')) select(tr.getAttribute('data-id') === state.selected ? null : tr.getAttribute('data-id'));
+    window.addEventListener('hashchange', function () {
+      var next = state.parse(location.hash), before = store.get().section;
+      if (page.data) Object.assign(next, fitToData(next, page.data));
+      store.set(next);
+      if (page.data && next.section !== before) go(next.section);
     });
-    $('table').addEventListener('keydown', function (e) {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      var tr = e.target.closest('tr[data-id]');
-      if (tr && e.target === tr && !tr.classList.contains('excluded')) {
-        e.preventDefault();
-        select(tr.getAttribute('data-id') === state.selected ? null : tr.getAttribute('data-id'));
-      }
+    $('secbar').addEventListener('click', function (e) {
+      var a = e.target.closest('a[data-section]');
+      if (!a) return;
+      e.preventDefault();
+      go(a.getAttribute('data-section'));
     });
-    $('file').addEventListener('change', function (e) { if (e.target.files[0]) readFile(e.target.files[0]); });
+    $('report').addEventListener('click', function (e) {
+      var a = e.target.closest('a[data-go]');
+      if (!a) return;
+      e.preventDefault();
+      go(a.getAttribute('data-go'));
+    });
+    window.addEventListener('scroll', onScroll, { passive: true });
     ['dragover', 'dragleave', 'drop'].forEach(function (ev) {
       document.addEventListener(ev, function (e) {
         e.preventDefault();
-        $('drop').classList.toggle('over', ev === 'dragover');
+        start.dragging($('start'), ev === 'dragover');
         if (ev === 'drop' && e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
       });
     });
-    $('open-another').addEventListener('click', function () { showError(''); });
-    $('sample-list').addEventListener('click', function (e) {
-      var b = e.target.closest('button[data-sample]');
-      if (b) openSample(b.getAttribute('data-sample'));
-    });
+    $('open-another').addEventListener('click', function () { showError(''); window.scrollTo(0, 0); });
     $('theme').addEventListener('click', function (e) {
       var b = e.target.closest('button[data-theme-choice]');
       if (b) setTheme(b.getAttribute('data-theme-choice'));
@@ -288,7 +249,11 @@
     var timer;
     window.addEventListener('resize', function () {
       clearTimeout(timer);
-      timer = setTimeout(function () { if (state.result && !$('report').hidden) renderChart(); }, 120);
+      timer = setTimeout(function () {
+        if (!page.result || $('report').hidden) return;
+        var ctx = context();
+        sections.forEach(function (s) { if (s.resize) s.resize($('section-' + s.id).querySelector('.section-body'), ctx); });
+      }, 120);
     });
     if (window.matchMedia) {
       var mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -303,12 +268,16 @@
     try { return JSON.parse(el.textContent); } catch (e) { return null; }
   }
 
-  state.theme = storedTheme();
+  page.theme = storedTheme();
   applyTheme();
+  buildLayout();
+  page.samples = samples();
+  start.render($('start'), { samples: page.samples, open: readFile, openSample: openSample });
   bind();
-  var inline = inlineData(), list = samples();
-  if (list) renderSamples(list);
+  // Load and render times, for checking the page stays fast on large files.
+  SP.timing = function () { return page.timing; };
+  var inline = inlineData();
   if (inline) load(inline);
-  else if (list || location.protocol === 'file:') showError('');
+  else if (page.samples || location.protocol === 'file:') showError('');
   else fetchData();
 })();
