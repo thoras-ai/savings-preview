@@ -16,6 +16,8 @@ With [gh](https://cli.github.com) logged in:
 
     gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh
 
+If gh has several accounts and says "release not found", first run `export GH_TOKEN="$(gh auth token -h github.com -u <account>)"` with an account that can read the repository. The export also reaches the gh calls inside `install.sh`.
+
 `install.sh` picks the archive for this machine (macOS or Linux, amd64 or arm64), checks it against the release's `checksums.txt`, and installs `savings-preview` into `~/.local/bin` when that is on `PATH`, or `/usr/local/bin` otherwise. It asks before using sudo, and stops without installing anything when a checksum is missing or does not match. Set `VERSION=v0.2.0` to install a release other than the latest, and `INSTALL_DIR` to install somewhere else:
 
     gh release download -R thoras-ai/savings-preview -p install.sh -O - | VERSION=v0.2.0 INSTALL_DIR=~/bin sh

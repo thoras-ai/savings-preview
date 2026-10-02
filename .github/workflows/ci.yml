@@ -111,11 +111,14 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
         run: |
+          # OWN_JOB and pkgs are space-separated package lists.
+          # shellcheck disable=SC2086
           if [ "$SHARD" = rest ]; then
             pkgs=$(go list ./... | grep -vxF "$(go list $OWN_JOB)")
           else
             pkgs=$(echo $OWN_JOB | cut -d' ' -f"$SHARD")
           fi
+          # shellcheck disable=SC2086
           go test -count=1 -vet=off $pkgs
 
   # Fails when the code calls a function with a known vulnerability, in a

@@ -2,9 +2,12 @@
 
 Pushing a tag that starts with `v` runs `.github/workflows/release.yml`:
 
-1. **checks** runs the CI workflow (`.github/workflows/ci.yml`): `go vet`, `go test`, `go test -race`, `govulncheck`, the Python and Node tests, and the fixture check against the contract. Pull requests run the same jobs except `go test -race`, which runs on pushes to `main`, nightly, on demand and here, so a release never skips it.
-2. **build** fails unless the tagged commit is on `main` and `CHANGELOG.md` has a section for the tag. It then runs `scripts/release.sh build <tag>`, which cross-compiles `darwin/amd64`, `darwin/arm64`, `linux/amd64` and `linux/arm64` binaries with `CGO_ENABLED=0` and the tag passed as `-X main.version=<tag>`. It uploads them as the `binaries` workflow artifact. CI and the release use the latest Go 1.26 patch release, not the minimum version in `go.mod`; change `go-version` in both workflows when moving to a new minor version.
-3. **publish** downloads the binaries, runs `scripts/release.sh package <tag>`, which also writes an SBOM for each archive, and creates a draft GitHub release for the tag. `scripts/release_notes.py` takes the release notes from the tag's `CHANGELOG.md` section, rewriting relative links to point at the tag; a prerelease tag such as `v1.2.0-rc.1` uses its own section when there is one and the `v1.2.0` section otherwise. It then fills in the Homebrew formula from the draft's asset URLs and `checksums.txt` with `scripts/homebrew_formula.py`, attaches it, and publishes the release. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a prerelease.
+1. **preflight** fails unless the tagged commit is on `main` and `CHANGELOG.md` has a section for the tag. It then looks up the CI runs on `main` for the tagged commit with `scripts/main_ci_result.py`: a push to `main`, the nightly run or a manual run, all of which run every check. When one is still running it waits for it, up to 15 minutes.
+2. **checks** runs the CI workflow (`.github/workflows/ci.yml`): `go vet`, `go test`, `go test -race`, `govulncheck`, the Python and Node tests, and the fixture check against the contract. It runs only when CI on `main` did not pass for the tagged commit: it failed, was cancelled, never ran, or was still running after the wait. Pull requests run the same jobs except `go test -race`, which runs on pushes to `main`, nightly, on demand and here, so a release never skips it.
+3. **build** runs once per platform, `darwin/amd64`, `darwin/arm64`, `linux/amd64` and `linux/arm64`, at the same time as **preflight**. Each job restores the Go build cache that CI saves on `main`, without ever saving one, and runs `scripts/release.sh build <tag> <os>/<arch>`, which cross-compiles the binary with `CGO_ENABLED=0` and the tag passed as `-X main.version=<tag>`. It then runs `scripts/release.sh package <tag> <os>/<arch>`, which writes the platform's archive and its SBOM, and uploads both as the `release-<os>-<arch>` workflow artifact. CI and the release use the latest Go 1.26 patch release, not the minimum version in `go.mod`; change `go-version` in both workflows when moving to a new minor version.
+4. **publish** runs once **build** passed for every platform and either CI passed on `main` or **checks** passed. It downloads the archives and SBOMs, runs `scripts/release.sh checksums <tag>`, which writes `checksums.txt` and copies `install.sh`, and creates a draft GitHub release for the tag. `scripts/release_notes.py` takes the release notes from the tag's `CHANGELOG.md` section, rewriting relative links to point at the tag; a prerelease tag such as `v1.2.0-rc.1` uses its own section when there is one and the `v1.2.0` section otherwise. It then fills in the Homebrew formula from the draft's asset URLs and `checksums.txt` with `scripts/homebrew_formula.py`, attaches it, and publishes the release. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a prerelease.
+
+A tag pushed after CI passed on `main` skips **checks**, and the four builds run side by side while **preflight** looks up the CI result.
 
 The `-X main.version` flag sets a `version` variable in `cmd/savings-preview`. The linker ignores it when the variable does not exist, so a binary built from a commit without that variable reports no version.
 
@@ -33,6 +36,12 @@ Then update the Homebrew tap as described below.
 
     scripts/release.sh build v0.1.0-local
     scripts/release.sh package v0.1.0-local
+
+Naming platforms, as the release jobs do, builds and packages only those, and `checksums` then writes `checksums.txt` and `install.sh` once every platform is packaged:
+
+    scripts/release.sh build v0.1.0-local linux/amd64
+    scripts/release.sh package v0.1.0-local linux/amd64
+    scripts/release.sh checksums v0.1.0-local
 
 The output lands in `dist/release/`. The package step builds the SBOM generator pinned in `tools/go.mod`, which downloads its modules the first time. Check a download with `shasum -a 256 -c checksums.txt` in the directory that holds the archives, adding `--ignore-missing` when only some of them are there.
 
@@ -103,6 +112,6 @@ The tap update can later move into the release workflow as a job that pushes the
 
 ## Adding signing or notarization
 
-The binaries pass between the **build** and **publish** jobs as the `binaries` artifact, and `package` archives whatever is in `dist/release/bin/`. To sign them, add a job that runs after **build**, downloads `binaries`, signs the files in place, and uploads them again under the same name with `overwrite: true`. Then make **publish** depend on that job instead of **build**.
+Each **build** job builds its platform's binary into `dist/release/bin/` and then packages it, and `package` archives whatever is there. To sign the binaries, add the signing steps to **build** between the two `scripts/release.sh` steps, limited to the platforms that need them, for example `if: matrix.goos == 'darwin'`. The SBOM is written from the archived binary, so it describes the signed one.
 
-macOS code signing and notarization need a `macos` runner with `codesign` and `xcrun notarytool`, the Developer ID certificate, and an App Store Connect API key, all stored as repository secrets and read only by the signing job. A bare binary cannot have a notarization ticket stapled to it, so Gatekeeper checks it online the first time it runs.
+macOS code signing and notarization need a `macos` runner with `codesign` and `xcrun notarytool`, the Developer ID certificate, and an App Store Connect API key, all stored as repository secrets and passed only to the signing steps. The darwin builds then run on that runner, through `runs-on` in the matrix. A bare binary cannot have a notarization ticket stapled to it, so Gatekeeper checks it online the first time it runs.

@@ -44,6 +44,41 @@ class WorkflowTest(unittest.TestCase):
                 self.assertEqual(len(shas), 1)
 
 
+def cache_steps(path):
+    """The text of each actions/cache step in a workflow, without its indentation."""
+    lines = path.read_text().splitlines()
+    steps = []
+    for i, line in enumerate(lines):
+        if re.match(r"^\s*-?\s*uses: actions/cache", line):
+            indent = len(line) - len(line.lstrip(" -"))
+            j = i + 1
+            while j < len(lines) and (not lines[j].strip() or len(lines[j]) - len(lines[j].lstrip()) >= indent
+                                      and not lines[j].lstrip().startswith("- ")):
+                j += 1
+            steps.append("\n".join(l[indent:] for l in lines[i:j]).strip())
+    return steps
+
+
+class ReleaseCacheTest(unittest.TestCase):
+    """The release builds restore the Go build cache CI saves on main and never save one."""
+
+    def setUp(self):
+        workflows = ROOT / ".github" / "workflows"
+        self.ci = cache_steps(workflows / "ci.yml")
+        self.release = cache_steps(workflows / "release.yml")
+
+    def test_release_restores_the_cache_ci_saves(self):
+        self.assertEqual(len(self.release), 1)
+        restore = self.release[0]
+        self.assertTrue(restore.startswith("uses: actions/cache/restore@"), restore)
+        # The vet job's restore step is the one whose key the save step reuses.
+        self.assertIn(restore, self.ci)
+
+    def test_release_never_saves_a_cache(self):
+        for step in self.release:
+            self.assertNotRegex(step, r"^uses: actions/cache(/save)?@")
+
+
 class DependabotTest(unittest.TestCase):
     def setUp(self):
         self.config = (ROOT / ".github" / "dependabot.yml").read_text()
