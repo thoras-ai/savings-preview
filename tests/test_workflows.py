@@ -44,6 +44,57 @@ class WorkflowTest(unittest.TestCase):
                 self.assertEqual(len(shas), 1)
 
 
+def cache_steps(path):
+    """The text of each actions/cache step in a workflow, without its indentation."""
+    lines = path.read_text().splitlines()
+    steps = []
+    for i, line in enumerate(lines):
+        if re.match(r"^\s*-?\s*uses: actions/cache", line):
+            indent = len(line) - len(line.lstrip(" -"))
+            j = i + 1
+            while j < len(lines) and (not lines[j].strip() or len(lines[j]) - len(lines[j].lstrip()) >= indent
+                                      and not lines[j].lstrip().startswith("- ")):
+                j += 1
+            steps.append("\n".join(l[indent:] for l in lines[i:j]).strip())
+    return steps
+
+
+class ReleaseCacheTest(unittest.TestCase):
+    """The release restores the caches CI saves on main and never saves one."""
+
+    def setUp(self):
+        workflows = ROOT / ".github" / "workflows"
+        self.ci = cache_steps(workflows / "ci.yml")
+        self.release = cache_steps(workflows / "release.yml")
+
+    def test_release_restores_the_caches_ci_saves(self):
+        self.assertGreater(len(self.release), 0)
+        for step in self.release:
+            with self.subTest(step=step.splitlines()[0]):
+                self.assertTrue(step.startswith("uses: actions/cache/restore@"), step)
+                self.assertIn(step, self.ci)
+
+    def test_release_scans_with_a_fresh_vulnerability_database(self):
+        release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+        self.assertNotIn("govulndb", release)
+        self.assertIn("https://vuln.go.dev/vulndb.zip", release)
+        self.assertIn("govulncheck -db file:///dev/shm/vulndb ./...", release)
+        publish = release.split("\n  publish:")[1]
+        self.assertRegex(publish, r"needs: \[[^\]]*\bgovulncheck\b")
+        self.assertIn("needs.govulncheck.result == 'success'", publish)
+
+    def test_ci_compiles_the_release_binaries_into_the_cache_before_saving_it(self):
+        vet = (ROOT / ".github" / "workflows" / "ci.yml").read_text().split("\n  test:")[0]
+        build = vet.find("run: scripts/release.sh build ")
+        self.assertGreater(build, 0)
+        self.assertLess(build, vet.index("-mmin +60"))
+        self.assertLess(build, vet.index("uses: actions/cache/save@"))
+
+    def test_release_never_saves_a_cache(self):
+        for step in self.release:
+            self.assertNotRegex(step, r"^uses: actions/cache(/save)?@")
+
+
 class DependabotTest(unittest.TestCase):
     def setUp(self):
         self.config = (ROOT / ".github" / "dependabot.yml").read_text()

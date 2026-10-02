@@ -100,9 +100,9 @@ Nowhere, unless you send it. The program makes no network requests other than to
 
 ## How releases are built
 
-- Release binaries are built by GitHub Actions from a tag on `main`, after the full CI run. `checksums.txt` on each release has the SHA-256 of every archive and SBOM, and `install.sh` and the Homebrew formula check the archive against it before installing.
+- Release binaries are built by GitHub Actions from a tag on `main`, and published only after the full CI run passed for that commit, on `main` or on the tag. `checksums.txt` on each release has the SHA-256 of every archive and SBOM, and `install.sh` and the Homebrew formula check the archive against it before installing.
 - Each archive has a CycloneDX SBOM, `savings-preview_<tag>_<os>_<arch>.cdx.json`, listing the Go modules and the Go release built into its binary. Feed it to your vulnerability scanner, or run `govulncheck -mode binary` on the binary itself.
-- CI runs `govulncheck` on every pull request and nightly, and fails when the code calls a function with a known vulnerability, in a dependency or in the Go standard library.
+- CI runs `govulncheck` on every pull request, nightly, and on each release tag with that day's vulnerability database, and fails when the code calls a function with a known vulnerability, in a dependency or in the Go standard library.
 - Every GitHub Action the workflows use is pinned to a commit, and Dependabot proposes updates to the actions, the Go modules and the CI tools each week.
 
 [releasing.md](releasing.md#sboms) has the details.

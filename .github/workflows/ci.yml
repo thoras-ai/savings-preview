@@ -63,6 +63,10 @@ jobs:
       # Compiles every test package into the cache, so the test jobs only link and run them.
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: go test -vet=off -run '^$' ./...
+      # Compiles the release binaries with the release's flags, so the release
+      # builds, which restore this cache, mostly only link.
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        run: scripts/release.sh build ci
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true' && steps.cache.outputs.cache-matched-key != ''
         run: find "$GOCACHE" -mindepth 2 -maxdepth 2 -mmin +60 -exec rm -rf {} +
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
@@ -111,11 +115,14 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
         run: |
+          # OWN_JOB and pkgs are space-separated package lists.
+          # shellcheck disable=SC2086
           if [ "$SHARD" = rest ]; then
             pkgs=$(go list ./... | grep -vxF "$(go list $OWN_JOB)")
           else
             pkgs=$(echo $OWN_JOB | cut -d' ' -f"$SHARD")
           fi
+          # shellcheck disable=SC2086
           go test -count=1 -vet=off $pkgs
 
   # Fails when the code calls a function with a known vulnerability, in a

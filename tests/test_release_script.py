@@ -1,4 +1,4 @@
-"""Tests for the package step of scripts/release.sh.
+"""Tests for the package and checksums steps of scripts/release.sh.
 
 The script runs in a copy of the repository layout with a fake go command,
 which builds a fake cyclonedx-gomod that records how it was called. Nothing is
@@ -42,30 +42,39 @@ chmod 755 "$4"
 
 
 class PackageTest(unittest.TestCase):
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.tmp)
-        (self.tmp / "scripts").mkdir()
-        shutil.copy(ROOT / "scripts" / "release.sh", self.tmp / "scripts")
-        shutil.copy(ROOT / "scripts" / "install.sh", self.tmp / "scripts")
-        (self.tmp / "README.md").write_text("readme\n")
-        bindir = self.tmp / "dist" / "release" / "bin"
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp())
+        cls.addClassCleanup(shutil.rmtree, cls.tmp)
+        (cls.tmp / "scripts").mkdir()
+        shutil.copy(ROOT / "scripts" / "release.sh", cls.tmp / "scripts")
+        shutil.copy(ROOT / "scripts" / "install.sh", cls.tmp / "scripts")
+        (cls.tmp / "README.md").write_text("readme\n")
+        bindir = cls.tmp / "dist" / "release" / "bin"
         bindir.mkdir(parents=True)
         for p in PLATFORMS:
             (bindir / f"savings-preview-{p.replace('_', '-')}").write_text(f"binary {p}\n")
-        fake = self.tmp / "fakebin"
+        fake = cls.tmp / "fakebin"
         fake.mkdir()
         (fake / "go").write_text(FAKE_GO)
         (fake / "go").chmod(0o755)
-        self.log = self.tmp / "go.log"
-        env = dict(os.environ, PATH=f"{fake}:{os.environ['PATH']}", FAKE_LOG=str(self.log))
-        env.pop("GOOS", None)
-        env.pop("GOARCH", None)
-        subprocess.run(
-            [self.tmp / "scripts" / "release.sh", "package", VERSION],
-            env=env, check=True, capture_output=True,
+        cls.log = cls.tmp / "go.log"
+        cls.env = dict(os.environ, PATH=f"{fake}:{os.environ['PATH']}", FAKE_LOG=str(cls.log))
+        cls.env.pop("GOOS", None)
+        cls.env.pop("GOARCH", None)
+        cls.out = cls.tmp / "dist" / "release"
+        cls.package()
+
+    @classmethod
+    def package(cls):
+        cls.release("package", VERSION)
+
+    @classmethod
+    def release(cls, *args):
+        return subprocess.run(
+            [cls.tmp / "scripts" / "release.sh", *args],
+            env=cls.env, check=True, capture_output=True, text=True,
         )
-        self.out = self.tmp / "dist" / "release"
 
     def test_one_sbom_per_archive(self):
         archives = sorted(p.name for p in self.out.glob("*.tar.gz"))
@@ -100,6 +109,46 @@ class PackageTest(unittest.TestCase):
         )
         self.assertTrue((self.out / "install.sh").exists())
 
+
+class PlatformTest(PackageTest):
+    """Packages each platform on its own, as the release jobs do, then writes the checksums."""
+
+    @classmethod
+    def package(cls):
+        for p in PLATFORMS:
+            r = cls.release("package", VERSION, p.replace("_", "/"))
+            assert r.stdout == "", r.stdout
+        assert not (cls.out / "checksums.txt").exists()
+        assert not (cls.out / "install.sh").exists()
+        cls.release("checksums", VERSION)
+
+    def test_checksums_list_archives_then_sboms_by_platform(self):
+        names = [line.split()[1] for line in (self.out / "checksums.txt").read_text().splitlines()]
+        self.assertEqual(
+            names,
+            [f"savings-preview_{VERSION}_{p}.tar.gz" for p in PLATFORMS]
+            + [f"savings-preview_{VERSION}_{p}.cdx.json" for p in PLATFORMS],
+        )
+
+    def test_packaging_one_platform_keeps_the_others(self):
+        self.addCleanup(self.release, "checksums", VERSION)
+        self.release("package", VERSION, "linux/arm64")
+        self.assertEqual(len(list(self.out.glob("*.tar.gz"))), 4)
+        self.assertTrue((self.out / "checksums.txt").exists())
+
+    def test_checksums_fail_when_an_archive_is_missing(self):
+        archive = self.out / f"savings-preview_{VERSION}_darwin_arm64.tar.gz"
+        moved = self.tmp / archive.name
+        archive.rename(moved)
+        self.addCleanup(self.release, "checksums", VERSION)
+        self.addCleanup(moved.rename, archive)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.release("checksums", VERSION)
+
+    def test_rejects_an_unknown_platform(self):
+        with self.assertRaises(subprocess.CalledProcessError) as e:
+            self.release("package", VERSION, "windows/amd64")
+        self.assertEqual(e.exception.returncode, 2)
 
 if __name__ == "__main__":
     unittest.main()
