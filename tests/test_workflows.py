@@ -74,6 +74,13 @@ class ReleaseCacheTest(unittest.TestCase):
         # The vet job's restore step is the one whose key the save step reuses.
         self.assertIn(restore, self.ci)
 
+    def test_ci_compiles_the_release_binaries_into_the_cache_before_saving_it(self):
+        vet = (ROOT / ".github" / "workflows" / "ci.yml").read_text().split("\n  test:")[0]
+        build = vet.find("run: scripts/release.sh build ")
+        self.assertGreater(build, 0)
+        self.assertLess(build, vet.index("-mmin +60"))
+        self.assertLess(build, vet.index("uses: actions/cache/save@"))
+
     def test_release_never_saves_a_cache(self):
         for step in self.release:
             self.assertNotRegex(step, r"^uses: actions/cache(/save)?@")

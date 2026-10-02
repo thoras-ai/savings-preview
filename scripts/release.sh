@@ -40,8 +40,7 @@ checksums() {
 	for p in $PLATFORMS; do files+=("savings-preview_${version}_${p%/*}_${p#*/}.tar.gz"); done
 	for p in $PLATFORMS; do files+=("savings-preview_${version}_${p%/*}_${p#*/}.cdx.json"); done
 	rm -f "$OUT/install.sh" "$OUT/checksums.txt"
-	(cd "$OUT" && shasum -a 256 -- "${files[@]}" > checksums.txt.tmp)
-	mv "$OUT/checksums.txt.tmp" "$OUT/checksums.txt"
+	(cd "$OUT" && shasum -a 256 -- "${files[@]}" > checksums.txt) || { rm -f "$OUT/checksums.txt"; exit 1; }
 	cp scripts/install.sh "$OUT/install.sh"
 	cat "$OUT/checksums.txt"
 }

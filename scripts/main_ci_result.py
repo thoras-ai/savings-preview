@@ -62,10 +62,10 @@ def main(argv=None):
     while True:
         try:
             runs = main_runs(fetch(args.repo, args.sha), args.repo, args.sha)
+            s = state(runs)
         except subprocess.CalledProcessError as e:
             print(f"Could not list the CI runs: {e.stderr.strip()}", file=sys.stderr)
-            runs = []
-        s = state(runs)
+            runs, s = [], "error"
         if s != "running" or time.monotonic() >= deadline:
             break
         print(f"CI on main for {args.sha} is still running; checking again in {args.interval:g} s", file=sys.stderr)
@@ -76,6 +76,7 @@ def main(argv=None):
         "running": "CI on main for {sha} is still running after {wait:g} s; running the checks here",
         "failed": "CI did not pass on main for {sha}: {url}; running the checks here",
         "none": "No CI run on main for {sha}; running the checks here",
+        "error": "Running the checks here",
     }
     shown = [r for r in runs if r.get("conclusion") == "success"] or runs
     url = max(shown, key=lambda r: r.get("created_at", ""), default={}).get("html_url", "")

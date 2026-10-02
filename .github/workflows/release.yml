@@ -28,8 +28,8 @@ jobs:
           fi
       - name: Check that CHANGELOG.md has a section for the tag
         run: python3 scripts/release_notes.py "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null
-      # The tagged commit is on main, so CI has run or is running on it with
-      # every check the checks job would run. Waits for a run in progress.
+      # Looks up CI runs on main for the tagged commit, which run every check
+      # the checks job would run. Waits for a run in progress.
       - id: ci
         name: Look up CI on main for the tagged commit
         env:
@@ -41,7 +41,7 @@ jobs:
     if: needs.preflight.outputs.ci-passed != 'true'
     uses: ./.github/workflows/ci.yml
 
-  # Starts with the checks; publish waits for both.
+  # Starts with preflight; publish waits for build, preflight and checks.
   build:
     name: build ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: ubuntu-24.04
@@ -64,8 +64,9 @@ jobs:
           go-version: "1.26"
           check-latest: true
           cache: false
-      # The build cache the CI vet job saves on main. A release only restores
-      # it, so nothing built from a tag is saved for later runs.
+      # The build cache the CI vet job saves on main, which holds the release
+      # binaries' compiled packages. A release only restores it, so nothing
+      # built from a tag is saved for later runs.
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -91,8 +92,8 @@ jobs:
             dist/release/*.cdx.json
           if-no-files-found: error
 
-  # Signing and notarization go in the build job, between build and package.
-  # See docs/releasing.md.
+  # Signing and notarization go between build and package, in a job that
+  # needs preflight. See docs/releasing.md.
 
   # Runs when CI passed on main and the checks job was skipped, or when the
   # checks job passed.
