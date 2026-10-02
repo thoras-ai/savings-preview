@@ -72,7 +72,7 @@ var ErrLocked = errors.New("locked")
 
 func writeMeta(dir string, m Meta) error {
 	b, _ := json.Marshal(m)
-	return writeAtomic(filepath.Join(dir, "meta.json"), func(w io.Writer) error { _, err := w.Write(b); return err })
+	return writeAtomic(filepath.Join(dir, "meta.json"), true, func(w io.Writer) error { _, err := w.Write(b); return err })
 }
 
 func readMeta(dir string) (Meta, error) {
@@ -392,7 +392,7 @@ func (st *Store) rollup(start int64) error {
 	}
 	f.Close()
 	sort.Slice(buckets, func(i, j int) bool { return buckets[i].t < buckets[j].t })
-	err = writeAtomic(filepath.Join(st.Dir, rollName(start)), func(w io.Writer) error {
+	err = writeAtomic(filepath.Join(st.Dir, rollName(start)), st.sync, func(w io.Writer) error {
 		bw := bufio.NewWriterSize(w, 1<<16)
 		z := gzip.NewWriter(bw)
 		enc := newEncoder()
@@ -423,8 +423,9 @@ func (st *Store) Close() error {
 	return st.lock.Close()
 }
 
-// writeAtomic writes path through a synced temporary file and a rename.
-func writeAtomic(path string, write func(io.Writer) error) error {
+// writeAtomic writes path through a temporary file and a rename, syncing the
+// file and its directory when sync is set.
+func writeAtomic(path string, sync bool, write func(io.Writer) error) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp*")
 	if err != nil {
 		return err
@@ -438,15 +439,20 @@ func writeAtomic(path string, write func(io.Writer) error) error {
 		tmp.Close()
 		return err
 	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
+	if sync {
+		if err := tmp.Sync(); err != nil {
+			tmp.Close()
+			return err
+		}
 	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
 	if err := os.Rename(tmp.Name(), path); err != nil {
 		return err
+	}
+	if !sync {
+		return nil
 	}
 	if d, err := os.Open(filepath.Dir(path)); err == nil {
 		d.Sync()

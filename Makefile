@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 PLATFORMS := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64
 
-.PHONY: build test clean
+.PHONY: build test test-all clean
 
 build:
 	@mkdir -p bin
@@ -13,10 +13,20 @@ build:
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/savings-preview || exit 1; \
 	done
 
+# test runs what CI runs on a pull request. test-all adds go vet and the race
+# detector, as CI does on main, nightly and before a release.
 test:
-	go test ./...
+	go test -count=1 ./...
 	python3 -m unittest discover -s tests
-	node --test tests/*.test.js
+	node --test 'tests/**/*.test.js'
+	python3 scripts/validate_contract.py fixtures/savings-preview.otlp.json
+
+test-all:
+	go vet ./...
+	go test -race -count=1 ./...
+	python3 -m unittest discover -s tests
+	node --test 'tests/**/*.test.js'
+	python3 scripts/validate_contract.py fixtures/savings-preview.otlp.json
 
 clean:
 	rm -rf bin

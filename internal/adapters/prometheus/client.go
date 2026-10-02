@@ -45,6 +45,9 @@ type Client struct {
 	// MaxRange is the longest time range the store accepts in one query,
 	// counting range selectors; zero means no limit.
 	MaxRange time.Duration
+
+	// sleep waits out the backoff between attempts; tests replace it.
+	sleep func(context.Context, time.Duration) error
 }
 
 // APIError is an error reported by the store.
@@ -80,6 +83,20 @@ type resultData struct {
 	} `json:"result"`
 }
 
+func (c *Client) backoff(ctx context.Context, d time.Duration) error {
+	if c.sleep != nil {
+		return c.sleep(ctx, d)
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
 func (c *Client) get(ctx context.Context, path string, params url.Values) (json.RawMessage, error) {
 	retries := c.Retries
 	if retries == 0 {
@@ -88,10 +105,8 @@ func (c *Client) get(ctx context.Context, path string, params url.Values) (json.
 	var lastErr error
 	for attempt := 0; attempt <= retries; attempt++ {
 		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(time.Duration(attempt) * 500 * time.Millisecond):
+			if err := c.backoff(ctx, time.Duration(attempt)*500*time.Millisecond); err != nil {
+				return nil, err
 			}
 		}
 		body, status, err := c.G.Get(ctx, path, params)

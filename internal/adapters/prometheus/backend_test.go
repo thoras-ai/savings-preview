@@ -244,7 +244,7 @@ func backendServer(t *testing.T, prefix string, check func(*http.Request) (int, 
 }
 
 func runBackend(t *testing.T, b Backend, auth Auth) (*Report, error) {
-	_, rep, err := Run(context.Background(), Options{Client: &Client{G: &HTTPGetter{Base: b.Base, Auth: auth}, Retries: 1, MaxRange: b.MaxRange},
+	_, rep, err := Run(context.Background(), Options{Client: &Client{G: &HTTPGetter{Base: b.Base, Auth: auth}, Retries: 1, MaxRange: b.MaxRange, sleep: noSleep},
 		Cluster: "test", Days: 40, Step: 5 * time.Minute, Now: time.Unix(t0, 0), AdaptiveMetrics: b.Name == BackendGrafanaCloud})
 	return rep, err
 }

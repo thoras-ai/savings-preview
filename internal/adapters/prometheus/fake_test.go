@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeStore answers the query API from a handler that gets the parsed request.
@@ -19,6 +20,8 @@ type fakeStore struct {
 	paths    []string
 	handle   func(path string, q url.Values) (status int, body any)
 }
+
+func noSleep(ctx context.Context, _ time.Duration) error { return ctx.Err() }
 
 func (f *fakeStore) client(t *testing.T) *Client {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -32,7 +35,7 @@ func (f *fakeStore) client(t *testing.T) *Client {
 		_ = json.NewEncoder(w).Encode(body)
 	}))
 	t.Cleanup(srv.Close)
-	return &Client{G: &HTTPGetter{Base: srv.URL}, Retries: 1}
+	return &Client{G: &HTTPGetter{Base: srv.URL}, Retries: 1, sleep: noSleep}
 }
 
 func vector(val float64) map[string]any {

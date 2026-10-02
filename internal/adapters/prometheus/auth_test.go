@@ -27,7 +27,7 @@ func TestHeaderAndChain(t *testing.T) {
 	}))
 	defer srv.Close()
 	auth := Chain{Header{Name: "X-Api-Key", Value: "k1"}, Header{Name: TenantHeader, Value: "team-a"}, Basic{User: "123456", Password: "glc_token"}}
-	c := &Client{G: &HTTPGetter{Base: srv.URL, Auth: auth}, Retries: 1}
+	c := &Client{G: &HTTPGetter{Base: srv.URL, Auth: auth}, Retries: 1, sleep: noSleep}
 	if _, err := c.Query(context.Background(), "up", time.Time{}); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestSigV4SignsQueries(t *testing.T) {
 	}))
 	defer srv.Close()
 	sig := &SigV4{Region: "us-west-2", Credentials: credentials.NewStaticCredentialsProvider(akid, secret, "")}
-	c := &Client{G: &HTTPGetter{Base: srv.URL + "/workspaces/ws-1234", Auth: Chain{Header{Name: TenantHeader, Value: "t"}, sig}}, Retries: 1}
+	c := &Client{G: &HTTPGetter{Base: srv.URL + "/workspaces/ws-1234", Auth: Chain{Header{Name: TenantHeader, Value: "t"}, sig}}, Retries: 1, sleep: noSleep}
 	// Spaces, quotes, braces, plus signs and newlines all need encoding.
 	q := "sum by (namespace) (rate(container_cpu_usage_seconds_total{container!=\"\",image=~\"a+b\"}[5m]))\n* 1"
 	if _, err := c.QueryRange(context.Background(), q, time.Unix(t0, 0), time.Unix(t0+3600, 0), time.Minute); err != nil {
@@ -159,7 +159,7 @@ func TestSigV4CredentialError(t *testing.T) {
 	})}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("an unsigned request was sent") }))
 	defer srv.Close()
-	c := &Client{G: &HTTPGetter{Base: srv.URL, Auth: sig}, Retries: 1}
+	c := &Client{G: &HTTPGetter{Base: srv.URL, Auth: sig}, Retries: 1, sleep: noSleep}
 	_, err := c.Query(context.Background(), "up", time.Time{})
 	if err == nil || !strings.Contains(err.Error(), "no SSO session") {
 		t.Fatalf("got %v", err)

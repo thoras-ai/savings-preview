@@ -121,12 +121,9 @@ type Options struct {
 // ReadingsDir is where readings for output are kept.
 func ReadingsDir(output string) string { return output + ".readings" }
 
-// createOutput writes the contract file; tests replace it.
-var createOutput = writeAtomic
-
-func writeOutput(path string, src source, cluster string, budget int64) (Summary, error) {
+func writeOutput(path string, sync bool, src source, cluster string, budget int64) (Summary, error) {
 	var sum Summary
-	err := createOutput(path, func(w io.Writer) error {
+	err := writeAtomic(path, sync, func(w io.Writer) error {
 		var err error
 		sum, err = Export(src, cluster, w, budget)
 		return err
@@ -194,7 +191,7 @@ func Run(ctx context.Context, opts Options, rd Reader, clk Clock, logw io.Writer
 		if err != nil {
 			return fmt.Errorf("no readings to export: %w", err)
 		}
-		sum, err := writeOutput(opts.Output, dirSource(dir), m.Cluster, budget)
+		sum, err := writeOutput(opts.Output, !opts.noSync, dirSource(dir), m.Cluster, budget)
 		if err != nil {
 			return err
 		}
@@ -221,7 +218,7 @@ func Run(ctx context.Context, opts Options, rd Reader, clk Clock, logw io.Writer
 			return err
 		}
 		rec := fromReading(clk.Now().Unix(), step, Reduce(c))
-		sum, err := writeOutput(opts.Output, recordSource(rec), opts.Cluster, budget)
+		sum, err := writeOutput(opts.Output, !opts.noSync, recordSource(rec), opts.Cluster, budget)
 		if err != nil {
 			return err
 		}
@@ -277,7 +274,7 @@ func Run(ctx context.Context, opts Options, rd Reader, clk Clock, logw io.Writer
 		exporting = done
 		go func() {
 			defer close(done)
-			s, err := writeOutput(opts.Output, dirSource(dir), m.Cluster, budget)
+			s, err := writeOutput(opts.Output, !opts.noSync, dirSource(dir), m.Cluster, budget)
 			if err != nil {
 				fmt.Fprintf(log, "write %s: %v\n", opts.Output, err)
 				return
@@ -288,6 +285,7 @@ func Run(ctx context.Context, opts Options, rd Reader, clk Clock, logw io.Writer
 
 	lastWrite := start
 	taken := 0
+	compacted, lastCutoffSeg := false, int64(0)
 	var runErr error
 	for end == 0 || next <= end {
 		if err := clk.Sleep(ctx, time.Unix(next, 0).Sub(clk.Now())); err != nil {
@@ -313,11 +311,14 @@ func Run(ctx context.Context, opts Options, rd Reader, clk Clock, logw io.Writer
 			}
 			sum.add(rec)
 			taken++
-			if opts.KeepRaw > 0 {
-				if err := st.Compact(next - int64(opts.KeepRaw/time.Second)); err != nil {
+			// Segments only become old enough to roll up when the cutoff
+			// enters a new segment, so the directory is listed once per segment.
+			if cutoff := next - int64(opts.KeepRaw/time.Second); opts.KeepRaw > 0 && (!compacted || m.segmentOf(cutoff) != lastCutoffSeg) {
+				if err := st.Compact(cutoff); err != nil {
 					runErr = err
 					break
 				}
+				compacted, lastCutoffSeg = true, m.segmentOf(cutoff)
 			}
 			if taken == 1 || clk.Now().Sub(lastWrite) >= opts.WriteEvery {
 				exportNow()
@@ -333,7 +334,7 @@ func Run(ctx context.Context, opts Options, rd Reader, clk Clock, logw io.Writer
 		<-exporting
 	}
 	if sum.Records > 0 {
-		final, err := writeOutput(opts.Output, dirSource(dir), m.Cluster, budget)
+		final, err := writeOutput(opts.Output, !opts.noSync, dirSource(dir), m.Cluster, budget)
 		if err != nil {
 			if runErr == nil {
 				runErr = fmt.Errorf("write %s: %w", opts.Output, err)

@@ -5,15 +5,13 @@ import (
 	"context"
 	"errors"
 	"net/url"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/thoras-ai/savings-preview/internal/contract"
+	validator "github.com/thoras-ai/savings-preview/internal/validate"
 )
 
 const t0 = 1_790_000_100 // a multiple of 300
@@ -104,22 +102,16 @@ func runAgainst(t *testing.T, f *fakeStore) (*contract.File, *Report, error) {
 	return Run(context.Background(), Options{Client: f.client(t), Cluster: "test", Days: 7, Step: 5 * time.Minute, Now: time.Unix(t0, 0)})
 }
 
+// validate checks f with the Go port of scripts/validate_contract.py, whose
+// agreement with the script internal/validate tests.
 func validate(t *testing.T, f *contract.File) {
 	t.Helper()
-	py, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 not available")
-	}
 	var buf bytes.Buffer
 	if err := f.Write(&buf); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(t.TempDir(), "out.json")
-	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if out, err := exec.Command(py, "../../../scripts/validate_contract.py", path).CombinedOutput(); err != nil {
-		t.Fatalf("validator rejected the file:\n%s", out)
+	if errs := validator.Validate(buf.Bytes()); len(errs) > 0 {
+		t.Fatalf("validator rejected the file:\n%s", strings.Join(errs[:min(len(errs), 10)], "\n"))
 	}
 }
 

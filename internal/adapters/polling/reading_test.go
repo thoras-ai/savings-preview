@@ -1,11 +1,12 @@
 package polling
 
 import (
-	"os/exec"
-	"path/filepath"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
+	validator "github.com/thoras-ai/savings-preview/internal/validate"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -160,14 +161,16 @@ func TestNodeCapacityLabels(t *testing.T) {
 	}
 }
 
-// validate runs the contract validator on path.
+// validate checks the file at path with the Go port of
+// scripts/validate_contract.py, whose agreement with the script
+// internal/validate tests.
 func validate(t *testing.T, path string) {
 	t.Helper()
-	py, err := exec.LookPath("python3")
+	b, err := os.ReadFile(path)
 	if err != nil {
-		t.Skip("python3 not available")
+		t.Fatal(err)
 	}
-	if out, err := exec.Command(py, filepath.Join("..", "..", "..", "scripts", "validate_contract.py"), path).CombinedOutput(); err != nil {
-		t.Fatalf("validator rejected %s:\n%s", path, out)
+	if errs := validator.Validate(b); len(errs) > 0 {
+		t.Fatalf("validator rejected %s:\n%s", path, strings.Join(errs[:min(len(errs), 10)], "\n"))
 	}
 }

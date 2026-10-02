@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -16,24 +18,74 @@ const fixture = "../../fixtures/savings-preview.otlp.json"
 
 type obj = map[string]any
 
-var fixtureBytes []byte
+var (
+	fixtureOnce     sync.Once
+	fixtureBytes    []byte
+	thinBytes       []byte
+	errFixtureBytes error
+)
 
-func load(t *testing.T) obj {
+// readFixture reads the fixture and makes a thinned copy of it that keeps the
+// points on the hour, and each series' last point. The copy spans the same 14
+// days, so tier and step checks judge it like the fixture, at a twelfth of the
+// points.
+func readFixture(t *testing.T) {
 	t.Helper()
-	if fixtureBytes == nil {
-		b, err := os.ReadFile(fixture)
-		if err != nil {
-			t.Fatal(err)
+	fixtureOnce.Do(func() {
+		if fixtureBytes, errFixtureBytes = os.ReadFile(fixture); errFixtureBytes != nil {
+			return
 		}
-		fixtureBytes = b
+		var doc obj
+		if errFixtureBytes = decode(fixtureBytes, &doc); errFixtureBytes != nil {
+			return
+		}
+		for _, r := range resources(doc) {
+			for _, m := range metrics(r.(obj)) {
+				pts := points(m.(obj))
+				var kept []any
+				for i, p := range pts {
+					ns, _ := strconv.ParseInt(p.(obj)["timeUnixNano"].(string), 10, 64)
+					if ns%3600e9 == 0 || i == len(pts)-1 {
+						kept = append(kept, p)
+					}
+				}
+				body(m.(obj))["dataPoints"] = kept
+			}
+		}
+		thinBytes, errFixtureBytes = json.Marshal(doc)
+	})
+	if errFixtureBytes != nil {
+		t.Fatal(errFixtureBytes)
 	}
-	dec := json.NewDecoder(bytes.NewReader(fixtureBytes))
+}
+
+func decode(b []byte, v any) error {
+	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.UseNumber()
+	return dec.Decode(v)
+}
+
+func decodeOrFatal(t *testing.T, b []byte) obj {
+	t.Helper()
 	var doc obj
-	if err := dec.Decode(&doc); err != nil {
+	if err := decode(b, &doc); err != nil {
 		t.Fatal(err)
 	}
 	return doc
+}
+
+// loadFull returns the fixture as it is.
+func loadFull(t *testing.T) obj {
+	t.Helper()
+	readFixture(t)
+	return decodeOrFatal(t, fixtureBytes)
+}
+
+// load returns the thinned fixture.
+func load(t *testing.T) obj {
+	t.Helper()
+	readFixture(t)
+	return decodeOrFatal(t, thinBytes)
 }
 
 func encode(t *testing.T, doc any) []byte {
@@ -110,13 +162,17 @@ func body(m obj) obj {
 func points(m obj) []any { return body(m)["dataPoints"].([]any) }
 
 func TestFixtureIsValid(t *testing.T) {
-	if errs := Validate(encode(t, load(t))); len(errs) != 0 {
+	readFixture(t)
+	if errs := Validate(fixtureBytes); len(errs) != 0 {
 		t.Fatalf("fixture invalid: %v", errs)
+	}
+	if errs := Validate(thinBytes); len(errs) != 0 {
+		t.Fatalf("thinned fixture invalid: %v", errs)
 	}
 }
 
 func TestFixtureCoversTheCases(t *testing.T) {
-	doc := load(t)
+	doc := loadFull(t)
 	names := map[string]bool{}
 	for _, r := range resources(doc) {
 		for _, k := range []string{"k8s.deployment.name", "k8s.statefulset.name"} {
@@ -299,8 +355,7 @@ func mutations() []mutation {
 			for _, mv := range metrics(app) {
 				m := mv.(obj)
 				if m["name"] != "thoras.container.oom_kills" {
-					pts := points(m)
-					body(m)["dataPoints"] = pts[len(pts)-288*3:]
+					body(m)["dataPoints"] = lastDays(t, points(m), 3)
 				}
 			}
 			setMetrics(app, append(metrics(app), obj{"name": "thoras.container.oom_kills", "unit": "{oom_kill}",
@@ -458,14 +513,7 @@ func addMax(t *testing.T, rm obj, usage, unit string) {
 func mixedSteps(t *testing.T, rm obj) (first, mid, last int64) {
 	t.Helper()
 	pts := points(metrics(rm)[0].(obj))
-	sec := func(p any) int64 {
-		n, err := strconv.ParseInt(p.(obj)["timeUnixNano"].(string), 10, 64)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return n / 1e9
-	}
-	first, last = sec(pts[0]), sec(pts[len(pts)-1])
+	first, last = unixSeconds(t, pts[0]), unixSeconds(t, pts[len(pts)-1])
 	valueOf(rm, "thoras.step_seconds")["intValue"] = "60"
 	return first, last - 3600, last
 }
@@ -479,6 +527,23 @@ func setSpans(rm obj, spans ...string) {
 		}
 	}
 	res["attributes"] = append(kept, obj{"key": "thoras.step_spans", "value": stringArray(spans...)})
+}
+
+// lastDays returns the points in the last days days of pts.
+func lastDays(t *testing.T, pts []any, days int64) []any {
+	t.Helper()
+	cut := unixSeconds(t, pts[len(pts)-1]) - days*86400
+	i := slices.IndexFunc(pts, func(p any) bool { return unixSeconds(t, p) > cut })
+	return pts[i:]
+}
+
+func unixSeconds(t *testing.T, p any) int64 {
+	t.Helper()
+	n, err := strconv.ParseInt(p.(obj)["timeUnixNano"].(string), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n / 1e9
 }
 
 func addSeconds(t *testing.T, ns any, s int64) string {
@@ -502,6 +567,7 @@ func mutated(t *testing.T, m mutation) []byte {
 func TestRejects(t *testing.T) {
 	for _, m := range mutations() {
 		t.Run(m.name, func(t *testing.T) {
+			t.Parallel()
 			errs := Validate(mutated(t, m))
 			if m.want == "" {
 				if len(errs) != 0 {
@@ -526,61 +592,103 @@ func TestMatchesPython(t *testing.T) {
 	if err != nil {
 		t.Skip("python3 not on PATH")
 	}
+	readFixture(t)
 	script, err := filepath.Abs("../../scripts/validate_contract.py")
 	if err != nil {
 		t.Fatal(err)
 	}
-	docs := map[string][]byte{
-		"fixture":  fixtureOrLoad(t),
-		"not json": []byte("not json"),
-		"nan":      []byte(`{"resourceMetrics": NaN}`),
-		"not otlp": []byte(`[]`),
+	fixed := func(b []byte) func(*testing.T) []byte { return func(*testing.T) []byte { return b } }
+	docs := map[string]func(*testing.T) []byte{
+		"fixture":  fixed(fixtureBytes),
+		"not json": fixed([]byte("not json")),
+		"nan":      fixed([]byte(`{"resourceMetrics": NaN}`)),
+		"not otlp": fixed([]byte(`[]`)),
 	}
 	for _, m := range mutations() {
-		docs[m.name] = mutated(t, m)
+		docs[m.name] = func(t *testing.T) []byte { return mutated(t, m) }
 	}
-	docs["no workload res"] = mutated(t, mutation{mutate: func(t *testing.T, doc, app, worker obj) {
-		// Drop every workload resource and rename one cluster and drop a unit for a long, mixed report.
-		var kept []any
-		for _, r := range resources(doc) {
-			rm := r.(obj)
-			if attr(rm, "k8s.container.name") == nil && attr(rm, "k8s.node.name") == nil {
-				continue
+	docs["no workload res"] = func(t *testing.T) []byte {
+		return mutated(t, mutation{mutate: func(t *testing.T, doc, app, worker obj) {
+			// Drop every workload resource and rename one cluster and drop a unit for a long, mixed report.
+			var kept []any
+			for _, r := range resources(doc) {
+				rm := r.(obj)
+				if attr(rm, "k8s.container.name") == nil && attr(rm, "k8s.node.name") == nil {
+					continue
+				}
+				kept = append(kept, r)
 			}
-			kept = append(kept, r)
-		}
-		doc["resourceMetrics"] = kept
-		valueOf(app, "k8s.cluster.name")["stringValue"] = "other"
-		metrics(app)[0].(obj)["unit"] = nil
-	}})
-	docs["new checks in order"] = mutated(t, mutation{mutate: func(t *testing.T, doc, app, worker obj) {
-		// One resource failing the 1.2 checks alongside older ones, so their order is compared.
-		first, _, last := mixedSteps(t, app)
-		setSpans(app, fmt.Sprintf("%d/%d/300", first, last+300))
-		valueOf(app, "thoras.source")["stringValue"] = ""
-		addAttr(app, "thoras.fidelity_notes", stringArray(""))
-		addMax(t, app, "container.memory.working_set", "MiBy")
-		mixedSteps(t, worker)
-		setSpans(worker, fmt.Sprintf("%d/%d/60", first+60, last+60))
-		valueOf(worker, "thoras.fidelity_tier")["intValue"] = "1"
-	}})
+			doc["resourceMetrics"] = kept
+			valueOf(app, "k8s.cluster.name")["stringValue"] = "other"
+			metrics(app)[0].(obj)["unit"] = nil
+		}})
+	}
+	docs["new checks in order"] = func(t *testing.T) []byte {
+		return mutated(t, mutation{mutate: func(t *testing.T, doc, app, worker obj) {
+			// One resource failing the 1.2 checks alongside older ones, so their order is compared.
+			first, _, last := mixedSteps(t, app)
+			setSpans(app, fmt.Sprintf("%d/%d/300", first, last+300))
+			valueOf(app, "thoras.source")["stringValue"] = ""
+			addAttr(app, "thoras.fidelity_notes", stringArray(""))
+			addMax(t, app, "container.memory.working_set", "MiBy")
+			mixedSteps(t, worker)
+			setSpans(worker, fmt.Sprintf("%d/%d/60", first+60, last+60))
+			valueOf(worker, "thoras.fidelity_tier")["intValue"] = "1"
+		}})
+	}
 
 	dir := t.TempDir()
-	for name, doc := range docs {
-		path := filepath.Join(dir, strings.ReplaceAll(name, " ", "-")+".json")
-		if err := os.WriteFile(path, doc, 0o644); err != nil {
-			t.Fatal(err)
+	var mu sync.Mutex
+	paths, built := map[string]string{}, map[string][]byte{}
+	t.Run("build", func(t *testing.T) {
+		for name, build := range docs {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				doc := build(t)
+				path := filepath.Join(dir, strings.ReplaceAll(name, " ", "-")+".json")
+				if err := os.WriteFile(path, doc, 0o644); err != nil {
+					t.Fatal(err)
+				}
+				mu.Lock()
+				paths[name], built[name] = path, doc
+				mu.Unlock()
+			})
 		}
+	})
+	if t.Failed() {
+		return
+	}
+
+	// One run of the Python validator checks every document: it prints a
+	// "PATH: ..." line for each, followed by its errors indented.
+	args := []string{script}
+	for _, path := range paths {
+		args = append(args, path)
+	}
+	out, err := exec.Command(py, args...).Output()
+	if _, isExit := err.(*exec.ExitError); err != nil && !isExit {
+		t.Fatal(err)
+	}
+	reports := map[string][]string{}
+	var cur string
+	for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+		if !strings.HasPrefix(l, "  ") {
+			cur, _, _ = strings.Cut(l, ": ")
+		}
+		reports[cur] = append(reports[cur], l)
+	}
+
+	for name, path := range paths {
 		t.Run(name, func(t *testing.T) {
-			out, err := exec.Command(py, script, path).Output()
-			pyValid := err == nil
-			if _, isExit := err.(*exec.ExitError); err != nil && !isExit {
-				t.Fatal(err)
+			t.Parallel()
+			doc, lines := built[name], reports[path]
+			if len(lines) == 0 {
+				t.Fatalf("python printed nothing for %s:\n%s", path, out)
 			}
-			lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+			pyValid := lines[0] == path+": ok"
 			goErrs := Validate(doc)
 			if pyValid != (len(goErrs) == 0) {
-				t.Fatalf("python valid=%v, go errors %v\npython:\n%s", pyValid, goErrs, out)
+				t.Fatalf("python valid=%v, go errors %v\npython:\n%s", pyValid, goErrs, strings.Join(lines, "\n"))
 			}
 			if strings.HasPrefix(lines[0], path+": cannot read: ") {
 				if len(goErrs) != 1 || !strings.HasPrefix(goErrs[0], "cannot read: ") {
@@ -602,9 +710,4 @@ func TestMatchesPython(t *testing.T) {
 			}
 		})
 	}
-}
-
-func fixtureOrLoad(t *testing.T) []byte {
-	load(t)
-	return fixtureBytes
 }

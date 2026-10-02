@@ -38,7 +38,7 @@ Or build for this machine only with `go build -o bin/savings-preview ./cmd/savin
 - `docs/datadog-adapter.md`: the Datadog adapter. It reads the history from the Datadog metrics query API with an API key and an application key.
 - `docs/design.md`: the design rules the report page follows, and how to re-sync the design tokens in `design/`.
 
-Run every test with `make test`, or the Go tests with `go test ./...`, the contract tests with `python3 -m unittest discover -s tests`, and the page tests with `node --test tests/*.test.js`. The scripts need Python 3 and the standard library only.
+Run every test with `make test`, or the Go tests with `go test ./...`, the contract tests with `python3 -m unittest discover -s tests`, and the page tests with `node --test 'tests/**/*.test.js'`. `make test-all` also runs `go vet` and the Go tests under the race detector. The scripts need Python 3 and the standard library only.
 
 ## Report page
 
