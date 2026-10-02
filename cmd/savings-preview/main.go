@@ -1,41 +1,57 @@
-// Command savings-preview reads a cluster's usage history and writes it as one
-// OTel metrics file.
+// Command savings-preview reads a cluster's usage history, writes it as one
+// OTel metrics file and shows what Thoras would have saved.
 package main
 
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/thoras-ai/savings-preview/internal/adapters/datadog"
 	"github.com/thoras-ai/savings-preview/internal/adapters/polling"
 )
 
-const usage = `usage: savings-preview <source> [flags]
+const usage = `usage: savings-preview [command] [flags]
 
-Sources:
-  prometheus   Prometheus-compatible store, reached through the Kubernetes API server
+Commands:
+  run          Find usage data, write and check the file, open the report (default)
+  prometheus   Write the file from a Prometheus-compatible store, reached through the Kubernetes API server
                or by URL (Mimir, Grafana Cloud, Amazon Managed Prometheus)
-  poll         Requests, nodes and metrics-server usage read at an interval (alias: snapshot)
-  datadog      Datadog metrics query API
+  poll         Write the file from requests, nodes and metrics-server usage read at an interval (alias: snapshot)
+  datadog      Write the file from the Datadog metrics query API
 
-Run "savings-preview <source> -h" for the flags of a source.
+Run "savings-preview <command> -h" for the flags of a command.
+"savings-preview --version" prints the version.
 `
 
 func main() {
-	if len(os.Args) < 2 || os.Args[1] == "-h" || os.Args[1] == "--help" {
-		fmt.Fprint(os.Stderr, usage)
-		os.Exit(2)
+	args := os.Args[1:]
+	if len(args) > 0 {
+		switch args[0] {
+		case "-h", "-help", "--help":
+			fmt.Fprint(os.Stderr, usage)
+			os.Exit(2)
+		case "-version", "--version":
+			fmt.Println("savings-preview", versionString())
+			return
+		}
+	}
+	cmd := "run"
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		cmd, args = args[0], args[1:]
 	}
 	var err error
-	switch os.Args[1] {
+	switch cmd {
+	case "run":
+		err = runRun(args)
 	case "prometheus":
-		err = runPrometheus(os.Args[2:])
+		err = runPrometheus(args)
 	case "poll", "snapshot":
-		err = polling.Main(os.Args[1], os.Args[2:])
+		err = polling.Main(cmd, args)
 	case "datadog":
-		err = datadog.Main(os.Args[2:])
+		err = datadog.Main(args)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown source %q\n\n%s", os.Args[1], usage)
+		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", cmd, usage)
 		os.Exit(2)
 	}
 	if err != nil {
