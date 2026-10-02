@@ -125,8 +125,9 @@ files or environment variables, never from flags.
 }
 
 func printReport(w io.Writer, out string, rep *Report) {
-	fmt.Fprintf(w, "wrote %s for cluster %s: %d containers in %d workloads, %d nodes; data from %s to %s\n", out, rep.Cluster,
-		rep.Containers, rep.Workloads, rep.Nodes, rep.Start.UTC().Format(time.RFC3339), rep.End.UTC().Format(time.RFC3339))
+	fmt.Fprintf(w, "wrote %s for cluster %s: %s in %s, %s; data from %s to %s\n", out, rep.Cluster,
+		plural(rep.Containers, "container"), plural(rep.Workloads, "workload"), plural(rep.Nodes, "node"),
+		rep.Start.UTC().Format(time.RFC3339), rep.End.UTC().Format(time.RFC3339))
 	fmt.Fprintf(w, "metrics: %s\n", strings.Join(rep.Metrics, ", "))
 	for _, m := range rep.Warnings {
 		fmt.Fprintln(w, "warning:", m)

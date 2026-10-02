@@ -347,3 +347,11 @@ func TestBadKeysStopBeforeQuerying(t *testing.T) {
 		t.Error("the error shows a key")
 	}
 }
+
+func TestPlural(t *testing.T) {
+	for n, want := range map[int]string{0: "0 nodes", 1: "1 node", 3: "3 nodes"} {
+		if got := plural(n, "node"); got != want {
+			t.Errorf("plural(%d) = %q, want %q", n, got, want)
+		}
+	}
+}
