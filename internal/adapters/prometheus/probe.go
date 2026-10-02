@@ -27,7 +27,11 @@ func (e *ErrAgentMode) Error() string {
 // 404 on the query API, so the remote_write targets are read from its config
 // and returned in an ErrAgentMode instead of a bare failure.
 func (c *Client) Check(ctx context.Context) error {
-	_, err := c.Query(ctx, "vector(1)", time.Time{})
+	q := "vector(1)"
+	if c.OneMetricPerQuery {
+		q = "count(up{})"
+	}
+	_, err := c.Query(ctx, q, time.Time{})
 	if err == nil {
 		return nil
 	}

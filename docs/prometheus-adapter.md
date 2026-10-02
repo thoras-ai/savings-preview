@@ -1,6 +1,6 @@
 # Prometheus adapter
 
-`savings-preview prometheus` reads a cluster's usage history from a Prometheus-compatible store and writes the OTel file described in [contract.md](contract.md). It reaches an in-cluster store through the Kubernetes API server, so nothing is installed in the cluster and no port-forward is needed. Stores outside the cluster, such as Mimir, Grafana Cloud, Amazon Managed Prometheus and Google Managed Prometheus, are queried directly by URL; see [Stores outside the cluster](#stores-outside-the-cluster).
+`savings-preview prometheus` reads a cluster's usage history from a Prometheus-compatible store and writes the OTel file described in [contract.md](contract.md). It reaches an in-cluster store through the Kubernetes API server, so nothing is installed in the cluster and no port-forward is needed. Stores outside the cluster, such as Mimir, Grafana Cloud, Amazon Managed Prometheus, Azure Monitor managed Prometheus and Google Managed Prometheus, are queried directly by URL; see [Stores outside the cluster](#stores-outside-the-cluster).
 
 ```
 savings-preview prometheus [--context NAME] [--days 14] [--step 1m] [--out savings-preview.otlp.json]
@@ -14,13 +14,15 @@ savings-preview prometheus [--context NAME] [--days 14] [--step 1m] [--out savin
 | `--step` | 1m | Resolution. Use `5m` for large clusters. |
 | `--target` | discovered | `[https:]namespace/service:port[/path-prefix]`, skips discovery. An `http://` or `https://` URL is the same as `--url`. |
 | `--url` | none | Query a store directly instead of through the API server. Requires `--cluster-name`. |
-| `--backend` | detected from the URL | `prometheus`, `mimir`, `grafana-cloud`, `amp` or `gmp`, for `--url`. |
+| `--backend` | detected from the URL | `prometheus`, `mimir`, `grafana-cloud`, `amp`, `gmp` or `azure`, for `--url`. |
 | `--tenant` | none | Mimir tenant, sent as `X-Scope-OrgID`. Implies `--backend mimir`. |
 | `--bearer-token-file`, `--basic-auth-file`, `--header-file` | none | Credentials for `--url`, read from a file so they stay out of shell history and process listings: a token, `user:password`, or `Name: value` lines. The environment variables `SAVINGS_PREVIEW_BEARER_TOKEN`, `SAVINGS_PREVIEW_BASIC_AUTH` and `SAVINGS_PREVIEW_HEADERS` hold the same values; a file takes precedence over its variable. |
 | `--aws-region` | from the URL | Region of an Amazon Managed Prometheus workspace whose URL does not name it. |
 | `--project` | none | Google Cloud project to read from Google Managed Prometheus, in place of `--url`. Implies `--backend gmp`. |
 | `--google-credentials-file` | Application Default Credentials | Service account key for Google Managed Prometheus. |
 | `--gke-metrics` | `auto` | What to read from Google Managed Prometheus: `prometheus` (cAdvisor and kube-state-metrics series), `system` (GKE system metrics), or `auto` (the first when the project has both cAdvisor and `kube_pod_owner` series, else the second). |
+| `--azure-tenant-id`, `--azure-client-id` | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` | Entra ID tenant and app registration for Azure Monitor managed Prometheus. Without a client secret, the Azure CLI login is used. |
+| `--azure-client-secret-file` | `AZURE_CLIENT_SECRET` | File holding the app registration's client secret. |
 | `--max-query-range` | the backend's limit | Longest time range the store accepts in one query, counting range selectors. |
 | `--selector` | none | Label matchers added to every query, such as `cluster="prod-us"`, to read one cluster from a store that holds several. Values may be left unquoted (`cluster=prod-us`). |
 | `--list` | off | Print what discovery finds and exit. |
@@ -106,11 +108,11 @@ Instance type, region and capacity type come from node labels, so kube-state-met
 
 ## Stores outside the cluster
 
-`--url` (or a URL in `--target`) queries a store directly, without the API server. The kubeconfig is not used, so `--cluster-name` is required. `savings-preview run` takes the same flags; it names the cluster after the kubeconfig's when it can read one, and a failing `--url` stops it rather than falling back to polling. The backend is detected from the host: `aps-workspaces.REGION.amazonaws.com` is Amazon Managed Prometheus, `*.grafana.net` is Grafana Cloud, `monitoring.googleapis.com` is Google Managed Prometheus, a `--tenant` means Mimir, and anything else is a plain Prometheus-compatible store. `--backend` overrides the detection. The query or remote-write URL a console shows is accepted as well as the base URL.
+`--url` (or a URL in `--target`) queries a store directly, without the API server. The kubeconfig is not used, so `--cluster-name` is required. `savings-preview run` takes the same flags; it names the cluster after the kubeconfig's when it can read one, and a failing `--url` stops it rather than falling back to polling. The backend is detected from the host: `aps-workspaces.REGION.amazonaws.com` is Amazon Managed Prometheus, `*.grafana.net` is Grafana Cloud, `monitoring.googleapis.com` is Google Managed Prometheus, `*.prometheus.monitor.azure.com` (and the `.us` and `.cn` domains of Azure Government and Azure China) is Azure Monitor managed Prometheus, a `--tenant` means Mimir, and anything else is a plain Prometheus-compatible store. `--backend` overrides the detection. The query or remote-write URL a console shows is accepted as well as the base URL.
 
-Credentials never come from flags. Bearer tokens, basic auth and extra headers are read from files or environment variables, Amazon credentials from the standard AWS chain, and Google credentials from Application Default Credentials or a key file. They are not printed or logged; the store URL is printed without user info or query string.
+Credentials never come from flags. Bearer tokens, basic auth and extra headers are read from files or environment variables, Amazon credentials from the standard AWS chain, Google credentials from Application Default Credentials or a key file, and Azure credentials from an app registration's secret or the Azure CLI. They are not printed or logged; the store URL is printed without user info or query string.
 
-Credentials plug in through `prometheus.Auth`, which wraps the HTTP client: `Header`, `Basic`, `Bearer`, `SigV4` and `Google`, combined with `Chain`. Azure OAuth is not implemented; `prometheus.Unsupported` marks where it goes.
+Credentials plug in through `prometheus.Auth`, which wraps the HTTP client: `Header`, `Basic`, `Bearer`, `SigV4`, `Google` and `Azure`, combined with `Chain`.
 
 Every store is checked for the labels the queries join on, as described in [Missing data](#missing-data). On Grafana Cloud the check matters most, because Adaptive Metrics can aggregate labels away.
 
@@ -290,6 +292,43 @@ AWS_PROFILE=readonly savings-preview prometheus \
 
 - **Limits:** a query may cover at most 95 days. Range queries are split by day, which also keeps each one within the per-24-hour sample and series budgets.
 - **Metrics:** the workspace holds whatever was remote-written. The AWS managed scraper's sample configuration has no kube-state-metrics job, and without kube-state-metrics the run stops (see [Missing data](#missing-data)).
+
+### Azure Monitor managed Prometheus
+
+```
+savings-preview prometheus --url https://WORKSPACE.REGION.prometheus.monitor.azure.com --cluster-name aks-prod --selector 'cluster="aks-prod"'
+```
+
+- **URL:** the query endpoint on the Overview page of the Azure Monitor workspace, `https://WORKSPACE.REGION.prometheus.monitor.azure.com`, or a query URL under it. Private link host names under the same domain are recognized. The endpoint has no path. For any other host, pass `--backend azure`.
+- **Credentials:** an Entra ID access token for the audience `https://prometheus.monitor.azure.com` (`https://prometheus.monitor.azure.us` in Azure Government, `https://prometheus.monitor.azure.cn` in Azure China, taken from the URL). The first of these that applies is used:
+  1. A token given directly, as for any other store, in `--bearer-token-file`, `SAVINGS_PREVIEW_BEARER_TOKEN` or an `Authorization` header. `az account get-access-token --resource https://prometheus.monitor.azure.com --query accessToken -o tsv` prints one; it expires after about an hour.
+  2. An app registration's client secret: `--azure-client-id`, `--azure-tenant-id` and `--azure-client-secret-file`, or `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_CLIENT_SECRET`. A flag or file takes precedence over its variable. Tokens come from the client credentials grant of the cloud's login endpoint.
+  3. The Azure CLI login, through `az account get-access-token`, in the tenant of `--azure-tenant-id` or `AZURE_TENANT_ID` when one is set. This covers a user's `az login`, a service principal, and a managed identity signed in with `az login --identity`. `AZURE_CLIENT_ID` without a secret does not select an app registration.
+
+  `--tenant` is refused for this backend, and so are an app registration and a token given directly together.
+- **What the customer grants:** the Monitoring Data Reader role on the Azure Monitor workspace, for a user or an app registration. For an app registration:
+
+  ```
+  az ad sp create-for-rbac --name savings-preview --role "Monitoring Data Reader" \
+    --scopes /subscriptions/SUBSCRIPTION_ID/resourceGroups/RESOURCE_GROUP/providers/Microsoft.Monitor/accounts/WORKSPACE
+  ```
+
+  It prints `appId`, `password` and `tenant`, the client ID, secret and tenant ID. Delete it when the run is done (`az ad sp delete --id APP_ID`).
+- **Several clusters:** a workspace often receives several AKS clusters, told apart by the `cluster` label. Choose one with `--selector`, as described in [Stores with several clusters](#stores-with-several-clusters).
+- **Limits:** a query may cover at most 32 days, counting range selectors. Range queries are split by day, and instant queries over the history are split into pieces shorter than 32 days.
+- **Metrics:** the minimal ingestion profile of the AKS metrics add-on, on by default, keeps the cAdvisor and kube-state-metrics series the adapter reads, except `kube_statefulset_replicas`. Without it, StatefulSet replica counts come from `kube_statefulset_status_replicas`, the current count rather than the desired one, and the run warns. Instance types and regions are not in the kept series, so nodes are `unknown` there.
+- **Case:** the workspace treats metric names, label names and label values case-insensitively. Kubernetes object names are lowercase, so this does not affect the queries.
+
+#### One metric per query
+
+The workspace rejects a query that does not read exactly one metric, so the joins the other stores run in PromQL are made by the adapter instead:
+
+- Each usage, request and limit query reads one metric and aggregates it on the store by namespace, container and owner key: the pod name without its last dash-separated part, which is the ReplicaSet of a Deployment's pod and the StatefulSet of a StatefulSet's pod. A query returns the per-pod mean and the pod count of each owner key.
+- `kube_pod_owner` and `kube_replicaset_owner`, read as instant queries over the history in one-day pieces, map each owner key to its Deployment or StatefulSet. The per-pod means of a workload's owner keys are averaged, weighted by pod count. When pods of more than one workload, or pods of a workload and other pods, share an owner key in a namespace, that key's pods are left out and the run warns.
+- `kube_pod_status_phase` is counted per owner key, and requests and limits are weighted by the running pods of each owner key, so the requests kube-state-metrics keeps for finished pods do not count. This relies on every pod of a ReplicaSet having the same requests, which holds unless pods were resized in place.
+- OOM kills are read from `kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}` and the restart counts of the pods that have it, queried by pod name.
+- Usage of an owner key counts only while the key has running pods, because cAdvisor keeps reporting deleted containers for a while; the joins of other stores leave those out through `kube_pod_owner`. Without `kube_pod_status_phase`, such usage is counted.
+- Usage split from pod-level series (see [Containers without usage labels](#containers-without-usage-labels)) needs a join on every step and is not available. A workspace without per-container usage series stops the run.
 
 ### Google Managed Prometheus and GKE
 

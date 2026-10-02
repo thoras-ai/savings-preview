@@ -33,3 +33,13 @@
 **How to keep the old behavior.** Unset either key for the run, for example `env -u DD_API_KEY savings-preview run`; the run then looks for a store and polls when there is none, as before. `--source prometheus` and `--source poll` also skip Datadog, but each reads only one source and does not fall back to the other.
 
 **How to tell which you have.** The access list `run` prints first starts with "query the Datadog metrics API" when it will read Datadog, and the line after the pull says `from Datadog`. The file's `thoras.source` is `datadog`.
+
+## Azure Monitor workspace URLs are read as Azure Monitor managed Prometheus
+
+**What changes.** A `--url` under `prometheus.monitor.azure.com` (or the `.us` and `.cn` domains) was read as a plain Prometheus-compatible store. It is now read as Azure Monitor managed Prometheus: each query reads one metric and the adapter joins the results, queries are limited to 32 days, and without a token given directly the run gets an Entra ID token from an app registration or the Azure CLI.
+
+**Who it affects.** People who already ran against an Azure Monitor workspace with a token in `--bearer-token-file`, `SAVINGS_PREVIEW_BEARER_TOKEN` or an `Authorization` header. The token is still used as is. The figures are the same as from the joined queries, except as [prometheus-adapter.md](prometheus-adapter.md#one-metric-per-query) describes. A workspace without per-container usage series, which the joined queries handled by splitting pod-level usage, now stops the run.
+
+**How to keep the old behavior.** Pass `--backend prometheus`.
+
+**How to tell which you have.** The run prints `using azure store at ...`, and `run` lists "query the Azure Monitor workspace".

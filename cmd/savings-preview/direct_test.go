@@ -262,3 +262,87 @@ func TestDirectHintForGMP(t *testing.T) {
 		t.Errorf("404: %v", err)
 	}
 }
+
+func TestDirectAuthAzure(t *testing.T) {
+	t.Setenv(envBearer, "")
+	t.Setenv(envBasic, "")
+	t.Setenv(envHeaders, "")
+	t.Setenv(envAzureTenant, "")
+	t.Setenv(envAzureClient, "")
+	t.Setenv(envAzureSecret, "")
+	var got prometheus.AzureCredentials
+	var gotAudience string
+	stub := prometheus.Bearer{Token: "stub"}
+	old := newAzure
+	newAzure = func(_ context.Context, audience string, c prometheus.AzureCredentials) (prometheus.Auth, error) {
+		gotAudience, got = audience, c
+		return stub, nil
+	}
+	t.Cleanup(func() { newAzure = old })
+	b := backend(t, "https://ws-1.usgovvirginia.prometheus.monitor.azure.us", "", false)
+
+	// Without an app registration, the Azure CLI login is used.
+	a, err := directAuth(context.Background(), b, credentialFiles{}, "")
+	if err != nil || a != stub || gotAudience != "https://prometheus.monitor.azure.us" || !reflect.DeepEqual(got, (prometheus.AzureCredentials{})) {
+		t.Errorf("CLI: %#v, %v, %q %+v", a, err, gotAudience, got)
+	}
+	// AZURE_CLIENT_ID alone names a managed identity to the Azure SDKs and
+	// is not an app registration here.
+	t.Setenv(envAzureClient, "mi-client")
+	t.Setenv(envAzureTenant, "contoso.onmicrosoft.com")
+	if _, err := directAuth(context.Background(), b, credentialFiles{}, ""); err != nil || !reflect.DeepEqual(got, (prometheus.AzureCredentials{TenantID: "contoso.onmicrosoft.com"})) {
+		t.Errorf("client ID without a secret: %+v, %v", got, err)
+	}
+	t.Setenv(envAzureSecret, "env-secret")
+	if _, err := directAuth(context.Background(), b, credentialFiles{}, ""); err != nil ||
+		!reflect.DeepEqual(got, (prometheus.AzureCredentials{TenantID: "contoso.onmicrosoft.com", ClientID: "mi-client", ClientSecret: "env-secret"})) {
+		t.Errorf("from the environment: %+v, %v", got, err)
+	}
+	// Flags and the secret file take precedence over the environment.
+	_, err = directAuth(context.Background(), b, credentialFiles{azureTenant: "t2", azureClientID: "app-2", azureSecret: writeFile(t, "file-secret\n")}, "")
+	if err != nil || !reflect.DeepEqual(got, (prometheus.AzureCredentials{TenantID: "t2", ClientID: "app-2", ClientSecret: "file-secret"})) {
+		t.Errorf("from flags: %+v, %v", got, err)
+	}
+	t.Setenv(envAzureSecret, "")
+	t.Setenv(envAzureClient, "")
+	t.Setenv(envAzureTenant, "")
+
+	// A token given directly, as from az account get-access-token, is used
+	// as is.
+	got = prometheus.AzureCredentials{ClientID: "unset"}
+	t.Setenv(envBearer, "eyJ.from-az")
+	a, err = directAuth(context.Background(), b, credentialFiles{}, "")
+	if err != nil || a != (prometheus.Bearer{Token: "eyJ.from-az"}) || got.ClientID != "unset" {
+		t.Errorf("bearer: %#v, %v", a, err)
+	}
+	if _, err := directAuth(context.Background(), b, credentialFiles{azureClientID: "app"}, ""); err == nil || !strings.Contains(err.Error(), "only one of") {
+		t.Errorf("bearer and app registration: %v", err)
+	}
+	t.Setenv(envBearer, "")
+	if _, err := directAuth(context.Background(), b, credentialFiles{}, "team-a"); err == nil || !strings.Contains(err.Error(), "--tenant applies to Mimir") {
+		t.Errorf("tenant with Azure: %v", err)
+	}
+}
+
+func TestDirectFlagsAzure(t *testing.T) {
+	target := ""
+	d := &directFlags{azureClientID: "app"}
+	if err := d.check(&target); err == nil || !strings.Contains(err.Error(), "apply only with --url") {
+		t.Errorf("--azure-client-id without --url: %v", err)
+	}
+	d = &directFlags{url: "http://prom.example", azureTenant: "t"}
+	if err := d.check(&target); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := d.open(context.Background()); err == nil || !strings.Contains(err.Error(), "apply to Azure Monitor managed Prometheus") {
+		t.Errorf("--azure-tenant-id with another store: %v", err)
+	}
+}
+
+func TestDirectHintForAzure(t *testing.T) {
+	store := backend(t, "https://ws-1.eastus.prometheus.monitor.azure.com", "", false)
+	err := directHint(&prometheus.APIError{Status: 403, Message: "Forbidden"}, store)
+	if err == nil || !strings.Contains(err.Error(), "Monitoring Data Reader") {
+		t.Errorf("403: %v", err)
+	}
+}

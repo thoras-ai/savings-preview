@@ -45,6 +45,10 @@ type Client struct {
 	// MaxRange is the longest time range the store accepts in one query,
 	// counting range selectors; zero means no limit.
 	MaxRange time.Duration
+	// OneMetricPerQuery is set for stores that reject a query that reads
+	// more than one metric, or none. Joins between metrics are then made on
+	// the client.
+	OneMetricPerQuery bool
 
 	// sleep waits out the backoff between attempts; tests replace it.
 	sleep func(context.Context, time.Duration) error
@@ -305,10 +309,15 @@ func (c *Client) rangeLimit() time.Duration {
 
 // queryWindow runs an instant query whose range selectors cover window,
 // ending at now. When window is longer than the store allows, it runs the
-// query once per consecutive piece of the window, newest first, and keeps
-// the newest sample of each series.
+// query in pieces, as queryPieces does.
 func (c *Client) queryWindow(ctx context.Context, q func(window time.Duration) string, now time.Time, window time.Duration) ([]Series, error) {
-	piece := c.rangeLimit()
+	return c.queryPieces(ctx, q, now, window, c.rangeLimit())
+}
+
+// queryPieces runs an instant query whose range selectors cover window,
+// ending at now, once per consecutive piece of at most piece, newest first,
+// and keeps the newest sample of each series.
+func (c *Client) queryPieces(ctx context.Context, q func(window time.Duration) string, now time.Time, window, piece time.Duration) ([]Series, error) {
 	if piece <= 0 || window <= piece {
 		return c.Query(ctx, q(window), now)
 	}
