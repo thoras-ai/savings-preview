@@ -41,7 +41,7 @@ jobs:
     if: needs.preflight.outputs.ci-passed != 'true'
     uses: ./.github/workflows/ci.yml
 
-  # Starts with preflight; publish waits for build, preflight and checks.
+  # Starts with preflight; publish waits for every other job.
   build:
     name: build ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: ubuntu-24.04
@@ -92,15 +92,57 @@ jobs:
             dist/release/*.cdx.json
           if-no-files-found: error
 
+  # Checks the tagged commit against the vulnerability database as of the tag,
+  # whether or not CI on main is reused. Restores caches but never saves one.
+  govulncheck:
+    runs-on: ubuntu-24.04
+    env:
+      GOCACHE: /dev/shm/go-build
+      GOMODCACHE: /dev/shm/go-mod
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          check-latest: true
+          cache: false
+      # The module sources the scan type-checks.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            /dev/shm/go-build
+            /dev/shm/go-mod
+            !/dev/shm/go-mod/cache/download/**/*.zip
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
+      - id: tool
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /dev/shm/tools
+          key: govulncheck-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('tools/go.sum') }}
+      - if: steps.tool.outputs.cache-hit != 'true'
+        run: go build -modfile=tools/go.mod -o /dev/shm/tools/govulncheck golang.org/x/vuln/cmd/govulncheck
+      - name: Download the current vulnerability database
+        run: |
+          curl -sSfL --retry 3 -o "$RUNNER_TEMP/vulndb.zip" https://vuln.go.dev/vulndb.zip
+          unzip -q "$RUNNER_TEMP/vulndb.zip" -d /dev/shm/vulndb
+      - run: /dev/shm/tools/govulncheck -db file:///dev/shm/vulndb ./...
+
   # Signing and notarization go between build and package, in a job that
   # needs preflight. See docs/releasing.md.
 
-  # Runs when CI passed on main and the checks job was skipped, or when the
-  # checks job passed.
+  # Runs when govulncheck passed on the tag and either CI passed on main and
+  # the checks job was skipped, or the checks job passed.
   publish:
-    needs: [preflight, checks, build]
+    needs: [preflight, checks, build, govulncheck]
     if: >-
       !cancelled() && needs.preflight.result == 'success' && needs.build.result == 'success' &&
+      needs.govulncheck.result == 'success' &&
       (needs.checks.result == 'success' || (needs.checks.result == 'skipped' && needs.preflight.outputs.ci-passed == 'true'))
     runs-on: ubuntu-24.04
     permissions:

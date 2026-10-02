@@ -60,19 +60,28 @@ def cache_steps(path):
 
 
 class ReleaseCacheTest(unittest.TestCase):
-    """The release builds restore the Go build cache CI saves on main and never save one."""
+    """The release restores the caches CI saves on main and never saves one."""
 
     def setUp(self):
         workflows = ROOT / ".github" / "workflows"
         self.ci = cache_steps(workflows / "ci.yml")
         self.release = cache_steps(workflows / "release.yml")
 
-    def test_release_restores_the_cache_ci_saves(self):
-        self.assertEqual(len(self.release), 1)
-        restore = self.release[0]
-        self.assertTrue(restore.startswith("uses: actions/cache/restore@"), restore)
-        # The vet job's restore step is the one whose key the save step reuses.
-        self.assertIn(restore, self.ci)
+    def test_release_restores_the_caches_ci_saves(self):
+        self.assertGreater(len(self.release), 0)
+        for step in self.release:
+            with self.subTest(step=step.splitlines()[0]):
+                self.assertTrue(step.startswith("uses: actions/cache/restore@"), step)
+                self.assertIn(step, self.ci)
+
+    def test_release_scans_with_a_fresh_vulnerability_database(self):
+        release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+        self.assertNotIn("govulndb", release)
+        self.assertIn("https://vuln.go.dev/vulndb.zip", release)
+        self.assertIn("govulncheck -db file:///dev/shm/vulndb ./...", release)
+        publish = release.split("\n  publish:")[1]
+        self.assertRegex(publish, r"needs: \[[^\]]*\bgovulncheck\b")
+        self.assertIn("needs.govulncheck.result == 'success'", publish)
 
     def test_ci_compiles_the_release_binaries_into_the_cache_before_saving_it(self):
         vet = (ROOT / ".github" / "workflows" / "ci.yml").read_text().split("\n  test:")[0]
