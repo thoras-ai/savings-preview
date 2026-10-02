@@ -161,6 +161,7 @@ const (
 	PodUsageProbe   = `count(container_memory_working_set_bytes{` + podCgroup + `})`
 	ContainerProbe  = `count(kube_pod_container_info{})`
 	RestartsProbe   = `count(kube_pod_container_status_restarts_total{})`
+	CAdvisorProbe   = `count(machine_memory_bytes{})`
 )
 
 // UnlabeledPods counts workload pods that have a pod cgroup series but no

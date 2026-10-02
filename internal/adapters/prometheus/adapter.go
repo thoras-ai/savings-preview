@@ -120,6 +120,11 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 			} else if len(missing) > 0 {
 				return nil, rep, &LabelsMissingError{Metric: "container_memory_working_set_bytes", Labels: missing, Aggregations: true, Runtime: true}
 			}
+			if ok, err := c.present(ctx, CAdvisorProbe, o.Now); err != nil {
+				return nil, rep, fmt.Errorf("probe container metrics: %w", err)
+			} else if ok {
+				return nil, rep, fmt.Errorf("the store has no per-container usage metrics (container_memory_working_set_bytes with container and image labels), but cAdvisor is collected (machine_memory_bytes has series): the collector probably dropped container series without a container label, as the Grafana k8s-monitoring chart does by default, because the cluster's container runtime does not label them (older containerd setups, minikube)")
+			}
 			return nil, rep, fmt.Errorf("the store has no per-container usage metrics (container_memory_working_set_bytes with container and image labels); the kubelet cAdvisor job is probably not collected")
 		}
 		if ok, err := c.present(ctx, PodUsageProbe, o.Now); err != nil {
