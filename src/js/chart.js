@@ -1,4 +1,4 @@
-/* Two-curve SVG chart: requested versus target, with the gap hatched. */
+/* SVG chart: requested versus target with the gap hatched, and usage under them. */
 (function () {
   'use strict';
 
@@ -7,9 +7,17 @@
 
   var MODES = {
     spend: { label: 'Spend', a: 'cur', b: 'opt', scale: 8760, aName: 'Current spend', bName: 'Without waste', money: true },
-    cpu: { label: 'CPU', a: 'reqCpu', b: 'tgtCpu', scale: 1, aName: 'Requested', bName: 'Usage + 10%', unit: 'cores', use: 'useCpu' },
-    mem: { label: 'Memory', a: 'reqMem', b: 'tgtMem', scale: 1, aName: 'Requested', bName: 'Usage + 10%', unit: 'GiB', use: 'useMem' }
+    cpu: { label: 'CPU', a: 'reqCpu', b: 'tgtCpu', scale: 1, aName: 'Requested', bName: 'Usage + 10%', unit: 'cores', use: 'useCpu', peak: 'peakCpu' },
+    mem: { label: 'Memory', a: 'reqMem', b: 'tgtMem', scale: 1, aName: 'Requested', bName: 'Usage + 10%', unit: 'GiB', use: 'useMem', peak: 'peakMem' }
   };
+
+  function legend(modeKey) {
+    var mode = MODES[modeKey];
+    var items = [{ kind: 'a', name: mode.aName }, { kind: 'b', name: mode.bName }];
+    if (mode.peak) items.push({ kind: 'p', name: 'Peak usage' }, { kind: 'u', name: 'Mean usage' });
+    items.push({ kind: 'gap', name: mode.money ? 'Waste' : 'Gap' });
+    return items;
+  }
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
@@ -48,24 +56,27 @@
     return MONTHS[d.getUTCMonth()] + ' ' + d.getUTCDate();
   }
 
-  // Fold the series into at most MAX_POINTS buckets, averaging the valid points in each.
+  // Fold the series into at most MAX_POINTS buckets, averaging the valid points
+  // in each. Peak usage keeps the highest point, so folding never hides a peak.
   function downsample(series, mode) {
     var n = series.t.length;
     var size = Math.max(1, Math.ceil(n / MAX_POINTS));
-    var out = { t: [], a: [], b: [], u: [], size: size };
+    var out = { t: [], a: [], b: [], u: [], p: [], size: size };
     for (var i = 0; i < n; i += size) {
       var end = Math.min(n, i + size);
-      var sa = 0, sb = 0, su = 0, c = 0;
+      var sa = 0, sb = 0, su = 0, pk = -Infinity, c = 0;
       for (var j = i; j < end; j++) {
         if (!isFinite(series[mode.a][j])) continue;
         sa += series[mode.a][j]; sb += series[mode.b][j];
         if (mode.use) su += series[mode.use][j];
+        if (mode.peak) pk = Math.max(pk, series[mode.peak][j]);
         c++;
       }
       out.t.push(series.t[i]);
       out.a.push(c ? sa / c * mode.scale : NaN);
       out.b.push(c ? sb / c * mode.scale : NaN);
       out.u.push(c && mode.use ? su / c : NaN);
+      out.p.push(c && mode.peak ? pk : NaN);
     }
     return out;
   }
@@ -82,7 +93,11 @@
     var d = downsample(series, mode);
     var n = d.t.length;
     var vals = [];
-    for (var i = 0; i < n; i++) if (isFinite(d.a[i])) vals.push(d.a[i], d.b[i]);
+    for (var i = 0; i < n; i++) {
+      if (!isFinite(d.a[i])) continue;
+      vals.push(d.a[i], d.b[i]);
+      if (isFinite(d.p[i])) vals.push(d.p[i]);
+    }
     if (!vals.length) { host.innerHTML = '<p class="empty">No complete data to chart.</p>'; return; }
     var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
     var pad0 = (hi - lo) * 0.12 || hi * 0.1 || 1;
@@ -101,7 +116,7 @@
     function x(i) { return m.left + (n > 1 ? (d.t[i] - t0) / span * w : w / 2); }
     function y(v) { return m.top + h - (v - yMin) / (yMax - yMin) * h; }
 
-    var aPath = '', bPath = '', gaps = '', dots = '';
+    var aPath = '', bPath = '', uPath = '', pPath = '', gaps = '', dots = '';
     var run = [];
     function flush() {
       if (run.length > 1) {
@@ -117,9 +132,16 @@
       var cmd = pen ? 'L' : 'M';
       aPath += cmd + x(k).toFixed(1) + ' ' + y(d.a[k]).toFixed(1);
       bPath += cmd + x(k).toFixed(1) + ' ' + y(d.b[k]).toFixed(1);
+      if (mode.peak) {
+        uPath += cmd + x(k).toFixed(1) + ' ' + y(d.u[k]).toFixed(1);
+        pPath += cmd + x(k).toFixed(1) + ' ' + y(d.p[k]).toFixed(1);
+      }
       pen = true;
       run.push(k);
-      if (n === 1) dots = '<circle class="dot-a" cx="' + x(k) + '" cy="' + y(d.a[k]) + '" r="4"/><circle class="dot-b" cx="' + x(k) + '" cy="' + y(d.b[k]) + '" r="4"/>';
+      if (n === 1) {
+        dots = '<circle class="dot-a" cx="' + x(k) + '" cy="' + y(d.a[k]) + '" r="4"/><circle class="dot-b" cx="' + x(k) + '" cy="' + y(d.b[k]) + '" r="4"/>';
+        if (mode.peak) dots += '<circle class="dot-u" cx="' + x(k) + '" cy="' + y(d.u[k]) + '" r="3"/><circle class="dot-p" cx="' + x(k) + '" cy="' + y(d.p[k]) + '" r="4"/>';
+      }
     }
     flush();
 
@@ -141,10 +163,11 @@
 
     host.innerHTML =
       '<svg class="chart" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' +
-      esc((opts.title || 'Chart') + ': ' + mode.aName + ' and ' + mode.bName) + '">' +
+      esc((opts.title || 'Chart') + ': ' + legend(modeKey).slice(0, -1).map(function (l) { return l.name; }).join(', ')) + '">' +
       '<defs><pattern id="hatch" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">' +
       '<line x1="0" y1="0" x2="0" y2="3" class="hatch-line" stroke-width="1"/></pattern></defs>' +
       grid + xt + gaps.replace(/class="gap"/g, 'class="gap" fill="url(#hatch)"') +
+      (mode.peak ? '<path class="line-u" d="' + uPath + '"/><path class="line-p" d="' + pPath + '"/>' : '') +
       '<path class="line-a" d="' + aPath + '"/><path class="line-b" d="' + bPath + '"/>' + dots +
       '<line class="cursor" y1="' + m.top + '" y2="' + (m.top + h) + '" x1="0" x2="0" visibility="hidden"/>' +
       '<rect class="hit" x="' + m.left + '" y="' + m.top + '" width="' + w + '" height="' + h + '" fill="transparent"/></svg>' +
@@ -165,7 +188,7 @@
       cursor.setAttribute('x1', x(best)); cursor.setAttribute('x2', x(best)); cursor.setAttribute('visibility', 'visible');
       var rows = '<div class="tip-time">' + esc(fmtDate(d.t[best], true)) + '</div>' +
         row('a', mode.aName, valueText(mode, d.a[best])) + row('b', mode.bName, valueText(mode, d.b[best]));
-      if (mode.use) rows += row('u', 'Usage', valueText(mode, d.u[best]));
+      if (mode.peak) rows += row('p', 'Peak usage', valueText(mode, d.p[best])) + row('u', 'Mean usage', valueText(mode, d.u[best]));
       rows += '<div class="tip-row tip-total"><span>' + (mode.money ? 'Waste' : 'Gap') + '</span><span>' +
         valueText(mode, Math.max(0, d.a[best] - d.b[best])) + '</span></div>';
       tip.innerHTML = rows;
@@ -183,7 +206,7 @@
     svg.addEventListener('mouseleave', function () { tip.hidden = true; cursor.setAttribute('visibility', 'hidden'); });
   }
 
-  var api = { render: render, modes: MODES, fmtMoney: fmtMoney, fmtNum: fmtNum, downsample: downsample };
+  var api = { render: render, modes: MODES, legend: legend, fmtMoney: fmtMoney, fmtNum: fmtNum, downsample: downsample };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else (self.SP = self.SP || {}).chart = api;
 })();

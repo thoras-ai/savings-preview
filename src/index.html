@@ -8,16 +8,30 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand">Thoras <span>Savings Preview</span></div>
+  <div class="brand"><span class="wordmark" role="img" aria-label="Thoras"><!--{{WORDMARK}}--></span><span class="product">Savings Preview</span></div>
+  <div class="top-tools">
+    <button id="open-another" type="button" class="top-button" hidden>Open another file</button>
+    <div id="theme" class="theme" role="radiogroup" aria-label="Theme">
+      <button type="button" role="radio" data-theme-choice="auto">Auto</button>
+      <button type="button" role="radio" data-theme-choice="light">Light</button>
+      <button type="button" role="radio" data-theme-choice="dark">Dark</button>
+    </div>
+  </div>
 </header>
 <main>
   <section id="loading" class="panel center" hidden>Loading report data…</section>
 
-  <section id="start" class="panel center" hidden>
-    <h1>Open a report file</h1>
-    <p>Choose the OTel metrics file the CLI wrote, or drop it on this page. Nothing leaves your machine.</p>
-    <p id="error" class="error" hidden></p>
-    <label class="button">Choose file<input id="file" type="file" accept=".json,application/json" hidden></label>
+  <section id="start" hidden>
+    <div id="drop" class="panel center drop">
+      <h1>Open a report file</h1>
+      <p>Drop a file here or choose one: the <code>savings-preview.otlp.json</code> file the CLI wrote, its <code>savings-preview.zip</code>, or the <code>report.html</code> from the zip. The file is read in this browser and is not uploaded.</p>
+      <p id="error" class="error" role="alert" hidden></p>
+      <label class="button">Choose file<input id="file" class="visually-hidden" type="file" accept=".json,.zip,.html,application/json,application/zip,text/html"></label>
+    </div>
+    <div id="samples" class="samples" hidden>
+      <h2>Samples</h2>
+      <ul id="sample-list"></ul>
+    </div>
   </section>
 
   <div id="report" hidden>

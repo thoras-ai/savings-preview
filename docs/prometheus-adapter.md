@@ -126,15 +126,142 @@ savings-preview prometheus --url https://mimir.example.com --tenant TENANT --clu
 ### Grafana Cloud
 
 ```
-SAVINGS_PREVIEW_BASIC_AUTH=INSTANCE_ID:TOKEN savings-preview prometheus \
-  --url https://prometheus-prod-NN-prod-REGION.grafana.net --cluster-name prod-us
+savings-preview prometheus --url https://prometheus-prod-NN-prod-REGION.grafana.net \
+  --basic-auth-file ~/.config/savings-preview/grafana-basic --cluster-name prod-us --selector 'cluster="prod-us"'
 ```
 
 - **URL:** the Prometheus endpoint of the stack, from the stack's Prometheus details page. `/api/prom` is added when the URL has no path, and the remote-write URL (`/api/prom/push`) is accepted.
 - **Credentials:** basic auth, the Prometheus instance ID (the numeric user on the same page) as user and an access policy token as password.
 - **What the customer creates:** an access policy scoped to the stack with the `metrics:read` scope, and a token for it. No other scope is needed.
-- **Limits:** a query may cover at most 32 days, counting range selectors. Range queries are split by day, and the instant queries that look back over the whole `--days` window are split into pieces of at most 32 days, so `--days` beyond 32 works.
+- **Limits:** a range selector may cover at most 32 days; a longer one fails with `err-mimir-max-query-length`. Range queries are split by day, and the instant queries that look back over the whole `--days` window are split into pieces of at most 32 days, so `--days` beyond 32 works.
 - **Adaptive Metrics:** an aggregation rule can drop the `pod`, `container` or other labels from cAdvisor and kube-state-metrics series. The run then stops and names the metric and the labels, instead of producing usage that cannot be attributed to workloads. A cluster whose container runtime does not label cAdvisor series (older containerd setups, minikube) stops the same way on Grafana Cloud, since its pod-level series cannot be told apart from aggregated ones. On Grafana Cloud usage is never split from pod-level series: there a series without a `container` label may be the sum of all of a pod's containers and the pod total, which would double the usage. The fix is to exclude the metric from Adaptive Metrics recommendations, or to keep the labels in its rule, and run again once new data has arrived.
+- **Container series dropped at collection:** the Grafana k8s-monitoring chart drops cAdvisor series without a `container` label by default, so on such a runtime the store has no container usage at all. The run stops and says so when it finds `machine_memory_bytes` but no container series. The kubelet's resource endpoint labels containers on such runtimes; the minikube values below show how to collect it, although its series carry no `image` label, which the adapter needs and those values add.
+
+#### Setup for a stack that already holds the cluster
+
+1. **Find the URL and the instance ID.** In the Grafana Cloud portal (grafana.com, My Account), open the stack and click **Details** on the Prometheus card. Copy the **URL** (`https://prometheus-prod-NN-prod-REGION.grafana.net/api/prom`) and the **Username / Instance ID** (a number).
+2. **Create a read-only token.** In the portal, **Security**, **Access Policies**, **Create access policy**. Set the realm to the stack, select only the `metrics:read` scope, and create it. On the new policy, **Add token**, and copy the token when it is shown.
+3. **Save the credentials to a file.** With the token on the clipboard, on macOS:
+
+   ```
+   mkdir -p -m 700 ~/.config/savings-preview
+   pbpaste > ~/.config/savings-preview/grafana-token && chmod 600 ~/.config/savings-preview/grafana-token
+   (umask 077; printf '%s:%s' INSTANCE_ID "$(cat ~/.config/savings-preview/grafana-token)" > ~/.config/savings-preview/grafana-basic)
+   ```
+
+4. **Run the adapter.** A stack usually holds several clusters. Without `--selector` the run stops and lists them by label, for example `the store holds 3 clusters (label cluster: "prod-eu", "prod-us", "staging")`. Run again with the one to read:
+
+   ```
+   savings-preview prometheus --url https://prometheus-prod-NN-prod-REGION.grafana.net \
+     --basic-auth-file ~/.config/savings-preview/grafana-basic --cluster-name prod-us --selector 'cluster="prod-us"'
+   python3 scripts/validate_contract.py savings-preview.otlp.json
+   ```
+
+#### Setup for testing without a customer stack
+
+1. **Start a trial** at grafana.com. It creates a stack with a Prometheus endpoint.
+2. **Create a token and save it** as in steps 1 to 3 above, with the scopes `metrics:read` and `metrics:write`: the collector writes with it and the adapter reads with it. Keep the instance ID.
+3. **Create the Secret** the collector reads, from the file. These steps use the namespace `monitoring`. When the cluster already has one, as with kube-prometheus-stack, pick another name and use it throughout, since step 7 deletes the namespace.
+
+   ```
+   kubectl --context minikube create namespace monitoring
+   kubectl --context minikube -n monitoring create secret generic grafana-cloud-metrics \
+     --from-literal=username=INSTANCE_ID --from-file=password=$HOME/.config/savings-preview/grafana-token
+   ```
+
+4. **Install k8s-monitoring.** Save these values as `grafana-cloud.yaml`, with the stack's URL and the remote-write path:
+
+   ```yaml
+   cluster:
+     name: minikube
+   destinations:
+     grafanaCloudMetrics:
+       type: prometheus
+       url: https://prometheus-prod-NN-prod-REGION.grafana.net/api/prom/push
+       auth:
+         type: basic
+       secret:
+         create: false
+         name: grafana-cloud-metrics
+   clusterMetrics:
+     enabled: true
+   hostMetrics:
+     enabled: true
+     linuxHosts:
+       enabled: true
+   collectors:
+     alloy-metrics:
+       presets: [clustered, statefulset]
+   telemetryServices:
+     kube-state-metrics:
+       deploy: true
+     node-exporter:
+       deploy: true
+   ```
+
+   `cluster.name` becomes the `cluster` label. The credentials stay in the Secret. minikube's container runtime does not label cAdvisor series, so the chart drops them all. On minikube, also save these values as `grafana-cloud-minikube.yaml`. They take container usage from the kubelet's resource endpoint, which is what metrics-server reads and which does label containers, and set the `image` label the adapter selects on:
+
+   ```yaml
+   clusterMetrics:
+     kubeletResource:
+       metricsTuning:
+         includeMetrics:
+           - container_cpu_usage_seconds_total
+           - container_memory_working_set_bytes
+       extraMetricProcessingRules: |
+         rule {
+           source_labels = ["__name__"]
+           regex         = "container_cpu_usage_seconds_total|container_memory_working_set_bytes"
+           target_label  = "image"
+           replacement   = "unknown"
+         }
+   ```
+
+   ```
+   helm repo add grafana https://grafana.github.io/helm-charts && helm repo update
+   helm --kube-context minikube install grafana-cloud grafana/k8s-monitoring --version 4.5.2 -n monitoring \
+     -f grafana-cloud.yaml -f grafana-cloud-minikube.yaml --wait
+   kubectl --context minikube -n monitoring get pods
+   ```
+
+   The chart's Fleet Management install (the Kubernetes app's setup wizard, `collectorCommon.alloy.remoteConfig`) can leave the collector with an empty remote configuration, so nothing is sent and every source shows as offline. These values write to the stack directly and need no remote configuration.
+5. **Check that metrics arrive.** A minute after the pods are ready:
+
+   ```
+   printf 'user = "%s"\n' "$(cat ~/.config/savings-preview/grafana-basic)" | curl -sS -K - --get \
+     https://prometheus-prod-NN-prod-REGION.grafana.net/api/prom/api/v1/query \
+     --data-urlencode 'query=count by (job) ({cluster="minikube"})'
+   ```
+
+   Expect the `integrations/kubernetes/kube-state-metrics`, `integrations/kubernetes/kubelet`, `integrations/kubernetes/resources` and `integrations/node_exporter` jobs. Reading the credentials from standard input keeps them out of the process list.
+6. **Run the adapter** after 10 minutes or more, with a one-day window:
+
+   ```
+   savings-preview prometheus --url https://prometheus-prod-NN-prod-REGION.grafana.net \
+     --basic-auth-file ~/.config/savings-preview/grafana-basic --cluster-name minikube --selector 'cluster="minikube"' --days 1
+   python3 scripts/validate_contract.py savings-preview.otlp.json
+   ```
+
+   Expect a warning that the store holds less than the day asked for. Memory, CPU and requests agree with `kubectl top pods -A --containers` and the pod specs, CPU to within its 5-minute rate window.
+7. **Remove the test setup:**
+
+   ```
+   helm --kube-context minikube uninstall grafana-cloud -n monitoring
+   kubectl --context minikube delete namespace monitoring
+   kubectl --context minikube delete crd alloys.collectors.grafana.com
+   ```
+
+   Helm leaves the Alloy CRD in place, hence the last command; skip it when another Alloy Operator install uses the CRD. Delete the access policy in the portal, and the two credential files, when the test is over.
+
+`internal/adapters/prometheus/testdata/grafana-cloud.json` is a recording of a run against a trial stack set up this way. To record another:
+
+```
+RECORD_GRAFANA_CLOUD_URL=https://prometheus-prod-NN-prod-REGION.grafana.net \
+RECORD_GRAFANA_CLOUD_AUTH_FILE=$HOME/.config/savings-preview/grafana-basic RECORD_SELECTOR='cluster="minikube"' \
+  go test -run TestRecordGrafanaCloud ./internal/adapters/prometheus
+```
+
+It holds one day at 1 minute, ending at the current minute. Cluster, namespace, workload, pod, container and node names are replaced with numbered ones (`cluster-1`, `namespace-3`) in the queries, the selector and the responses alike, labels the adapter does not read are dropped, and provider IDs keep only their scheme. Usage values are kept. Review the file before committing it.
 
 ### Amazon Managed Prometheus
 

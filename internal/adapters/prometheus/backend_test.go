@@ -193,6 +193,35 @@ func TestAdaptiveMetricsDroppedContainerLabel(t *testing.T) {
 	}
 }
 
+func TestGrafanaCloudContainerSeriesDropped(t *testing.T) {
+	for _, cadvisor := range []bool{true, false} {
+		h := clusterStore(true, true, true)
+		f := &fakeStore{handle: func(path string, q url.Values) (int, any) {
+			switch query := q.Get("query"); {
+			case query == CAdvisorProbe:
+				if cadvisor {
+					return 200, vector(1)
+				}
+				return 200, empty()
+			case strings.Contains(query, "container_memory_working_set_bytes"), strings.Contains(query, "container_cpu_usage_seconds_total"):
+				return 200, empty()
+			}
+			return h(path, q)
+		}}
+		_, _, err := Run(context.Background(), Options{Client: f.client(t), Cluster: "test", Days: 7, Step: 5 * time.Minute,
+			Now: time.Unix(t0, 0), AdaptiveMetrics: true})
+		if err == nil {
+			t.Fatal("no error")
+		}
+		if got := strings.Contains(err.Error(), "k8s-monitoring"); got != cadvisor {
+			t.Errorf("cAdvisor collected %v: %v", cadvisor, err)
+		}
+		if !strings.HasPrefix(err.Error(), "the store has no per-container usage metrics") {
+			t.Errorf("message: %v", err)
+		}
+	}
+}
+
 // backendServer serves a fake store under prefix, after check accepts the request.
 func backendServer(t *testing.T, prefix string, check func(*http.Request) (int, string), h func(string, url.Values) (int, any)) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

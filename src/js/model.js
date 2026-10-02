@@ -32,7 +32,7 @@
   };
   var REQUIRED = [M.cpuUse, M.memUse, M.cpuReq, M.memReq];
   var REPLICA_METRICS = { deployment: 'k8s.deployment.pod.desired', statefulset: 'k8s.statefulset.pod.desired' };
-  var FIELDS = ['reqCpu', 'reqMem', 'useCpu', 'useMem', 'tgtCpu', 'tgtMem', 'cur', 'opt'];
+  var FIELDS = ['reqCpu', 'reqMem', 'useCpu', 'useMem', 'peakCpu', 'peakMem', 'tgtCpu', 'tgtMem', 'cur', 'opt'];
 
   function attrMap(resource) {
     var out = {};
@@ -243,7 +243,7 @@
     var weight = new Float64Array(n);
     var s = {};
     FIELDS.forEach(function (f) { s[f] = new Float64Array(n); });
-    var pkCpu = new Float64Array(n), pkMem = new Float64Array(n);
+    var pkCpu = s.peakCpu, pkMem = s.peakMem;
     usable.forEach(function (c, ci) {
       var at = function (name) { return resample(c.series[name], grid, c.step, c.spans, !!c.held[name]); };
       var cu = at(M.cpuUse), mu = at(M.memUse), cr = at(M.cpuReq), mr = at(M.memReq);
@@ -302,6 +302,8 @@
   }
 
   // Sum workload series onto one grid. A bucket counts only when every workload has a value in it.
+  // Each workload adds its mean to a bucket, except for peaks, where it adds its highest point.
+  var PEAKS = ['peakCpu', 'peakMem'];
   function combine(list) {
     var step = 0, t0 = Infinity, t1 = -Infinity;
     list.forEach(function (w) {
@@ -322,15 +324,18 @@
       for (var i = 0; i < s.t.length; i++) {
         if (!isFinite(s.cur[i])) continue;
         var bi = Math.floor((s.t[i] - t0) / step);
+        FIELDS.forEach(function (f) {
+          if (PEAKS.indexOf(f) < 0) sum[f][bi] += s[f][i];
+          else sum[f][bi] = cnt[bi] ? Math.max(sum[f][bi], s[f][i]) : s[f][i];
+        });
         cnt[bi]++;
-        FIELDS.forEach(function (f) { sum[f][bi] += s[f][i]; });
       }
       var first = Math.floor((s.t[0] - t0) / step), last = Math.floor((s.t[s.t.length - 1] - t0) / step);
       for (var j = 0; j < nb; j++) {
         if (j < first || j > last) { have[j]++; continue; }
         if (!cnt[j]) continue;
         have[j]++;
-        FIELDS.forEach(function (f) { out[f][j] += sum[f][j] / cnt[j]; });
+        FIELDS.forEach(function (f) { out[f][j] += PEAKS.indexOf(f) < 0 ? sum[f][j] / cnt[j] : sum[f][j]; });
       }
     });
     for (var q = 0; q < nb; q++) {

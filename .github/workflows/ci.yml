@@ -119,5 +119,7 @@ jobs:
         run: python3 -m unittest discover -s tests
       - name: Report page tests
         run: node --test 'tests/**/*.test.js'
-      - name: Validate the fixture against the contract
-        run: python3 scripts/validate_contract.py fixtures/savings-preview.otlp.json
+      - name: Validate the fixtures against the contract
+        run: |
+          python3 scripts/validate_contract.py fixtures/savings-preview.otlp.json
+          python3 scripts/validate_contract.py fixtures/minikube-poll.otlp.json

@@ -114,6 +114,8 @@
   --chart-3: var(--primitive-azure-300);
   --chart-4: var(--primitive-mango-300);
   --chart-other: var(--color-zinc-300);
+  --chart-cpu: var(--primitive-brand-500);
+  --chart-memory: var(--primitive-mango-600);
 }
 
 /* ============================================
@@ -207,6 +209,8 @@
   --chart-3: var(--primitive-azure-200);
   --chart-4: var(--primitive-mango-200);
   --chart-other: var(--color-zinc-600);
+  --chart-cpu: var(--primitive-brand-500);
+  --chart-memory: var(--primitive-mango-600);
 }
 
 /* ============================================
