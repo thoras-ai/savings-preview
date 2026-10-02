@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="wordmark" role="img" aria-label="Thoras"><!--{{WORDMARK}}--></span><span class="product">Savings Preview</span></div>
+  <div class="brand"><span class="wordmark" role="img" aria-label="Thoras"><!--{{WORDMARK}}--></span><span class="product">Savings Preview</span><span id="context" class="context"></span></div>
   <div class="top-tools">
     <button id="open-another" type="button" class="top-button" hidden>Open another file</button>
     <div id="theme" class="theme" role="radiogroup" aria-label="Theme">
@@ -18,53 +18,11 @@
     </div>
   </div>
 </header>
+<nav id="secbar" class="secbar" aria-label="Report sections" hidden><ol></ol></nav>
 <main>
   <section id="loading" class="panel center" hidden>Loading report data…</section>
-
-  <section id="start" hidden>
-    <div id="drop" class="panel center drop">
-      <h1>Open a report file</h1>
-      <p>Drop a file here or choose one: the <code>savings-preview.otlp.json</code> file the CLI wrote, its <code>savings-preview.zip</code>, or the <code>report.html</code> from the zip. The file is read in this browser and is not uploaded.</p>
-      <p id="error" class="error" role="alert" hidden></p>
-      <label class="button">Choose file<input id="file" class="visually-hidden" type="file" accept=".json,.zip,.html,application/json,application/zip,text/html"></label>
-    </div>
-    <div id="samples" class="samples" hidden>
-      <h2>Samples</h2>
-      <ul id="sample-list"></ul>
-    </div>
-  </section>
-
-  <div id="report" hidden>
-    <div class="heading">
-      <div>
-        <h1 id="cluster"></h1>
-        <div id="fidelity" class="fidelity"></div>
-      </div>
-    </div>
-    <div id="tiles" class="tiles"></div>
-    <div id="notes" class="notes" hidden></div>
-
-    <section id="chart-card" class="card">
-      <div class="card-head">
-        <div>
-          <h2 id="chart-title"></h2>
-          <div id="chart-sub" class="sub"></div>
-        </div>
-        <div class="card-tools">
-          <button id="back" type="button" class="link" hidden>← Whole cluster</button>
-          <div id="tabs" class="tabs" role="tablist"></div>
-        </div>
-      </div>
-      <div id="legend" class="legend"></div>
-      <div id="chart" class="chart-host"></div>
-    </section>
-
-    <section class="card">
-      <div class="card-head"><div><h2>Workloads</h2><div class="sub">Sorted by waste. Select a workload to chart it.</div></div></div>
-      <div class="table-wrap"><table id="table"></table></div>
-    </section>
-    <p id="basis" class="basis"></p>
-  </div>
+  <section id="start" hidden></section>
+  <div id="report" hidden></div>
 </main>
 <script>/*{{JS}}*/</script>
 </body>

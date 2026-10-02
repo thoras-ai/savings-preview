@@ -59,9 +59,10 @@
     return { t: t, v: v };
   }
 
-  function mean(arr, weights) {
-    var s = 0, n = 0;
-    for (var i = 0; i < arr.length; i++) {
+  // Over indexes [from, to) when given, else the whole array.
+  function mean(arr, weights, from, to) {
+    var s = 0, n = 0, end = to === undefined ? arr.length : to;
+    for (var i = from || 0; i < end; i++) {
       if (!isFinite(arr[i])) continue;
       var w = weights ? weights[i] : 1;
       s += arr[i] * w; n += w;
@@ -209,26 +210,28 @@
     return REQUIRED.filter(function (n) { return !c.series[n] || !c.series[n].t.length; });
   }
 
-  function analyzeWorkload(id, info, parts, rates) {
-    var res = {
-      id: id, ns: info.ns, kind: info.kind, name: info.name, containers: [],
-      status: 'excluded', reason: '', series: null,
-      annualSpend: 0, annualSavings: 0, savingsPct: 0, wasteCores: 0, wasteGiB: 0, reqCores: 0, reqGiB: 0
+  // Aligns a workload's containers on one time grid and sums them, scaled by
+  // replicas. Everything here is independent of the levers, so it runs once
+  // per file.
+  function prepareWorkload(id, info, parts) {
+    var p = {
+      id: id, ns: info.ns, kind: info.kind, name: info.name, containers: [], notes: [], status: 'excluded', reason: '',
+      s: null, weight: null, wasteCpu: null, wasteMem: null, peaks: null
     };
     var usable = [];
     parts.forEach(function (c) {
       var miss = missingRequired(c);
-      res.containers.push({ name: c.name, missing: miss, excluded: miss.length > 0 });
+      p.containers.push({ name: c.name, missing: miss, excluded: miss.length > 0 });
       if (!miss.length) usable.push(c);
     });
     if (!usable.length) {
       var all = [];
-      res.containers.forEach(function (c) { c.missing.forEach(function (m) { if (all.indexOf(m) < 0) all.push(m); }); });
-      res.reason = 'Missing ' + all.map(shortMetric).join(' and ') + ' data';
-      return res;
+      p.containers.forEach(function (c) { c.missing.forEach(function (m) { if (all.indexOf(m) < 0) all.push(m); }); });
+      p.reason = 'Missing ' + all.map(shortMetric).join(' and ') + ' data';
+      return p;
     }
     var rep = info.workload && info.workload.series[REPLICA_METRICS[info.kind]];
-    if (!rep || !rep.t.length) { res.reason = 'Missing replica count'; return res; }
+    if (!rep || !rep.t.length) { p.reason = 'Missing replica count'; return p; }
 
     var lists = [];
     usable.forEach(function (c) { lists.push(c.series[M.cpuUse].t, c.series[M.memUse].t); });
@@ -266,30 +269,63 @@
       if (ok) anyValid = true;
       else { s.useCpu[i] = s.useMem[i] = s.reqCpu[i] = s.reqMem[i] = pkCpu[i] = pkMem[i] = NaN; }
     }
-    if (!anyValid) { res.reason = 'No time with complete data'; return res; }
-    var pc = rollingMax(grid, pkCpu, PEAK_WINDOW_SECONDS), pm = rollingMax(grid, pkMem, PEAK_WINDOW_SECONDS);
+    if (!anyValid) { p.reason = 'No time with complete data'; return p; }
+    s.t = grid; s.step = step;
+    p.s = s;
+    p.weight = weight;
+    p.wasteCpu = new Float64Array(n);
+    p.wasteMem = new Float64Array(n);
+    p.status = p.containers.some(function (c) { return c.excluded; }) ? 'partial' : 'ok';
+    if (p.status === 'partial') p.reason = 'Some containers lack data and are left out';
+    return p;
+  }
+
+  // First index whose time is at or after t, in a sorted time array.
+  function lowerBound(t, x) {
+    var lo = 0, hi = t.length;
+    while (lo < hi) { var mid = (lo + hi) >> 1; if (t[mid] < x) lo = mid + 1; else hi = mid; }
+    return lo;
+  }
+
+  // The workload's figures under the given levers. The target, spend and
+  // waste arrays belong to the prepared workload and are overwritten by the
+  // next call.
+  function computeWorkload(p, rates, lv) {
+    var res = {
+      id: p.id, ns: p.ns, kind: p.kind, name: p.name, containers: p.containers, notes: p.notes,
+      status: p.status, reason: p.reason, series: null,
+      annualSpend: 0, annualSavings: 0, savingsPct: 0, wasteCores: 0, wasteGiB: 0, reqCores: 0, reqGiB: 0
+    };
+    if (!p.s) return res;
+    var s = p.s, n = s.t.length, weight = p.weight, lo = 0, hi = n;
+    if (lv.range) {
+      lo = lowerBound(s.t, lv.range[0]);
+      hi = lowerBound(s.t, lv.range[1] + 1e-9);
+      var any = false;
+      for (var j = lo; j < hi && !any; j++) any = isFinite(s.reqCpu[j]);
+      if (!any) { res.status = 'excluded'; res.reason = 'No data in the selected time range'; return res; }
+    }
+    if (!p.peaks || p.peaks.window !== lv.peakWindow) {
+      p.peaks = { window: lv.peakWindow, cpu: rollingMax(s.t, s.peakCpu, lv.peakWindow), mem: rollingMax(s.t, s.peakMem, lv.peakWindow) };
+    }
+    var pc = p.peaks.cpu, pm = p.peaks.mem, h = lv.headroom;
     for (var k = 0; k < n; k++) {
-      s.tgtCpu[k] = pc[k] * TARGET_HEADROOM;
-      s.tgtMem[k] = pm[k] * TARGET_HEADROOM;
+      s.tgtCpu[k] = pc[k] * h;
+      s.tgtMem[k] = pm[k] * h;
       s.cur[k] = Math.max(s.reqCpu[k] * rates.perCore, s.reqMem[k] * rates.perGiB);
       s.opt[k] = Math.max(Math.min(s.reqCpu[k], s.tgtCpu[k]) * rates.perCore, Math.min(s.reqMem[k], s.tgtMem[k]) * rates.perGiB);
+      p.wasteCpu[k] = Math.max(0, s.reqCpu[k] - s.tgtCpu[k]);
+      p.wasteMem[k] = Math.max(0, s.reqMem[k] - s.tgtMem[k]);
     }
-    var wasteCpu = new Float64Array(n), wasteMem = new Float64Array(n);
-    for (var m = 0; m < n; m++) {
-      wasteCpu[m] = Math.max(0, s.reqCpu[m] - s.tgtCpu[m]);
-      wasteMem[m] = Math.max(0, s.reqMem[m] - s.tgtMem[m]);
-    }
-    s.t = grid; s.step = step;
     res.series = s;
-    res.status = res.containers.some(function (c) { return c.excluded; }) ? 'partial' : 'ok';
-    if (res.status === 'partial') res.reason = 'Some containers lack data and are left out';
-    res.reqCores = mean(s.reqCpu, weight);
-    res.reqGiB = mean(s.reqMem, weight);
-    res.annualSpend = mean(s.cur, weight) * HOURS_PER_YEAR;
-    res.annualSavings = (mean(s.cur, weight) - mean(s.opt, weight)) * HOURS_PER_YEAR;
+    res.reqCores = mean(s.reqCpu, weight, lo, hi);
+    res.reqGiB = mean(s.reqMem, weight, lo, hi);
+    var cur = mean(s.cur, weight, lo, hi);
+    res.annualSpend = cur * HOURS_PER_YEAR;
+    res.annualSavings = (cur - mean(s.opt, weight, lo, hi)) * HOURS_PER_YEAR;
     res.savingsPct = res.annualSpend > 0 ? res.annualSavings / res.annualSpend : 0;
-    res.wasteCores = mean(wasteCpu, weight);
-    res.wasteGiB = mean(wasteMem, weight);
+    res.wasteCores = mean(p.wasteCpu, weight, lo, hi);
+    res.wasteGiB = mean(p.wasteMem, weight, lo, hi);
     return res;
   }
 
@@ -312,34 +348,34 @@
       t1 = Math.max(t1, w.series.t[w.series.t.length - 1]);
     });
     if (!(step > 0)) step = 1;
-    var nb = Math.floor((t1 - t0) / step) + 1;
+    var nb = Math.floor((t1 - t0) / step) + 1, nf = FIELDS.length;
     var out = { t: new Float64Array(nb), step: step };
     for (var b = 0; b < nb; b++) out.t[b] = t0 + b * step;
     var have = new Float64Array(nb);
-    FIELDS.forEach(function (f) { out[f] = new Float64Array(nb); });
+    var outs = FIELDS.map(function (f) { return (out[f] = new Float64Array(nb)); });
+    var peak = FIELDS.map(function (f) { return PEAKS.indexOf(f) >= 0; });
+    // One scratch row per field, reset over each workload's own buckets.
+    var sum = FIELDS.map(function () { return new Float64Array(nb); }), cnt = new Float64Array(nb);
+    var bin = new Int32Array(0);
     list.forEach(function (w) {
-      var sum = {}, cnt = new Float64Array(nb);
-      FIELDS.forEach(function (f) { sum[f] = new Float64Array(nb); });
-      var s = w.series;
-      for (var i = 0; i < s.t.length; i++) {
-        if (!isFinite(s.cur[i])) continue;
-        var bi = Math.floor((s.t[i] - t0) / step);
-        FIELDS.forEach(function (f) {
-          if (PEAKS.indexOf(f) < 0) sum[f][bi] += s[f][i];
-          else sum[f][bi] = cnt[bi] ? Math.max(sum[f][bi], s[f][i]) : s[f][i];
-        });
-        cnt[bi]++;
+      var s = w.series, n = s.t.length, i, k;
+      var first = Math.floor((s.t[0] - t0) / step), last = Math.floor((s.t[n - 1] - t0) / step);
+      if (bin.length < n) bin = new Int32Array(n);
+      // The bucket of each valid point, or -1.
+      for (i = 0; i < n; i++) bin[i] = isFinite(s.cur[i]) ? Math.floor((s.t[i] - t0) / step) : -1;
+      for (k = first; k <= last; k++) cnt[k] = 0;
+      for (i = 0; i < n; i++) if (bin[i] >= 0) cnt[bin[i]]++;
+      for (var f = 0; f < nf; f++) {
+        var row = sum[f], src = s[FIELDS[f]], dst = outs[f];
+        for (k = first; k <= last; k++) row[k] = peak[f] ? -Infinity : 0;
+        if (peak[f]) { for (i = 0; i < n; i++) if (bin[i] >= 0) row[bin[i]] = Math.max(row[bin[i]], src[i]); }
+        else { for (i = 0; i < n; i++) if (bin[i] >= 0) row[bin[i]] += src[i]; }
+        for (k = first; k <= last; k++) if (cnt[k]) dst[k] += peak[f] ? row[k] : row[k] / cnt[k];
       }
-      var first = Math.floor((s.t[0] - t0) / step), last = Math.floor((s.t[s.t.length - 1] - t0) / step);
-      for (var j = 0; j < nb; j++) {
-        if (j < first || j > last) { have[j]++; continue; }
-        if (!cnt[j]) continue;
-        have[j]++;
-        FIELDS.forEach(function (f) { out[f][j] += PEAKS.indexOf(f) < 0 ? sum[f][j] / cnt[j] : sum[f][j]; });
-      }
+      for (k = 0; k < nb; k++) if (k < first || k > last || cnt[k]) have[k]++;
     });
     for (var q = 0; q < nb; q++) {
-      if (have[q] !== list.length) FIELDS.forEach(function (f) { out[f][q] = NaN; });
+      if (have[q] !== list.length) for (var g = 0; g < nf; g++) outs[g][q] = NaN;
     }
     return out;
   }
@@ -429,9 +465,10 @@
     return formatSpan(span) + ' at ' + formatStep(step) + ' resolution';
   }
 
-  function analyze(doc) {
+  // Reads a file once: parses it, prices its nodes and lines up each
+  // workload's series. compute() turns the result into figures.
+  function prepare(doc) {
     var data = parse(doc);
-    var rates = pricing(data.nodes);
     var byWorkload = {}, order = [];
     data.containers.forEach(function (c) {
       if (!byWorkload[c.workloadId]) { byWorkload[c.workloadId] = []; order.push(c.workloadId); }
@@ -440,9 +477,45 @@
     var workloads = order.map(function (id) {
       var first = byWorkload[id][0];
       var info = { ns: first.ns, kind: first.kind, name: first.workload, workload: data.workloads[id] };
-      var w = analyzeWorkload(id, info, byWorkload[id], rates);
-      w.notes = workloadNotes(byWorkload[id]);
-      return w;
+      var p = prepareWorkload(id, info, byWorkload[id]);
+      p.notes = workloadNotes(byWorkload[id]);
+      return p;
+    });
+    var namespaces = [];
+    workloads.forEach(function (w) { if (namespaces.indexOf(w.ns) < 0) namespaces.push(w.ns); });
+    var fid = fidelity(data.containers);
+    fid.notes = noteSummaries(workloads);
+    return {
+      cluster: data.cluster, fidelity: fid, pricing: pricing(data.nodes), nodes: data.nodes,
+      namespaces: namespaces.sort(), workloads: workloads
+    };
+  }
+
+  var DEFAULT_LEVERS = { rates: null, headroom: TARGET_HEADROOM, peakWindow: PEAK_WINDOW_SECONDS, namespaces: null, range: null };
+
+  function fmtRate(v) { return '$' + Number(v.toPrecision(4)); }
+
+  // The one place totals are computed. With DEFAULT_LEVERS it matches
+  // internal/savings, which the parity tests check.
+  //   rates       {perCore, perGiB} in USD per hour, or null to price from the nodes
+  //   headroom    target as a multiple of the peak (1.1)
+  //   peakWindow  seconds the rolling peak looks back (900)
+  //   namespaces  namespaces to count, or null for all
+  //   range       [from, to] in Unix seconds, or null for the whole file
+  function compute(data, levers) {
+    var lv = Object.assign({}, DEFAULT_LEVERS, levers);
+    var rates = data.pricing;
+    if (lv.rates) {
+      rates = Object.assign({}, data.pricing, {
+        perCore: lv.rates.perCore, perGiB: lv.rates.perGiB, custom: true,
+        basis: fmtRate(lv.rates.perCore) + ' per core-hour and ' + fmtRate(lv.rates.perGiB) + ' per GiB-hour'
+      });
+    }
+    var scope = null;
+    if (lv.namespaces) { scope = {}; lv.namespaces.forEach(function (n) { scope[n] = true; }); }
+    var workloads = [];
+    data.workloads.forEach(function (p) {
+      if (!scope || scope[p.ns]) workloads.push(computeWorkload(p, rates, lv));
     });
     var counted = workloads.filter(function (w) { return w.series; });
     var totals = { spend: 0, savings: 0, cores: 0, gib: 0, reqCores: 0, reqGiB: 0, workloads: workloads.length, counted: counted.length };
@@ -451,16 +524,30 @@
       totals.cores += w.wasteCores; totals.gib += w.wasteGiB;
       totals.reqCores += w.reqCores; totals.reqGiB += w.reqGiB;
     });
+    var series = counted.length ? combine(counted) : null;
+    if (series && lv.range) series = clip(series, lv.range);
     return {
-      cluster: data.cluster, fidelity: Object.assign(fidelity(data.containers), { notes: noteSummaries(workloads) }), pricing: rates,
-      workloads: workloads, totals: totals,
-      series: counted.length ? combine(counted) : null
+      cluster: data.cluster, fidelity: data.fidelity, pricing: rates, namespaces: data.namespaces,
+      levers: lv, workloads: workloads, totals: totals, series: series
     };
   }
 
+  function clip(series, range) {
+    var a = 0, b = series.t.length;
+    while (a < b && series.t[a] < range[0]) a++;
+    while (b > a && series.t[b - 1] > range[1]) b--;
+    var out = { step: series.step, t: series.t.subarray(a, b) };
+    FIELDS.forEach(function (f) { out[f] = series[f].subarray(a, b); });
+    return out;
+  }
+
+  function analyze(doc) {
+    return compute(prepare(doc));
+  }
+
   var api = {
-    analyze: analyze, parse: parse, pricing: pricing, resample: resample, rollingMax: rollingMax,
-    fidelityLabel: fidelityLabel, notes: NOTES, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
+    analyze: analyze, prepare: prepare, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, resample: resample, rollingMax: rollingMax,
+    fidelityLabel: fidelityLabel, formatSpan: formatSpan, formatStep: formatStep, notes: NOTES, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else (self.SP = self.SP || {}).model = api;

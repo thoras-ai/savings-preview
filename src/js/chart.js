@@ -101,7 +101,8 @@
     if (!vals.length) { host.innerHTML = '<p class="empty">No complete data to chart.</p>'; return; }
     var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
     var pad0 = (hi - lo) * 0.12 || hi * 0.1 || 1;
-    var yMin = Math.max(0, lo - pad0), yMax = hi + pad0;
+    // opts.fromZero shows amounts against zero, so a gap reads as a share of the whole.
+    var yMin = opts.fromZero ? 0 : Math.max(0, lo - pad0), yMax = hi + pad0;
     var step = niceStep(yMax - yMin, 5);
     yMin = Math.max(0, Math.floor(yMin / step) * step);
     yMax = Math.ceil(yMax / step) * step;

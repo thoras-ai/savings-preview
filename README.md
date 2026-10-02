@@ -2,7 +2,7 @@
 
 A read-only CLI that reads a cluster's existing usage history, writes it as one OTel metrics file, and shows what Thoras would have saved.
 
-![The report page with the synthetic sample, CPU view](docs/images/report.png)
+![The report page with the synthetic sample: the summary section](docs/images/report.png)
 
 The report page is also published at https://curly-dollop-gw8yzn1.pages.github.io/. The site is private: it needs a GitHub login with access to the thoras-ai organization. It opens a `savings-preview.otlp.json`, a `savings-preview.zip` or a `report.html` in the browser, and nothing is uploaded.
 
@@ -44,6 +44,23 @@ Run every test with `make test`, or the Go tests with `go test ./...`, the contr
 
 `python3 scripts/build_report.py [OUTDIR]` writes `OUTDIR/index.html` (default `dist/`): one file with the scripts, styles and fonts inlined. It makes no network requests, so it works offline.
 
+The page is one report in six numbered sections, read top to bottom: summary, where the money is, workloads, cluster and nodes, assumptions, and data and method. A bar under the header lists them and underlines the one in view. Where the money is and cluster and nodes are placeholders for now; assumptions lists the settings in effect, and data and method lists the workloads the totals leave out. The page reads the file once and recomputes every section when a setting changes. The settings live in the URL hash, so a link opens the same view; each key is written only when it differs from its default:
+
+| Key | Meaning | Default |
+| --- | --- | --- |
+| `section` | Section to open: `summary`, `money`, `workloads`, `cluster`, `assumptions` or `method` | `summary` |
+| `cpu`, `gib` | Price in USD per core-hour and per GiB-hour, both or neither | From the nodes |
+| `headroom` | Target headroom over the peak, in percent | `10` |
+| `peak` | Rolling peak window, in minutes | `15` |
+| `ns` | Namespaces to count, comma separated | All |
+| `from`, `to` | Time range, in Unix seconds | The whole file |
+| `cost` | Loaded cost of an engineer per year, in USD | `200000` |
+| `workload` | Workload in focus, as `namespace/kind/name` | None |
+
+For example, `index.html#section=workloads&headroom=20&ns=shop,data`. A value that does not parse is ignored. With the defaults, the totals match the CLI's `summary.json`.
+
+Each section is a script in `src/js/section-*.js` that registers itself with `SP.sections` (`src/js/sections.js` describes the contract). Shared pieces are in `src/js/model.js` (`prepare` reads a file once, `compute` applies the settings), `src/js/state.js` (the settings and their hash form) and `src/js/components.js` (number formats, KPI tile, confidence pill, banner). A new script must be listed in both `scripts/build_report.py` and `page.go`.
+
 The page fetches `savings-preview.otlp.json` from the same directory, or the file named in the `data` query parameter. A page that holds the file in a `<script type="application/json" id="report-data">` element, like the `report.html` in the zip, uses that instead of fetching. When the fetch fails, for example when the page is opened from disk, it asks for a file instead: a contract file, a `savings-preview.zip`, or a `report.html`, chosen or dropped on the page and read in the browser. The header switches between the light and dark themes or follows the system (Auto); the choice is kept in the browser's local storage.
 
 `python3 scripts/build_report.py --site OUTDIR` builds the copy for GitHub Pages: it opens on the upload screen and lists the two fixtures as samples, copied to `OUTDIR/samples/`. `.github/workflows/pages.yml` builds and deploys it on every push to `main`; the repository's Pages source must be set to GitHub Actions. The site holds only the page and the two fixtures, no customer data.
@@ -54,6 +71,6 @@ To try it with the fixture:
     cp fixtures/savings-preview.otlp.json dist/
     python3 -m http.server -d dist
 
-The savings math is in `src/js/model.js`. The target is 1.1 times the trailing 15-minute maximum of usage, per workload. Waste is the request above the target. Cost is the larger of the CPU and memory cost, priced from the node resources when their instance types are in the built-in AWS price table, and from a 4-core, 16 GiB, $0.192 per hour node otherwise. A container missing a required series is listed but not counted. When a file mixes steps (`thoras.step_spans`), each point counts for its own step, averages are weighted by time, and peaks come from the `.max` series where the file has them.
+The savings math is in `src/js/model.js`. By default the target is 1.1 times the trailing 15-minute maximum of usage, per workload. Waste is the request above the target. Cost is the larger of the CPU and memory cost, priced from the node resources when their instance types are in the built-in AWS price table, and from a 4-core, 16 GiB, $0.192 per hour node otherwise. A container missing a required series is listed but not counted. When a file mixes steps (`thoras.step_spans`), each point counts for its own step, averages are weighted by time, and peaks come from the `.max` series where the file has them.
 
 The page's design tokens are derived from the dashboard's tokens and live in `design/`. `docs/design.md` describes them, the rules the page follows, and how to re-sync them with `scripts/sync_design_tokens.py`.

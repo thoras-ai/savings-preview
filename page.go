@@ -16,7 +16,22 @@ var src embed.FS
 // The lists and markers below mirror scripts/build_report.py, so both produce
 // the same page.
 var (
-	scripts  = []string{"src/js/model.js", "src/js/files.js", "src/js/chart.js", "src/js/app.js"}
+	scripts = []string{
+		"src/js/model.js",
+		"src/js/files.js",
+		"src/js/state.js",
+		"src/js/components.js",
+		"src/js/chart.js",
+		"src/js/sections.js",
+		"src/js/section-start.js",
+		"src/js/section-summary.js",
+		"src/js/section-money.js",
+		"src/js/section-workloads.js",
+		"src/js/section-cluster.js",
+		"src/js/section-assumptions.js",
+		"src/js/section-method.js",
+		"src/js/app.js",
+	}
 	styles   = []string{"design/zinc.css", "design/primitives.css", "design/semantic.css", "design/elevation.css", "src/styles/report.css"}
 	wordmark = "design/assets/thoras-wordmark.svg"
 	fonts    = []struct {

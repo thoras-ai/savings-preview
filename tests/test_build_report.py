@@ -33,6 +33,15 @@ class BuildReportTest(unittest.TestCase):
                 self.assertTrue(os.path.isfile(os.path.join(out, s["url"])), s["url"])
             self.assertTrue(os.path.exists(os.path.join(out, ".nojekyll")))
 
+    def test_page_includes_every_script(self):
+        on_disk = sorted("src/js/" + n for n in os.listdir(os.path.join(build_report.ROOT, "src", "js")) if n.endswith(".js"))
+        self.assertEqual(sorted(build_report.SCRIPTS), on_disk)
+        # Sections register themselves, so the registry loads before them and the page wiring after.
+        order = build_report.SCRIPTS
+        sections = [i for i, n in enumerate(order) if os.path.basename(n).startswith("section-")]
+        self.assertLess(order.index("src/js/sections.js"), min(sections))
+        self.assertEqual(order[-1], "src/js/app.js")
+
 
 if __name__ == "__main__":
     unittest.main()
