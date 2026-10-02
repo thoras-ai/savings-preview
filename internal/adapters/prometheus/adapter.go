@@ -23,6 +23,11 @@ type Options struct {
 	Now         time.Time
 	Concurrency int
 	Log         func(format string, args ...any)
+	// AdaptiveMetrics is set for Grafana Cloud, where Adaptive Metrics can
+	// aggregate series and drop labels. Pod-level usage is not split there,
+	// because a series without a container label may be the sum of a pod's
+	// containers rather than the pod cgroup.
+	AdaptiveMetrics bool
 }
 
 // Report describes what a pull found and what it could not get.
@@ -102,10 +107,21 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 	if err := oneCluster(ctx, c, o.Now, maxBack); err != nil {
 		return nil, rep, err
 	}
+	if err := checkLabels(ctx, c, o.Now, o.AdaptiveMetrics); err != nil {
+		return nil, rep, err
+	}
 	usageProbe := UsageProbe
 	if ok, err := c.present(ctx, UsageProbe, o.Now); err != nil {
 		return nil, rep, fmt.Errorf("probe container metrics: %w", err)
 	} else if !ok {
+		if o.AdaptiveMetrics {
+			if missing, err := c.missingLabels(ctx, "container_memory_working_set_bytes", containerLabels, o.Now); err != nil {
+				return nil, rep, fmt.Errorf("probe container metrics: %w", err)
+			} else if len(missing) > 0 {
+				return nil, rep, &LabelsMissingError{Metric: "container_memory_working_set_bytes", Labels: missing, Aggregations: true}
+			}
+			return nil, rep, fmt.Errorf("the store has no per-container usage metrics (container_memory_working_set_bytes with container and image labels); the kubelet cAdvisor job is probably not collected")
+		}
 		if ok, err := c.present(ctx, PodUsageProbe, o.Now); err != nil {
 			return nil, rep, fmt.Errorf("probe pod metrics: %w", err)
 		} else if !ok {
@@ -124,6 +140,11 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 	if rep.UsageFromPods {
 		if ok, _ := c.present(ctx, ContainerProbe, o.Now); !ok {
 			return nil, rep, fmt.Errorf("the store has no per-container usage metrics (container_memory_working_set_bytes with container and image labels), and kube_pod_container_info is not in the store to split the pod cgroup series between containers")
+		}
+		if missing, err := c.missingLabels(ctx, "kube_pod_container_info", []string{"namespace", "pod", "container"}, o.Now); err != nil {
+			return nil, rep, fmt.Errorf("probe labels of kube_pod_container_info: %w", err)
+		} else if len(missing) > 0 {
+			return nil, rep, &LabelsMissingError{Metric: "kube_pod_container_info", Labels: missing}
 		}
 	} else if s, err := c.Query(ctx, UnlabeledPods, o.Now); err == nil && len(s) > 0 && len(s[0].Points) > 0 && s[0].Points[0].V > 0 {
 		rep.Warnings = append(rep.Warnings, fmt.Sprintf("%.0f workload pods have pod-level usage but no per-container usage series (their nodes do not label cAdvisor series) and are left out of the usage averages", s[0].Points[0].V))
@@ -453,12 +474,11 @@ func firstLabel(m map[string]string, keys ...string) string {
 
 func nodeResources(ctx context.Context, o Options, p *pulled, base contract.Common) ([]contract.Resource, error) {
 	window := time.Duration(o.Days) * 24 * time.Hour
-	qi, ql := NodeInfoAt(window)
-	info, err := o.Client.Query(ctx, qi, o.Now)
+	info, err := o.Client.queryWindow(ctx, func(w time.Duration) string { q, _ := NodeInfoAt(w); return q }, o.Now, window)
 	if err != nil {
 		return nil, err
 	}
-	labels, err := o.Client.Query(ctx, ql, o.Now)
+	labels, err := o.Client.queryWindow(ctx, func(w time.Duration) string { _, q := NodeInfoAt(w); return q }, o.Now, window)
 	if err != nil {
 		return nil, err
 	}
@@ -535,8 +555,15 @@ func capacityType(l map[string]string) string {
 // oneCluster fails when a cluster label has more than one value in any of the
 // ClusterValues queries.
 func oneCluster(ctx context.Context, c *Client, now time.Time, window time.Duration) error {
-	for _, q := range ClusterValues(window) {
-		ss, err := c.Query(ctx, q, now)
+	for i, q := range ClusterValues(window) {
+		var ss []Series
+		var err error
+		if i == 0 {
+			// Only the node info query has a range selector.
+			ss, err = c.queryWindow(ctx, func(w time.Duration) string { return ClusterValues(w)[0] }, now, window)
+		} else {
+			ss, err = c.Query(ctx, q, now)
+		}
 		if err != nil {
 			return fmt.Errorf("probe cluster labels: %w", err)
 		}

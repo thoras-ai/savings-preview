@@ -33,7 +33,10 @@ func (c *Client) Check(ctx context.Context) error {
 	}
 	var ae *APIError
 	if errors.As(err, &ae) && (ae.Status == 404 || strings.Contains(strings.ToLower(ae.Message), "agent")) {
-		if rw, rerr := c.RemoteWriteTargets(ctx); rerr == nil {
+		// An agent always has remote_write targets. An empty config comes
+		// from stores that answer the config endpoint at another path than
+		// the query API, such as Mimir at its root.
+		if rw, rerr := c.RemoteWriteTargets(ctx); rerr == nil && len(rw) > 0 {
 			return &ErrAgentMode{RemoteWrite: rw}
 		}
 		if strings.Contains(strings.ToLower(ae.Message), "agent") {

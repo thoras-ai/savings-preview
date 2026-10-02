@@ -42,6 +42,9 @@ type Client struct {
 	// Selector holds label matchers, as returned by ParseSelector, that are
 	// added to every vector selector of every query.
 	Selector string
+	// MaxRange is the longest time range the store accepts in one query,
+	// counting range selectors; zero means no limit.
+	MaxRange time.Duration
 }
 
 // APIError is an error reported by the store.
@@ -232,7 +235,13 @@ func (c *Client) QueryRangeChunked(ctx context.Context, q string, start, end tim
 	if stepS <= 0 {
 		return nil, fmt.Errorf("step must be at least one second")
 	}
+	if lim := c.rangeLimit(); lim > 0 && (maxSpan <= 0 || maxSpan > lim) {
+		maxSpan = lim
+	}
 	span := int64(ChunkSpan(step, maxSpan) / time.Second)
+	if span < stepS {
+		span = stepS
+	}
 	s := start.Unix() / stepS * stepS
 	e := end.Unix() / stepS * stepS
 	merged := map[string]*Series{}
@@ -263,6 +272,48 @@ func (c *Client) QueryRangeChunked(ctx context.Context, q string, start, end tim
 		sort.Slice(m.Points, func(i, j int) bool { return m.Points[i].T < m.Points[j].T })
 		m.Points = dedupe(m.Points)
 		out = append(out, *m)
+	}
+	return out, nil
+}
+
+// rangeLimit is MaxRange with an hour of headroom, so that the store's own
+// lookback or rounding does not tip a query over its limit.
+func (c *Client) rangeLimit() time.Duration {
+	if c.MaxRange <= 0 {
+		return 0
+	}
+	if c.MaxRange > 2*time.Hour {
+		return c.MaxRange - time.Hour
+	}
+	return c.MaxRange
+}
+
+// queryWindow runs an instant query whose range selectors cover window,
+// ending at now. When window is longer than the store allows, it runs the
+// query once per consecutive piece of the window, newest first, and keeps
+// the newest sample of each series.
+func (c *Client) queryWindow(ctx context.Context, q func(window time.Duration) string, now time.Time, window time.Duration) ([]Series, error) {
+	piece := c.rangeLimit()
+	if piece <= 0 || window <= piece {
+		return c.Query(ctx, q(window), now)
+	}
+	seen := map[string]bool{}
+	var out []Series
+	for at, left := now, window; left > 0; at, left = at.Add(-piece), left-piece {
+		w := piece
+		if left < w {
+			w = left
+		}
+		got, err := c.Query(ctx, q(w), at)
+		if err != nil {
+			return nil, err
+		}
+		for _, s := range got {
+			if k := seriesKey(s.Labels); !seen[k] {
+				seen[k] = true
+				out = append(out, s)
+			}
+		}
 	}
 	return out, nil
 }

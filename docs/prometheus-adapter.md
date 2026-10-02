@@ -1,6 +1,6 @@
 # Prometheus adapter
 
-`savings-preview prometheus` reads a cluster's usage history from a Prometheus-compatible store and writes the OTel file described in [contract.md](contract.md). It reaches the store through the Kubernetes API server, so nothing is installed in the cluster and no port-forward is needed.
+`savings-preview prometheus` reads a cluster's usage history from a Prometheus-compatible store and writes the OTel file described in [contract.md](contract.md). It reaches an in-cluster store through the Kubernetes API server, so nothing is installed in the cluster and no port-forward is needed. Stores outside the cluster, such as Mimir, Grafana Cloud and Amazon Managed Prometheus, are queried directly by URL; see [Stores outside the cluster](#stores-outside-the-cluster).
 
 ```
 savings-preview prometheus [--context NAME] [--days 14] [--step 1m] [--out savings-preview.otlp.json]
@@ -12,8 +12,13 @@ savings-preview prometheus [--context NAME] [--days 14] [--step 1m] [--out savin
 | `--cluster-name` | the kubeconfig cluster name | Value of `k8s.cluster.name`. |
 | `--days` | 14 | Days of history to pull. Less is pulled if the store holds less. |
 | `--step` | 1m | Resolution. Use `5m` for large clusters. |
-| `--target` | discovered | `[https:]namespace/service:port[/path-prefix]`, skips discovery. |
-| `--url`, `--bearer-token-file`, `--basic-auth-file` | none | Query a store directly instead of through the API server. Requires `--cluster-name`. Credentials are read from a file (`user:password` for basic auth) so they stay out of shell history. |
+| `--target` | discovered | `[https:]namespace/service:port[/path-prefix]`, skips discovery. An `http://` or `https://` URL is the same as `--url`. |
+| `--url` | none | Query a store directly instead of through the API server. Requires `--cluster-name`. |
+| `--backend` | detected from the URL | `prometheus`, `mimir`, `grafana-cloud` or `amp`, for `--url`. |
+| `--tenant` | none | Mimir tenant, sent as `X-Scope-OrgID`. Implies `--backend mimir`. |
+| `--bearer-token-file`, `--basic-auth-file`, `--header-file` | none | Credentials for `--url`, read from a file so they stay out of shell history and process listings: a token, `user:password`, or `Name: value` lines. The environment variables `SAVINGS_PREVIEW_BEARER_TOKEN`, `SAVINGS_PREVIEW_BASIC_AUTH` and `SAVINGS_PREVIEW_HEADERS` hold the same values; a file takes precedence over its variable. |
+| `--aws-region` | from the URL | Region of an Amazon Managed Prometheus workspace whose URL does not name it. |
+| `--max-query-range` | the backend's limit | Longest time range the store accepts in one query, counting range selectors. |
 | `--selector` | none | Label matchers added to every query, such as `cluster="prod-us"`, to read one cluster from a store that holds several. Values may be left unquoted (`cluster=prod-us`). |
 | `--list` | off | Print what discovery finds and exit. |
 | `--concurrency` | 2 | Queries in flight at once. |
@@ -29,7 +34,7 @@ The adapter lists the cluster's services and Prometheus Operator resources and p
 
 Thanos and VictoriaMetrics come first because they usually keep more history than the Prometheus in front of them. The first store that answers a test query is used. `--list` shows every candidate and `--target` overrides the choice.
 
-A Prometheus in agent mode has no query API. The adapter detects it (a `PrometheusAgent` resource, or a 404 from the query API) and stops with the redacted `remote_write` targets, which is where the data can be read instead.
+A Prometheus in agent mode has no query API. The adapter detects it (a `PrometheusAgent` resource, or a 404 from the query API with `remote_write` targets in the running config) and stops with the redacted targets, which is where the data can be read instead.
 
 ## Access
 
@@ -90,7 +95,66 @@ Instance type, region and capacity type come from node labels, so kube-state-met
 - When it exports requests, a container with usage but no request series has no request set, or had none yet. It gets zero requests at the times the workload had a replica count.
 - Gaps in a series stay gaps. Values are never filled or carried forward.
 - No container usage series at all, neither per container nor per pod, stops the run with an explanation. So does a store with only pod-level usage and no `kube_pod_container_info`.
+- When a metric the queries join on has series but none of them carries a label the joins need, the run stops and names the metric and the labels. That happens when a recording, relabeling or aggregation rule (Grafana Cloud Adaptive Metrics, for example) removed the label. The metrics and labels checked are `namespace` and `pod` on `container_cpu_usage_seconds_total` and `container_memory_working_set_bytes`; `namespace`, `pod`, `owner_kind` and `owner_name` on `kube_pod_owner`; `namespace`, `replicaset`, `owner_kind` and `owner_name` on `kube_replicaset_owner`; `namespace`, `pod`, `container` and `resource` on `kube_pod_container_resource_requests`; `namespace`, `pod` and `phase` on `kube_pod_status_phase`; `namespace` and the workload name on `kube_deployment_spec_replicas` and `kube_statefulset_replicas`; `node` and `resource` on `kube_node_status_allocatable`; and, for the pod-level usage fallback, `namespace`, `pod` and `container` on `kube_pod_container_info`.
 
-## Managed backends
+  Earlier versions went on in this case. Depending on the label, Deployments were left out with a warning that `kube_replicaset_owner` was missing, requests were reported as unavailable, or no workload was found. Such runs now exit with status 1 and an error of the form `METRIC has series but none with the LABEL label`. There is no compatible way to keep the old behavior, because the figures it produced were incomplete or wrong. To upgrade, restore the label in the store; running the previous build restores the old behavior.
 
-Credentials plug in through `prometheus.Auth`, which wraps the HTTP client. Bearer token and basic auth are implemented. SigV4 (Amazon Managed Prometheus), Google and Azure OAuth are not; `prometheus.Unsupported` marks where they go.
+## Stores outside the cluster
+
+`--url` (or a URL in `--target`) queries a store directly, without the API server. The kubeconfig is not used, so `--cluster-name` is required. The backend is detected from the host: `aps-workspaces.REGION.amazonaws.com` is Amazon Managed Prometheus, `*.grafana.net` is Grafana Cloud, a `--tenant` means Mimir, and anything else is a plain Prometheus-compatible store. `--backend` overrides the detection. The query or remote-write URL a console shows is accepted as well as the base URL.
+
+Credentials never come from flags. Bearer tokens, basic auth and extra headers are read from files or environment variables, and Amazon credentials from the standard AWS chain. They are not printed or logged; the store URL is printed without user info or query string.
+
+Credentials plug in through `prometheus.Auth`, which wraps the HTTP client: `Header`, `Basic`, `Bearer` and `SigV4`, combined with `Chain`. Google and Azure OAuth are not implemented; `prometheus.Unsupported` marks where they go.
+
+Every store is checked for the labels the queries join on, as described in [Missing data](#missing-data). On Grafana Cloud the check matters most, because Adaptive Metrics can aggregate labels away.
+
+### Mimir
+
+```
+savings-preview prometheus --url https://mimir.example.com --tenant TENANT --cluster-name prod-us
+```
+
+- **URL:** the gateway, query-frontend or monolithic Mimir. The Prometheus API is under `/prometheus`, which is added when the URL has no path. Give the path explicitly when the operator changed `prometheus_http_prefix` or a gateway maps it elsewhere.
+- **Tenant:** `--tenant` sets `X-Scope-OrgID`. It is not needed when multi-tenancy is off. A multi-tenant Mimir answers `401 no org id` without it.
+- **Gateway auth:** whatever the gateway in front of Mimir uses, as basic auth, a bearer token or headers. Mimir itself does no authentication.
+- **What the customer provides:** the URL, the tenant ID that holds the cluster's metrics, and gateway credentials with read access to that tenant.
+- **Limits:** Mimir has no range limit by default. When the operator set `max_total_query_length` or `max_partial_query_length`, the store rejects queries longer than that with `err-mimir-max-query-length`; pass the same limit as `--max-query-range`. It counts range selectors in instant queries too.
+
+### Grafana Cloud
+
+```
+SAVINGS_PREVIEW_BASIC_AUTH=INSTANCE_ID:TOKEN savings-preview prometheus \
+  --url https://prometheus-prod-NN-prod-REGION.grafana.net --cluster-name prod-us
+```
+
+- **URL:** the Prometheus endpoint of the stack, from the stack's Prometheus details page. `/api/prom` is added when the URL has no path, and the remote-write URL (`/api/prom/push`) is accepted.
+- **Credentials:** basic auth, the Prometheus instance ID (the numeric user on the same page) as user and an access policy token as password.
+- **What the customer creates:** an access policy scoped to the stack with the `metrics:read` scope, and a token for it. No other scope is needed.
+- **Limits:** a query may cover at most 32 days, counting range selectors. Range queries are split by day, and the instant queries that look back over the whole `--days` window are split into pieces of at most 32 days, so `--days` beyond 32 works.
+- **Adaptive Metrics:** an aggregation rule can drop the `pod`, `container` or other labels from cAdvisor and kube-state-metrics series. The run then stops and names the metric and the labels, instead of producing usage that cannot be attributed to workloads. On Grafana Cloud usage is never split from pod-level series: there a series without a `container` label may be the sum of all of a pod's containers and the pod total, which would double the usage. The fix is to exclude the metric from Adaptive Metrics recommendations, or to keep the labels in its rule, and run again once new data has arrived.
+
+### Amazon Managed Prometheus
+
+```
+AWS_PROFILE=readonly savings-preview prometheus \
+  --url https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-0123abcd --cluster-name prod-us
+```
+
+- **URL:** the workspace endpoint, `https://aps-workspaces.REGION.amazonaws.com/workspaces/WORKSPACE_ID`, or the query URL the console shows. The region comes from the host. VPC endpoint host names are recognized too. For any other host, pass `--backend amp --aws-region REGION`.
+- **Credentials:** every request is signed with SigV4 for the `aps` service. Credentials come from the standard AWS chain: environment variables, `AWS_PROFILE` with the shared config and credentials files (including SSO and assumed roles), web identity, and the container or instance role. Bearer tokens and basic auth are refused for this backend.
+- **What the customer grants:** an IAM identity with this policy. The adapter calls only `/api/v1/query` and `/api/v1/query_range`, both covered by `aps:QueryMetrics`.
+
+  ```json
+  {
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["aps:QueryMetrics"],
+      "Resource": "arn:aws:aps:REGION:ACCOUNT_ID:workspace/WORKSPACE_ID"
+    }]
+  }
+  ```
+
+- **Limits:** a query may cover at most 95 days. Range queries are split by day, which also keeps each one within the per-24-hour sample and series budgets.
+- **Metrics:** the workspace holds whatever was remote-written. The AWS managed scraper's sample configuration has no kube-state-metrics job, and without kube-state-metrics the run stops (see [Missing data](#missing-data)).

@@ -1,0 +1,6973 @@
+{
+ "store": "mimir",
+ "now": 1790909340,
+ "days": 1,
+ "step_seconds": 60,
+ "headers": {
+  "X-Scope-OrgID": "team-a"
+ },
+ "responses": {
+  "/api/v1/query?query=count%28container_cpu_usage_seconds_total%7B%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "101"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28container_cpu_usage_seconds_total%7Bnamespace%21%3D%22%22%2Cpod%21%3D%22%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "31"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7B%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "101"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcontainer%21%3D%22%22%2Ccontainer%21%3D%22POD%22%2Cimage%21%3D%22%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": []
+    }
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcontainer%3D%22%22%2Cpod%21%3D%22%22%7D%29\u0026time=1790822940": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": []
+    }
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcontainer%3D%22%22%2Cpod%21%3D%22%22%7D%29\u0026time=1790866140": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": []
+    }
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcontainer%3D%22%22%2Cpod%21%3D%22%22%7D%29\u0026time=1790887740": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": []
+    }
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcontainer%3D%22%22%2Cpod%21%3D%22%22%7D%29\u0026time=1790898540": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": []
+    }
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcontainer%3D%22%22%2Cpod%21%3D%22%22%7D%29\u0026time=1790903940": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": []
+    }
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcontainer%3D%22%22%2Cpod%21%3D%22%22%7D%29\u0026time=1790906640": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": []
+    }
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bcontainer%3D%22%22%2Cpod%21%3D%22%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "31"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28container_memory_working_set_bytes%7Bnamespace%21%3D%22%22%2Cpod%21%3D%22%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "31"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_deployment_spec_replicas%7B%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "21"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_deployment_spec_replicas%7Bnamespace%21%3D%22%22%2Cdeployment%21%3D%22%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "21"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_node_status_allocatable%7B%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "8"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_node_status_allocatable%7Bnode%21%3D%22%22%2Cresource%21%3D%22%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "8"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_container_info%7B%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "34"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_container_info%7Bnamespace%21%3D%22%22%2Cpod%21%3D%22%22%2Ccontainer%21%3D%22%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "34"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_container_resource_requests%7B%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "43"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_container_resource_requests%7Bnamespace%21%3D%22%22%2Cpod%21%3D%22%22%2Ccontainer%21%3D%22%22%2Cresource%21%3D%22%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "43"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_container_status_restarts_total%7B%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "34"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_owner%7B%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "31"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_owner%7Bnamespace%21%3D%22%22%2Cpod%21%3D%22%22%2Cowner_kind%21%3D%22%22%2Cowner_name%21%3D%22%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "30"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_status_phase%7B%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "155"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_status_phase%7Bnamespace%21%3D%22%22%2Cpod%21%3D%22%22%2Cphase%21%3D%22%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "155"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_pod_status_phase%7Bphase%3D%22Running%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "31"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_replicaset_owner%7B%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "80"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_replicaset_owner%7Bnamespace%21%3D%22%22%2Creplicaset%21%3D%22%22%2Cowner_kind%21%3D%22%22%2Cowner_name%21%3D%22%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "80"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_replicaset_owner%7Bowner_kind%3D%22Deployment%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "80"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_statefulset_replicas%7B%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "2"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count%28kube_statefulset_replicas%7Bnamespace%21%3D%22%22%2Cstatefulset%21%3D%22%22%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909340,
+        "2"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count+by+%28cluster%2C+cluster_name%2C+cluster_id%2C+k8s_cluster%2C+k8s_cluster_name%2C+kubernetes_cluster%29+%28container_memory_working_set_bytes%7B%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {
+        "cluster": "minikube"
+       },
+       "value": [
+        1790909340,
+        "101"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count+by+%28cluster%2C+cluster_name%2C+cluster_id%2C+k8s_cluster%2C+k8s_cluster_name%2C+kubernetes_cluster%29+%28kube_pod_owner%7B%7D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {
+        "cluster": "minikube"
+       },
+       "value": [
+        1790909340,
+        "31"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=count+by+%28cluster%2C+cluster_name%2C+cluster_id%2C+k8s_cluster%2C+k8s_cluster_name%2C+kubernetes_cluster%29+%28last_over_time%28kube_node_info%7B%7D%5B86400s%5D%29%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {
+        "cluster": "minikube"
+       },
+       "value": [
+        1790909340,
+        "1"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=last_over_time%28kube_node_info%7B%7D%5B86400s%5D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {
+        "__name__": "kube_node_info",
+        "cluster": "minikube",
+        "container_runtime_version": "docker://29.2.1",
+        "instance": "kube-state-metrics:8080",
+        "internal_ip": "192.168.49.2",
+        "job": "kube-state-metrics",
+        "kernel_version": "6.8.0-100-generic",
+        "kubelet_version": "v1.35.1",
+        "kubeproxy_version": "deprecated",
+        "node": "minikube",
+        "os_image": "Debian GNU/Linux 12 (bookworm)",
+        "pod_cidr": "10.244.0.0/24",
+        "system_uuid": "4cc7f6fc-8be9-4028-a076-930435870b51"
+       },
+       "value": [
+        1790909340,
+        "1"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=last_over_time%28kube_node_labels%7B%7D%5B86400s%5D%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {
+        "__name__": "kube_node_labels",
+        "cluster": "minikube",
+        "instance": "kube-state-metrics:8080",
+        "job": "kube-state-metrics",
+        "label_beta_kubernetes_io_arch": "arm64",
+        "label_beta_kubernetes_io_os": "linux",
+        "label_kubernetes_io_arch": "arm64",
+        "label_kubernetes_io_hostname": "minikube",
+        "label_kubernetes_io_os": "linux",
+        "label_minikube_k8s_io_commit": "c93a4cb9311efc66b90d33ea03f75f2c4120e9b0",
+        "label_minikube_k8s_io_name": "minikube",
+        "label_minikube_k8s_io_primary": "true",
+        "label_minikube_k8s_io_updated_at": "2026_08_18T10_50_15_0700",
+        "label_minikube_k8s_io_version": "v1.38.1",
+        "node": "minikube"
+       },
+       "value": [
+        1790909340,
+        "1"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query?query=min%28prometheus_tsdb_lowest_timestamp_seconds%29\u0026time=1790909340": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": []
+    }
+   }
+  },
+  "/api/v1/query?query=vector%281%29": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1790909360.223,
+        "1"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%29+%28container_memory_working_set_bytes%7Bcontainer%3D%22%22%2Cpod%21%3D%22%22%7D%29%0A++%2A+on+%28namespace%2C+pod%29+group_right+%28%29+%28%0A++%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22memory%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29+%2F+on+%28namespace%2C+pod%29+group_left+%28%29+%28sum+by+%28namespace%2C+pod%29+%28%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22memory%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29%29+%3E+0%29%0A++or+on+%28namespace%2C+pod%2C+container%29%0A++%28%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22memory%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29+%2A+0+%2B+1%29+%2F+on+%28namespace%2C+pod%29+group_left+%28%29+count+by+%28namespace%2C+pod%29+%28%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22memory%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29%29%0A%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "container": "cert-manager-cainjector",
+        "namespace": "cert-manager",
+        "workload": "cert-manager-cainjector"
+       },
+       "values": [
+        [
+         1790908800,
+         "49180672"
+        ],
+        [
+         1790908860,
+         "49180672"
+        ],
+        [
+         1790908920,
+         "49180672"
+        ],
+        [
+         1790908980,
+         "49180672"
+        ],
+        [
+         1790909040,
+         "49180672"
+        ],
+        [
+         1790909100,
+         "49180672"
+        ],
+        [
+         1790909160,
+         "49180672"
+        ],
+        [
+         1790909220,
+         "49180672"
+        ],
+        [
+         1790909280,
+         "49180672"
+        ],
+        [
+         1790909340,
+         "49180672"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "cert-manager-controller",
+        "namespace": "cert-manager",
+        "workload": "cert-manager"
+       },
+       "values": [
+        [
+         1790908800,
+         "26701824"
+        ],
+        [
+         1790908860,
+         "26705920"
+        ],
+        [
+         1790908920,
+         "26701824"
+        ],
+        [
+         1790908980,
+         "26701824"
+        ],
+        [
+         1790909040,
+         "26701824"
+        ],
+        [
+         1790909100,
+         "26701824"
+        ],
+        [
+         1790909160,
+         "26701824"
+        ],
+        [
+         1790909220,
+         "26701824"
+        ],
+        [
+         1790909280,
+         "26701824"
+        ],
+        [
+         1790909340,
+         "26705920"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "cert-manager-webhook",
+        "namespace": "cert-manager",
+        "workload": "cert-manager-webhook"
+       },
+       "values": [
+        [
+         1790908800,
+         "47603712"
+        ],
+        [
+         1790908860,
+         "47603712"
+        ],
+        [
+         1790908920,
+         "47603712"
+        ],
+        [
+         1790908980,
+         "47607808"
+        ],
+        [
+         1790909040,
+         "47607808"
+        ],
+        [
+         1790909100,
+         "47607808"
+        ],
+        [
+         1790909160,
+         "47607808"
+        ],
+        [
+         1790909220,
+         "47607808"
+        ],
+        [
+         1790909280,
+         "47607808"
+        ],
+        [
+         1790909340,
+         "47607808"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "coredns",
+        "namespace": "kube-system",
+        "workload": "coredns"
+       },
+       "values": [
+        [
+         1790908800,
+         "74014720"
+        ],
+        [
+         1790908860,
+         "74362880"
+        ],
+        [
+         1790908920,
+         "74375168"
+        ],
+        [
+         1790908980,
+         "74387456"
+        ],
+        [
+         1790909040,
+         "74391552"
+        ],
+        [
+         1790909100,
+         "74010624"
+        ],
+        [
+         1790909160,
+         "74014720"
+        ],
+        [
+         1790909220,
+         "74018816"
+        ],
+        [
+         1790909280,
+         "74014720"
+        ],
+        [
+         1790909340,
+         "74014720"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "ksm",
+        "namespace": "sp-mimir-test",
+        "workload": "kube-state-metrics"
+       },
+       "values": [
+        [
+         1790908800,
+         "29433856"
+        ],
+        [
+         1790908860,
+         "29548544"
+        ],
+        [
+         1790908920,
+         "23687168"
+        ],
+        [
+         1790908980,
+         "23769088"
+        ],
+        [
+         1790909040,
+         "20365312"
+        ],
+        [
+         1790909100,
+         "20365312"
+        ],
+        [
+         1790909160,
+         "20295680"
+        ],
+        [
+         1790909220,
+         "20295680"
+        ],
+        [
+         1790909280,
+         "20148224"
+        ],
+        [
+         1790909340,
+         "20156416"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "ksm",
+        "namespace": "monitoring",
+        "workload": "ksm"
+       },
+       "values": [
+        [
+         1790908800,
+         "385024"
+        ],
+        [
+         1790908860,
+         "409600"
+        ],
+        [
+         1790908920,
+         "350208"
+        ],
+        [
+         1790908980,
+         "350208"
+        ],
+        [
+         1790909040,
+         "17559552"
+        ],
+        [
+         1790909100,
+         "17612800"
+        ],
+        [
+         1790909160,
+         "17199104"
+        ],
+        [
+         1790909220,
+         "17211392"
+        ],
+        [
+         1790909280,
+         "13115392"
+        ],
+        [
+         1790909340,
+         "13115392"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "metrics-server",
+        "namespace": "kube-system",
+        "workload": "metrics-server"
+       },
+       "values": [
+        [
+         1790908800,
+         "24432640"
+        ],
+        [
+         1790908860,
+         "24440832"
+        ],
+        [
+         1790908920,
+         "24453120"
+        ],
+        [
+         1790908980,
+         "24522752"
+        ],
+        [
+         1790909040,
+         "24535040"
+        ],
+        [
+         1790909100,
+         "24535040"
+        ],
+        [
+         1790909160,
+         "24535040"
+        ],
+        [
+         1790909220,
+         "24539136"
+        ],
+        [
+         1790909280,
+         "24543232"
+        ],
+        [
+         1790909340,
+         "24539136"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "mimir",
+        "namespace": "sp-mimir-test",
+        "workload": "mimir"
+       },
+       "values": [
+        [
+         1790908800,
+         "31006720"
+        ],
+        [
+         1790908860,
+         "69124096"
+        ],
+        [
+         1790908920,
+         "75735040"
+        ],
+        [
+         1790908980,
+         "90374144"
+        ],
+        [
+         1790909040,
+         "92270592"
+        ],
+        [
+         1790909100,
+         "111726592"
+        ],
+        [
+         1790909160,
+         "117133312"
+        ],
+        [
+         1790909220,
+         "123895808"
+        ],
+        [
+         1790909280,
+         "125079552"
+        ],
+        [
+         1790909340,
+         "125116416"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "oauth2-proxy",
+        "namespace": "thoras",
+        "workload": "thoras-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "2220851.2"
+        ],
+        [
+         1790908860,
+         "2194636.8000000003"
+        ],
+        [
+         1790908920,
+         "2202828.8000000003"
+        ],
+        [
+         1790908980,
+         "2194636.8000000003"
+        ],
+        [
+         1790909040,
+         "2194636.8000000003"
+        ],
+        [
+         1790909100,
+         "2220032"
+        ],
+        [
+         1790909160,
+         "2229862.4"
+        ],
+        [
+         1790909220,
+         "2197913.6"
+        ],
+        [
+         1790909280,
+         "2203648"
+        ],
+        [
+         1790909340,
+         "2226585.6"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "prometheus",
+        "namespace": "sp-mimir-test",
+        "workload": "prometheus"
+       },
+       "values": [
+        [
+         1790908800,
+         "32669696"
+        ],
+        [
+         1790908860,
+         "52969472"
+        ],
+        [
+         1790908920,
+         "57794560"
+        ],
+        [
+         1790908980,
+         "58081280"
+        ],
+        [
+         1790909040,
+         "61607936"
+        ],
+        [
+         1790909100,
+         "63614976"
+        ],
+        [
+         1790909160,
+         "64405504"
+        ],
+        [
+         1790909220,
+         "66211840"
+        ],
+        [
+         1790909280,
+         "66535424"
+        ],
+        [
+         1790909340,
+         "67444736"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "prometheus",
+        "namespace": "monitoring",
+        "workload": "prometheus-server"
+       },
+       "values": [
+        [
+         1790908800,
+         "33288192"
+        ],
+        [
+         1790908860,
+         "36962304"
+        ],
+        [
+         1790908920,
+         "37023744"
+        ],
+        [
+         1790908980,
+         "37625856"
+        ],
+        [
+         1790909040,
+         "45617152"
+        ],
+        [
+         1790909100,
+         "50573312"
+        ],
+        [
+         1790909160,
+         "56905728"
+        ],
+        [
+         1790909220,
+         "62287872"
+        ],
+        [
+         1790909280,
+         "62300160"
+        ],
+        [
+         1790909340,
+         "47030272"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "sleeper",
+        "namespace": "sp-mimir-test",
+        "workload": "demo-deploy"
+       },
+       "values": [
+        [
+         1790908800,
+         "649216"
+        ],
+        [
+         1790908860,
+         "649216"
+        ],
+        [
+         1790908920,
+         "649216"
+        ],
+        [
+         1790908980,
+         "649216"
+        ],
+        [
+         1790909040,
+         "649216"
+        ],
+        [
+         1790909100,
+         "649216"
+        ],
+        [
+         1790909160,
+         "649216"
+        ],
+        [
+         1790909220,
+         "649216"
+        ],
+        [
+         1790909280,
+         "649216"
+        ],
+        [
+         1790909340,
+         "649216"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-api-server-v2",
+        "namespace": "thoras",
+        "workload": "thoras-api-server-v2"
+       },
+       "values": [
+        [
+         1790908800,
+         "35573760"
+        ],
+        [
+         1790908860,
+         "35799040"
+        ],
+        [
+         1790908920,
+         "34820096"
+        ],
+        [
+         1790908980,
+         "34975744"
+        ],
+        [
+         1790909040,
+         "33259520"
+        ],
+        [
+         1790909100,
+         "33263616"
+        ],
+        [
+         1790909160,
+         "32505856"
+        ],
+        [
+         1790909220,
+         "32505856"
+        ],
+        [
+         1790909280,
+         "32505856"
+        ],
+        [
+         1790909340,
+         "32505856"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-blob-api",
+        "namespace": "thoras",
+        "workload": "metrics-collector"
+       },
+       "values": [
+        [
+         1790908800,
+         "13515980.8"
+        ],
+        [
+         1790908860,
+         "13568573.44"
+        ],
+        [
+         1790908920,
+         "13612154.88"
+        ],
+        [
+         1790908980,
+         "13679984.64"
+        ],
+        [
+         1790909040,
+         "13718323.200000001"
+        ],
+        [
+         1790909100,
+         "13755187.200000001"
+        ],
+        [
+         1790909160,
+         "10471342.08"
+        ],
+        [
+         1790909220,
+         "11512217.6"
+        ],
+        [
+         1790909280,
+         "11659509.76"
+        ],
+        [
+         1790909340,
+         "11747000.32"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-config-controller",
+        "namespace": "thoras",
+        "workload": "thoras-config-controller"
+       },
+       "values": [
+        [
+         1790908800,
+         "14233600"
+        ],
+        [
+         1790908860,
+         "14286848"
+        ],
+        [
+         1790908920,
+         "14290944"
+        ],
+        [
+         1790908980,
+         "14315520"
+        ],
+        [
+         1790909040,
+         "14319616"
+        ],
+        [
+         1790909100,
+         "14229504"
+        ],
+        [
+         1790909160,
+         "14229504"
+        ],
+        [
+         1790909220,
+         "14229504"
+        ],
+        [
+         1790909280,
+         "14229504"
+        ],
+        [
+         1790909340,
+         "14262272"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-api",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-api"
+       },
+       "values": [
+        [
+         1790908800,
+         "17932288"
+        ],
+        [
+         1790908860,
+         "17948672"
+        ],
+        [
+         1790908920,
+         "17948672"
+        ],
+        [
+         1790908980,
+         "17952768"
+        ],
+        [
+         1790909040,
+         "17952768"
+        ],
+        [
+         1790909100,
+         "17952768"
+        ],
+        [
+         1790909160,
+         "17952768"
+        ],
+        [
+         1790909220,
+         "17952768"
+        ],
+        [
+         1790909280,
+         "17952768"
+        ],
+        [
+         1790909340,
+         "17756160"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-config-controller",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-config-controller"
+       },
+       "values": [
+        [
+         1790908800,
+         "14921728"
+        ],
+        [
+         1790908860,
+         "14921728"
+        ],
+        [
+         1790908920,
+         "14921728"
+        ],
+        [
+         1790908980,
+         "14970880"
+        ],
+        [
+         1790909040,
+         "15077376"
+        ],
+        [
+         1790909100,
+         "14761984"
+        ],
+        [
+         1790909160,
+         "14774272"
+        ],
+        [
+         1790909220,
+         "14774272"
+        ],
+        [
+         1790909280,
+         "14848000"
+        ],
+        [
+         1790909340,
+         "14917632"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-dashboard",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "3764224"
+        ],
+        [
+         1790908860,
+         "3760128"
+        ],
+        [
+         1790908920,
+         "3760128"
+        ],
+        [
+         1790908980,
+         "3760128"
+        ],
+        [
+         1790909040,
+         "3760128"
+        ],
+        [
+         1790909100,
+         "3760128"
+        ],
+        [
+         1790909160,
+         "3760128"
+        ],
+        [
+         1790909220,
+         "3760128"
+        ],
+        [
+         1790909280,
+         "3760128"
+        ],
+        [
+         1790909340,
+         "3760128"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-dashboard",
+        "namespace": "thoras",
+        "workload": "thoras-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "8883404.8"
+        ],
+        [
+         1790908860,
+         "8778547.200000001"
+        ],
+        [
+         1790908920,
+         "8811315.200000001"
+        ],
+        [
+         1790908980,
+         "8778547.200000001"
+        ],
+        [
+         1790909040,
+         "8778547.200000001"
+        ],
+        [
+         1790909100,
+         "8880128"
+        ],
+        [
+         1790909160,
+         "8919449.6"
+        ],
+        [
+         1790909220,
+         "8791654.4"
+        ],
+        [
+         1790909280,
+         "8814592"
+        ],
+        [
+         1790909340,
+         "8906342.4"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-forecast-worker",
+        "namespace": "thoras",
+        "workload": "thoras-forecast-worker"
+       },
+       "values": [
+        [
+         1790908800,
+         "287637504"
+        ],
+        [
+         1790908860,
+         "287637504"
+        ],
+        [
+         1790908920,
+         "287641600"
+        ],
+        [
+         1790908980,
+         "287637504"
+        ],
+        [
+         1790909040,
+         "287641600"
+        ],
+        [
+         1790909100,
+         "287641600"
+        ],
+        [
+         1790909160,
+         "287637504"
+        ],
+        [
+         1790909220,
+         "287637504"
+        ],
+        [
+         1790909280,
+         "287641600"
+        ],
+        [
+         1790909340,
+         "287637504"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-operator",
+        "namespace": "thoras",
+        "workload": "thoras-operator"
+       },
+       "values": [
+        [
+         1790908800,
+         "33695744"
+        ],
+        [
+         1790908860,
+         "33693696"
+        ],
+        [
+         1790908920,
+         "33734656"
+        ],
+        [
+         1790908980,
+         "33730560"
+        ],
+        [
+         1790909040,
+         "33730560"
+        ],
+        [
+         1790909100,
+         "33730560"
+        ],
+        [
+         1790909160,
+         "33734656"
+        ],
+        [
+         1790909220,
+         "33943552"
+        ],
+        [
+         1790909280,
+         "33941504"
+        ],
+        [
+         1790909340,
+         "33945600"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-worker",
+        "namespace": "thoras",
+        "workload": "thoras-worker"
+       },
+       "values": [
+        [
+         1790908800,
+         "43724800"
+        ],
+        [
+         1790908860,
+         "43782144"
+        ],
+        [
+         1790908920,
+         "43802624"
+        ],
+        [
+         1790908980,
+         "45223936"
+        ],
+        [
+         1790909040,
+         "45670400"
+        ],
+        [
+         1790909100,
+         "44179456"
+        ],
+        [
+         1790909160,
+         "40824832"
+        ],
+        [
+         1790909220,
+         "40808448"
+        ],
+        [
+         1790909280,
+         "40894464"
+        ],
+        [
+         1790909340,
+         "40722432"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "timescale-tls-reload",
+        "namespace": "thoras",
+        "workload": "metrics-collector"
+       },
+       "values": [
+        [
+         1790908800,
+         "0"
+        ],
+        [
+         1790908860,
+         "0"
+        ],
+        [
+         1790908920,
+         "0"
+        ],
+        [
+         1790908980,
+         "0"
+        ],
+        [
+         1790909040,
+         "0"
+        ],
+        [
+         1790909100,
+         "0"
+        ],
+        [
+         1790909160,
+         "0"
+        ],
+        [
+         1790909220,
+         "0"
+        ],
+        [
+         1790909280,
+         "0"
+        ],
+        [
+         1790909340,
+         "0"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "timescaledb",
+        "namespace": "thoras",
+        "workload": "metrics-collector"
+       },
+       "values": [
+        [
+         1790908800,
+         "324383539.2"
+        ],
+        [
+         1790908860,
+         "325645762.56"
+        ],
+        [
+         1790908920,
+         "326691717.12"
+        ],
+        [
+         1790908980,
+         "328319631.36"
+        ],
+        [
+         1790909040,
+         "329239756.8"
+        ],
+        [
+         1790909100,
+         "330124492.8"
+        ],
+        [
+         1790909160,
+         "251312209.92"
+        ],
+        [
+         1790909220,
+         "276293222.4"
+        ],
+        [
+         1790909280,
+         "279828234.24"
+        ],
+        [
+         1790909340,
+         "281928007.68"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%29+%28container_memory_working_set_bytes%7Bcontainer%3D%22%22%2Cpod%21%3D%22%22%7D%29%0A++%2A+on+%28namespace%2C+pod%29+group_right+%28%29+%28%0A++%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22memory%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29+%2F+on+%28namespace%2C+pod%29+group_left+%28%29+%28sum+by+%28namespace%2C+pod%29+%28%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22memory%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29%29+%3E+0%29%0A++or+on+%28namespace%2C+pod%2C+container%29%0A++%28%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22memory%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29+%2A+0+%2B+1%29+%2F+on+%28namespace%2C+pod%29+group_left+%28%29+count+by+%28namespace%2C+pod%29+%28%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22memory%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29%29%0A%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "container": "sleeper",
+        "namespace": "sp-mimir-test",
+        "workload": "demo-sts"
+       },
+       "values": [
+        [
+         1790908800,
+         "651264"
+        ],
+        [
+         1790908860,
+         "651264"
+        ],
+        [
+         1790908920,
+         "651264"
+        ],
+        [
+         1790908980,
+         "651264"
+        ],
+        [
+         1790909040,
+         "651264"
+        ],
+        [
+         1790909100,
+         "651264"
+        ],
+        [
+         1790909160,
+         "651264"
+        ],
+        [
+         1790909220,
+         "651264"
+        ],
+        [
+         1790909280,
+         "651264"
+        ],
+        [
+         1790909340,
+         "651264"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "timescaledb",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-db"
+       },
+       "values": [
+        [
+         1790908800,
+         "88743936"
+        ],
+        [
+         1790908860,
+         "88813568"
+        ],
+        [
+         1790908920,
+         "88383488"
+        ],
+        [
+         1790908980,
+         "88788992"
+        ],
+        [
+         1790909040,
+         "88834048"
+        ],
+        [
+         1790909100,
+         "88883200"
+        ],
+        [
+         1790909160,
+         "88887296"
+        ],
+        [
+         1790909220,
+         "88674304"
+        ],
+        [
+         1790909280,
+         "88727552"
+        ],
+        [
+         1790909340,
+         "88784896"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%29+%28rate%28container_cpu_usage_seconds_total%7Bcontainer%3D%22%22%2Cpod%21%3D%22%22%7D%5B300s%5D%29%29%0A++%2A+on+%28namespace%2C+pod%29+group_right+%28%29+%28%0A++%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22cpu%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29+%2F+on+%28namespace%2C+pod%29+group_left+%28%29+%28sum+by+%28namespace%2C+pod%29+%28%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22cpu%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29%29+%3E+0%29%0A++or+on+%28namespace%2C+pod%2C+container%29%0A++%28%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22cpu%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29+%2A+0+%2B+1%29+%2F+on+%28namespace%2C+pod%29+group_left+%28%29+count+by+%28namespace%2C+pod%29+%28%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22cpu%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29%29%0A%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "container": "cert-manager-cainjector",
+        "namespace": "cert-manager",
+        "workload": "cert-manager-cainjector"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.0003735558153755664"
+        ],
+        [
+         1790908920,
+         "0.0005891113680921544"
+        ],
+        [
+         1790908980,
+         "0.0007243315365235321"
+        ],
+        [
+         1790909040,
+         "0.0008831389936718238"
+        ],
+        [
+         1790909100,
+         "0.0009165047487857057"
+        ],
+        [
+         1790909160,
+         "0.0007999992450231301"
+        ],
+        [
+         1790909220,
+         "0.0008441247906827034"
+        ],
+        [
+         1790909280,
+         "0.0010334670466301352"
+        ],
+        [
+         1790909340,
+         "0.00114852178679922"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "cert-manager-controller",
+        "namespace": "cert-manager",
+        "workload": "cert-manager"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.00021921328814208311"
+        ],
+        [
+         1790908920,
+         "0.0004380946923845721"
+        ],
+        [
+         1790908980,
+         "0.0005085198610327696"
+        ],
+        [
+         1790909040,
+         "0.0006140046429581611"
+        ],
+        [
+         1790909100,
+         "0.0007471772267732796"
+        ],
+        [
+         1790909160,
+         "0.0006092717857050324"
+        ],
+        [
+         1790909220,
+         "0.0006503690644272728"
+        ],
+        [
+         1790909280,
+         "0.00076407854951935"
+        ],
+        [
+         1790909340,
+         "0.0007488714395921543"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "cert-manager-webhook",
+        "namespace": "cert-manager",
+        "workload": "cert-manager-webhook"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.00015938785145021156"
+        ],
+        [
+         1790908920,
+         "0.00022152143338579445"
+        ],
+        [
+         1790908980,
+         "0.00029773507407960235"
+        ],
+        [
+         1790909040,
+         "0.0003409084295174133"
+        ],
+        [
+         1790909100,
+         "0.0003626928695500349"
+        ],
+        [
+         1790909160,
+         "0.00027885886599618524"
+        ],
+        [
+         1790909220,
+         "0.0002819452464556031"
+        ],
+        [
+         1790909280,
+         "0.000324989329759224"
+        ],
+        [
+         1790909340,
+         "0.000357401754346757"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "coredns",
+        "namespace": "kube-system",
+        "workload": "coredns"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.0007488313507446133"
+        ],
+        [
+         1790908920,
+         "0.0011159387626582863"
+        ],
+        [
+         1790908980,
+         "0.0014128623660924085"
+        ],
+        [
+         1790909040,
+         "0.0017053373596020748"
+        ],
+        [
+         1790909100,
+         "0.0018514575028800234"
+        ],
+        [
+         1790909160,
+         "0.0015142080867038832"
+        ],
+        [
+         1790909220,
+         "0.0017099048172310952"
+        ],
+        [
+         1790909280,
+         "0.0018805129857191142"
+        ],
+        [
+         1790909340,
+         "0.0019836575510828705"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "ksm",
+        "namespace": "sp-mimir-test",
+        "workload": "kube-state-metrics"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.0003067321880095923"
+        ],
+        [
+         1790908920,
+         "0.0004742718248124264"
+        ],
+        [
+         1790908980,
+         "0.0006202685114567247"
+        ],
+        [
+         1790909040,
+         "0.00082924974832352"
+        ],
+        [
+         1790909100,
+         "0.0009202822640988153"
+        ],
+        [
+         1790909160,
+         "0.0008125099048380889"
+        ],
+        [
+         1790909220,
+         "0.0009018856512743728"
+        ],
+        [
+         1790909280,
+         "0.0010119545459614373"
+        ],
+        [
+         1790909340,
+         "0.0009982398837406175"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "ksm",
+        "namespace": "monitoring",
+        "workload": "ksm"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.00011152522981903919"
+        ],
+        [
+         1790908920,
+         "0.00010230284812741102"
+        ],
+        [
+         1790908980,
+         "0.00016473466666666665"
+        ],
+        [
+         1790909040,
+         "0.000014830977266128942"
+        ],
+        [
+         1790909100,
+         "0.00005151045395680934"
+        ],
+        [
+         1790909160,
+         "0.00007977768828937346"
+        ],
+        [
+         1790909220,
+         "0.000136480855294551"
+        ],
+        [
+         1790909280,
+         "0.00024009631816063382"
+        ],
+        [
+         1790909340,
+         "0.00029614186600866667"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "metrics-server",
+        "namespace": "kube-system",
+        "workload": "metrics-server"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.00116824346644081"
+        ],
+        [
+         1790908920,
+         "0.0017970259580438097"
+        ],
+        [
+         1790908980,
+         "0.002347415386272677"
+        ],
+        [
+         1790909040,
+         "0.00279748864333934"
+        ],
+        [
+         1790909100,
+         "0.0028590659640196363"
+        ],
+        [
+         1790909160,
+         "0.002485615807500802"
+        ],
+        [
+         1790909220,
+         "0.0025838284430769695"
+        ],
+        [
+         1790909280,
+         "0.003016902153353439"
+        ],
+        [
+         1790909340,
+         "0.003213009846326447"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "mimir",
+        "namespace": "sp-mimir-test",
+        "workload": "mimir"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.0032679795607396104"
+        ],
+        [
+         1790908920,
+         "0.004865446884329891"
+        ],
+        [
+         1790908980,
+         "0.005916317808791912"
+        ],
+        [
+         1790909040,
+         "0.006943439989572371"
+        ],
+        [
+         1790909100,
+         "0.007713181928998743"
+        ],
+        [
+         1790909160,
+         "0.00687436321461471"
+        ],
+        [
+         1790909220,
+         "0.007302086192698325"
+        ],
+        [
+         1790909280,
+         "0.008439630658544844"
+        ],
+        [
+         1790909340,
+         "0.008659457541042989"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "oauth2-proxy",
+        "namespace": "thoras",
+        "workload": "thoras-dashboard"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.00015814978472238517"
+        ],
+        [
+         1790908920,
+         "0.00025670324777014305"
+        ],
+        [
+         1790908980,
+         "0.0003534293405785598"
+        ],
+        [
+         1790909040,
+         "0.0004376103623821507"
+        ],
+        [
+         1790909100,
+         "0.0004663063427654015"
+        ],
+        [
+         1790909160,
+         "0.0004292893631132154"
+        ],
+        [
+         1790909220,
+         "0.00044919229779630645"
+        ],
+        [
+         1790909280,
+         "0.00044554912844139505"
+        ],
+        [
+         1790909340,
+         "0.0004591576294162434"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "prometheus",
+        "namespace": "sp-mimir-test",
+        "workload": "prometheus"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.001721841316998469"
+        ],
+        [
+         1790908920,
+         "0.0025496096662090163"
+        ],
+        [
+         1790908980,
+         "0.003044733900492932"
+        ],
+        [
+         1790909040,
+         "0.003628602861678208"
+        ],
+        [
+         1790909100,
+         "0.003785576108827894"
+        ],
+        [
+         1790909160,
+         "0.0031749172759731647"
+        ],
+        [
+         1790909220,
+         "0.0034422598182988775"
+        ],
+        [
+         1790909280,
+         "0.003972440285464607"
+        ],
+        [
+         1790909340,
+         "0.004249469812691868"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "prometheus",
+        "namespace": "monitoring",
+        "workload": "prometheus-server"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.0004291104502179804"
+        ],
+        [
+         1790908920,
+         "0.0006442534393656334"
+        ],
+        [
+         1790908980,
+         "0.0008258012525433366"
+        ],
+        [
+         1790909040,
+         "0.0011093237727008488"
+        ],
+        [
+         1790909100,
+         "0.001426349638014038"
+        ],
+        [
+         1790909160,
+         "0.0017845113979370751"
+        ],
+        [
+         1790909220,
+         "0.0018987083170977734"
+        ],
+        [
+         1790909280,
+         "0.0019705216812943714"
+        ],
+        [
+         1790909340,
+         "0.0020429351899901977"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "sleeper",
+        "namespace": "sp-mimir-test",
+        "workload": "demo-deploy"
+       },
+       "values": [
+        [
+         1790908860,
+         "0"
+        ],
+        [
+         1790908920,
+         "0"
+        ],
+        [
+         1790908980,
+         "0"
+        ],
+        [
+         1790909040,
+         "0"
+        ],
+        [
+         1790909100,
+         "0"
+        ],
+        [
+         1790909160,
+         "0"
+        ],
+        [
+         1790909220,
+         "0"
+        ],
+        [
+         1790909280,
+         "0"
+        ],
+        [
+         1790909340,
+         "0"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-api-server-v2",
+        "namespace": "thoras",
+        "workload": "thoras-api-server-v2"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.00047339196134813796"
+        ],
+        [
+         1790908920,
+         "0.0007948607363654316"
+        ],
+        [
+         1790908980,
+         "0.0009589347518632891"
+        ],
+        [
+         1790909040,
+         "0.0012043364164890874"
+        ],
+        [
+         1790909100,
+         "0.0011683229903513654"
+        ],
+        [
+         1790909160,
+         "0.0009930945286538845"
+        ],
+        [
+         1790909220,
+         "0.001037245211704872"
+        ],
+        [
+         1790909280,
+         "0.0011228023346857262"
+        ],
+        [
+         1790909340,
+         "0.0012116420470046838"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-blob-api",
+        "namespace": "thoras",
+        "workload": "metrics-collector"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.00006232281777654336"
+        ],
+        [
+         1790908920,
+         "0.00009348954287793321"
+        ],
+        [
+         1790908980,
+         "0.00012932825070556702"
+        ],
+        [
+         1790909040,
+         "0.00015540284271444704"
+        ],
+        [
+         1790909100,
+         "0.00016445471963199025"
+        ],
+        [
+         1790909160,
+         "0.0001456667309102501"
+        ],
+        [
+         1790909220,
+         "0.00016420964775968884"
+        ],
+        [
+         1790909280,
+         "0.0001759114257881474"
+        ],
+        [
+         1790909340,
+         "0.00018947083775066153"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-config-controller",
+        "namespace": "thoras",
+        "workload": "thoras-config-controller"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.00032774003753328814"
+        ],
+        [
+         1790908920,
+         "0.0004819627219997695"
+        ],
+        [
+         1790908980,
+         "0.0005763702319650644"
+        ],
+        [
+         1790909040,
+         "0.0006895427437792099"
+        ],
+        [
+         1790909100,
+         "0.0007350217640894992"
+        ],
+        [
+         1790909160,
+         "0.000576606566710929"
+        ],
+        [
+         1790909220,
+         "0.000606947478225336"
+        ],
+        [
+         1790909280,
+         "0.0006779380921385738"
+        ],
+        [
+         1790909340,
+         "0.0006989414189245524"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-api",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-api"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.0005952546869545139"
+        ],
+        [
+         1790908920,
+         "0.0009261088563665629"
+        ],
+        [
+         1790908980,
+         "0.0016081454334757567"
+        ],
+        [
+         1790909040,
+         "0.001779477670432307"
+        ],
+        [
+         1790909100,
+         "0.0017774530286595832"
+        ],
+        [
+         1790909160,
+         "0.0017006844447772223"
+        ],
+        [
+         1790909220,
+         "0.0015713200214724269"
+        ],
+        [
+         1790909280,
+         "0.0017561986441699444"
+        ],
+        [
+         1790909340,
+         "0.0016452583692128286"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-config-controller",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-config-controller"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.00033786250700136805"
+        ],
+        [
+         1790908920,
+         "0.0004787866194725342"
+        ],
+        [
+         1790908980,
+         "0.0005891715991331532"
+        ],
+        [
+         1790909040,
+         "0.0007009533949490936"
+        ],
+        [
+         1790909100,
+         "0.0007139279058308723"
+        ],
+        [
+         1790909160,
+         "0.0006353627609202149"
+        ],
+        [
+         1790909220,
+         "0.0006087384759365869"
+        ],
+        [
+         1790909280,
+         "0.0007727428975072517"
+        ],
+        [
+         1790909340,
+         "0.0008789875536032608"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-dashboard",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-dashboard"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.00004447497349815227"
+        ],
+        [
+         1790908920,
+         "0.0000710706002368788"
+        ],
+        [
+         1790908980,
+         "0.00009467578437114448"
+        ],
+        [
+         1790909040,
+         "0.00011034402385286818"
+        ],
+        [
+         1790909100,
+         "0.00011979595314319097"
+        ],
+        [
+         1790909160,
+         "0.00010916829674709632"
+        ],
+        [
+         1790909220,
+         "0.00011014649428584427"
+        ],
+        [
+         1790909280,
+         "0.00013383670392053842"
+        ],
+        [
+         1790909340,
+         "0.00015525240503066787"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-dashboard",
+        "namespace": "thoras",
+        "workload": "thoras-dashboard"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.001581497847223852"
+        ],
+        [
+         1790908920,
+         "0.0025670324777014304"
+        ],
+        [
+         1790908980,
+         "0.0035342934057855987"
+        ],
+        [
+         1790909040,
+         "0.004376103623821508"
+        ],
+        [
+         1790909100,
+         "0.004663063427654016"
+        ],
+        [
+         1790909160,
+         "0.004292893631132154"
+        ],
+        [
+         1790909220,
+         "0.0044919229779630645"
+        ],
+        [
+         1790909280,
+         "0.0044554912844139505"
+        ],
+        [
+         1790909340,
+         "0.004591576294162434"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-forecast-worker",
+        "namespace": "thoras",
+        "workload": "thoras-forecast-worker"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.0010686035640110245"
+        ],
+        [
+         1790908920,
+         "0.0017193132153164575"
+        ],
+        [
+         1790908980,
+         "0.002228764697757874"
+        ],
+        [
+         1790909040,
+         "0.0028263832236875897"
+        ],
+        [
+         1790909100,
+         "0.0030282955455189827"
+        ],
+        [
+         1790909160,
+         "0.002930993129574223"
+        ],
+        [
+         1790909220,
+         "0.0031193674870680483"
+        ],
+        [
+         1790909280,
+         "0.003273922226549556"
+        ],
+        [
+         1790909340,
+         "0.0032427991430139013"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-operator",
+        "namespace": "thoras",
+        "workload": "thoras-operator"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.0010391275092555055"
+        ],
+        [
+         1790908920,
+         "0.0018447858249399257"
+        ],
+        [
+         1790908980,
+         "0.002252629597475905"
+        ],
+        [
+         1790909040,
+         "0.002771482172740296"
+        ],
+        [
+         1790909100,
+         "0.0030047832568870997"
+        ],
+        [
+         1790909160,
+         "0.0026997866074126545"
+        ],
+        [
+         1790909220,
+         "0.0029583392926915307"
+        ],
+        [
+         1790909280,
+         "0.0033399793195887425"
+        ],
+        [
+         1790909340,
+         "0.0035637573787412695"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-worker",
+        "namespace": "thoras",
+        "workload": "thoras-worker"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.005313738060583409"
+        ],
+        [
+         1790908920,
+         "0.007973634578124486"
+        ],
+        [
+         1790908980,
+         "0.009756921441220189"
+        ],
+        [
+         1790909040,
+         "0.011340794496862957"
+        ],
+        [
+         1790909100,
+         "0.011355849731924163"
+        ],
+        [
+         1790909160,
+         "0.009543915316000233"
+        ],
+        [
+         1790909220,
+         "0.010181501773676405"
+        ],
+        [
+         1790909280,
+         "0.011859620938426633"
+        ],
+        [
+         1790909340,
+         "0.013415648825339915"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "timescale-tls-reload",
+        "namespace": "thoras",
+        "workload": "metrics-collector"
+       },
+       "values": [
+        [
+         1790908860,
+         "0"
+        ],
+        [
+         1790908920,
+         "0"
+        ],
+        [
+         1790908980,
+         "0"
+        ],
+        [
+         1790909040,
+         "0"
+        ],
+        [
+         1790909100,
+         "0"
+        ],
+        [
+         1790909160,
+         "0"
+        ],
+        [
+         1790909220,
+         "0"
+        ],
+        [
+         1790909280,
+         "0"
+        ],
+        [
+         1790909340,
+         "0"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "timescaledb",
+        "namespace": "thoras",
+        "workload": "metrics-collector"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.003988660337698775"
+        ],
+        [
+         1790908920,
+         "0.005983330744187726"
+        ],
+        [
+         1790908980,
+         "0.008277008045156289"
+        ],
+        [
+         1790909040,
+         "0.00994578193372461"
+        ],
+        [
+         1790909100,
+         "0.010525102056447376"
+        ],
+        [
+         1790909160,
+         "0.009322670778256006"
+        ],
+        [
+         1790909220,
+         "0.010509417456620086"
+        ],
+        [
+         1790909280,
+         "0.011258331250441433"
+        ],
+        [
+         1790909340,
+         "0.012126133616042338"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%29+%28rate%28container_cpu_usage_seconds_total%7Bcontainer%3D%22%22%2Cpod%21%3D%22%22%7D%5B300s%5D%29%29%0A++%2A+on+%28namespace%2C+pod%29+group_right+%28%29+%28%0A++%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22cpu%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29+%2F+on+%28namespace%2C+pod%29+group_left+%28%29+%28sum+by+%28namespace%2C+pod%29+%28%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22cpu%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29%29+%3E+0%29%0A++or+on+%28namespace%2C+pod%2C+container%29%0A++%28%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22cpu%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29+%2A+0+%2B+1%29+%2F+on+%28namespace%2C+pod%29+group_left+%28%29+count+by+%28namespace%2C+pod%29+%28%28%0A++++max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_resource_requests%7Bresource%3D%22cpu%22%7D%29%0A++++or+on+%28namespace%2C+pod%2C+container%29+0+%2A+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_info%7B%7D%29%0A++%29%29%0A%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "container": "sleeper",
+        "namespace": "sp-mimir-test",
+        "workload": "demo-sts"
+       },
+       "values": [
+        [
+         1790908860,
+         "0"
+        ],
+        [
+         1790908920,
+         "0"
+        ],
+        [
+         1790908980,
+         "0"
+        ],
+        [
+         1790909040,
+         "0"
+        ],
+        [
+         1790909100,
+         "0"
+        ],
+        [
+         1790909160,
+         "0"
+        ],
+        [
+         1790909220,
+         "0"
+        ],
+        [
+         1790909280,
+         "0"
+        ],
+        [
+         1790909340,
+         "0"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "timescaledb",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-db"
+       },
+       "values": [
+        [
+         1790908860,
+         "0.0019824231782794885"
+        ],
+        [
+         1790908920,
+         "0.0029285813705663033"
+        ],
+        [
+         1790908980,
+         "0.0036576088953414448"
+        ],
+        [
+         1790909040,
+         "0.004369996275497944"
+        ],
+        [
+         1790909100,
+         "0.004262328716390748"
+        ],
+        [
+         1790909160,
+         "0.0037488426668278708"
+        ],
+        [
+         1790909220,
+         "0.003935058391664379"
+        ],
+        [
+         1790909280,
+         "0.004332710706485036"
+        ],
+        [
+         1790909340,
+         "0.004654443532111655"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_limits%7Bresource%3D%22cpu%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "container": "thoras-console-dashboard",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.5"
+        ],
+        [
+         1790908860,
+         "0.5"
+        ],
+        [
+         1790908920,
+         "0.5"
+        ],
+        [
+         1790908980,
+         "0.5"
+        ],
+        [
+         1790909040,
+         "0.5"
+        ],
+        [
+         1790909100,
+         "0.5"
+        ],
+        [
+         1790909160,
+         "0.5"
+        ],
+        [
+         1790909220,
+         "0.5"
+        ],
+        [
+         1790909280,
+         "0.5"
+        ],
+        [
+         1790909340,
+         "0.5"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-forecast-worker",
+        "namespace": "thoras",
+        "workload": "thoras-forecast-worker"
+       },
+       "values": [
+        [
+         1790908800,
+         "2"
+        ],
+        [
+         1790908860,
+         "2"
+        ],
+        [
+         1790908920,
+         "2"
+        ],
+        [
+         1790908980,
+         "2"
+        ],
+        [
+         1790909040,
+         "2"
+        ],
+        [
+         1790909100,
+         "2"
+        ],
+        [
+         1790909160,
+         "2"
+        ],
+        [
+         1790909220,
+         "2"
+        ],
+        [
+         1790909280,
+         "2"
+        ],
+        [
+         1790909340,
+         "2"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_limits%7Bresource%3D%22cpu%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": []
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_limits%7Bresource%3D%22memory%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "container": "coredns",
+        "namespace": "kube-system",
+        "workload": "coredns"
+       },
+       "values": [
+        [
+         1790908800,
+         "178257920"
+        ],
+        [
+         1790908860,
+         "178257920"
+        ],
+        [
+         1790908920,
+         "178257920"
+        ],
+        [
+         1790908980,
+         "178257920"
+        ],
+        [
+         1790909040,
+         "178257920"
+        ],
+        [
+         1790909100,
+         "178257920"
+        ],
+        [
+         1790909160,
+         "178257920"
+        ],
+        [
+         1790909220,
+         "178257920"
+        ],
+        [
+         1790909280,
+         "178257920"
+        ],
+        [
+         1790909340,
+         "178257920"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "oauth2-proxy",
+        "namespace": "thoras",
+        "workload": "thoras-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "268435456"
+        ],
+        [
+         1790908860,
+         "268435456"
+        ],
+        [
+         1790908920,
+         "268435456"
+        ],
+        [
+         1790908980,
+         "268435456"
+        ],
+        [
+         1790909040,
+         "268435456"
+        ],
+        [
+         1790909100,
+         "268435456"
+        ],
+        [
+         1790909160,
+         "268435456"
+        ],
+        [
+         1790909220,
+         "268435456"
+        ],
+        [
+         1790909280,
+         "268435456"
+        ],
+        [
+         1790909340,
+         "268435456"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-api-server-v2",
+        "namespace": "thoras",
+        "workload": "thoras-api-server-v2"
+       },
+       "values": [
+        [
+         1790908800,
+         "4294967296"
+        ],
+        [
+         1790908860,
+         "4294967296"
+        ],
+        [
+         1790908920,
+         "4294967296"
+        ],
+        [
+         1790908980,
+         "4294967296"
+        ],
+        [
+         1790909040,
+         "4294967296"
+        ],
+        [
+         1790909100,
+         "4294967296"
+        ],
+        [
+         1790909160,
+         "4294967296"
+        ],
+        [
+         1790909220,
+         "4294967296"
+        ],
+        [
+         1790909280,
+         "4294967296"
+        ],
+        [
+         1790909340,
+         "4294967296"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-blob-api",
+        "namespace": "thoras",
+        "workload": "metrics-collector"
+       },
+       "values": [
+        [
+         1790908800,
+         "8589934592"
+        ],
+        [
+         1790908860,
+         "8589934592"
+        ],
+        [
+         1790908920,
+         "8589934592"
+        ],
+        [
+         1790908980,
+         "8589934592"
+        ],
+        [
+         1790909040,
+         "8589934592"
+        ],
+        [
+         1790909100,
+         "8589934592"
+        ],
+        [
+         1790909160,
+         "8589934592"
+        ],
+        [
+         1790909220,
+         "8589934592"
+        ],
+        [
+         1790909280,
+         "8589934592"
+        ],
+        [
+         1790909340,
+         "8589934592"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-config-controller",
+        "namespace": "thoras",
+        "workload": "thoras-config-controller"
+       },
+       "values": [
+        [
+         1790908800,
+         "268435456"
+        ],
+        [
+         1790908860,
+         "268435456"
+        ],
+        [
+         1790908920,
+         "268435456"
+        ],
+        [
+         1790908980,
+         "268435456"
+        ],
+        [
+         1790909040,
+         "268435456"
+        ],
+        [
+         1790909100,
+         "268435456"
+        ],
+        [
+         1790909160,
+         "268435456"
+        ],
+        [
+         1790909220,
+         "268435456"
+        ],
+        [
+         1790909280,
+         "268435456"
+        ],
+        [
+         1790909340,
+         "268435456"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-api",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-api"
+       },
+       "values": [
+        [
+         1790908800,
+         "1073741824"
+        ],
+        [
+         1790908860,
+         "1073741824"
+        ],
+        [
+         1790908920,
+         "1073741824"
+        ],
+        [
+         1790908980,
+         "1073741824"
+        ],
+        [
+         1790909040,
+         "1073741824"
+        ],
+        [
+         1790909100,
+         "1073741824"
+        ],
+        [
+         1790909160,
+         "1073741824"
+        ],
+        [
+         1790909220,
+         "1073741824"
+        ],
+        [
+         1790909280,
+         "1073741824"
+        ],
+        [
+         1790909340,
+         "1073741824"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-config-controller",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-config-controller"
+       },
+       "values": [
+        [
+         1790908800,
+         "268435456"
+        ],
+        [
+         1790908860,
+         "268435456"
+        ],
+        [
+         1790908920,
+         "268435456"
+        ],
+        [
+         1790908980,
+         "268435456"
+        ],
+        [
+         1790909040,
+         "268435456"
+        ],
+        [
+         1790909100,
+         "268435456"
+        ],
+        [
+         1790909160,
+         "268435456"
+        ],
+        [
+         1790909220,
+         "268435456"
+        ],
+        [
+         1790909280,
+         "268435456"
+        ],
+        [
+         1790909340,
+         "268435456"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-dashboard",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "268435456"
+        ],
+        [
+         1790908860,
+         "268435456"
+        ],
+        [
+         1790908920,
+         "268435456"
+        ],
+        [
+         1790908980,
+         "268435456"
+        ],
+        [
+         1790909040,
+         "268435456"
+        ],
+        [
+         1790909100,
+         "268435456"
+        ],
+        [
+         1790909160,
+         "268435456"
+        ],
+        [
+         1790909220,
+         "268435456"
+        ],
+        [
+         1790909280,
+         "268435456"
+        ],
+        [
+         1790909340,
+         "268435456"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-dashboard",
+        "namespace": "thoras",
+        "workload": "thoras-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "2147483648"
+        ],
+        [
+         1790908860,
+         "2147483648"
+        ],
+        [
+         1790908920,
+         "2147483648"
+        ],
+        [
+         1790908980,
+         "2147483648"
+        ],
+        [
+         1790909040,
+         "2147483648"
+        ],
+        [
+         1790909100,
+         "2147483648"
+        ],
+        [
+         1790909160,
+         "2147483648"
+        ],
+        [
+         1790909220,
+         "2147483648"
+        ],
+        [
+         1790909280,
+         "2147483648"
+        ],
+        [
+         1790909340,
+         "2147483648"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-forecast-worker",
+        "namespace": "thoras",
+        "workload": "thoras-forecast-worker"
+       },
+       "values": [
+        [
+         1790908800,
+         "2147483648"
+        ],
+        [
+         1790908860,
+         "2147483648"
+        ],
+        [
+         1790908920,
+         "2147483648"
+        ],
+        [
+         1790908980,
+         "2147483648"
+        ],
+        [
+         1790909040,
+         "2147483648"
+        ],
+        [
+         1790909100,
+         "2147483648"
+        ],
+        [
+         1790909160,
+         "2147483648"
+        ],
+        [
+         1790909220,
+         "2147483648"
+        ],
+        [
+         1790909280,
+         "2147483648"
+        ],
+        [
+         1790909340,
+         "2147483648"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-operator",
+        "namespace": "thoras",
+        "workload": "thoras-operator"
+       },
+       "values": [
+        [
+         1790908800,
+         "4294967296"
+        ],
+        [
+         1790908860,
+         "4294967296"
+        ],
+        [
+         1790908920,
+         "4294967296"
+        ],
+        [
+         1790908980,
+         "4294967296"
+        ],
+        [
+         1790909040,
+         "4294967296"
+        ],
+        [
+         1790909100,
+         "4294967296"
+        ],
+        [
+         1790909160,
+         "4294967296"
+        ],
+        [
+         1790909220,
+         "4294967296"
+        ],
+        [
+         1790909280,
+         "4294967296"
+        ],
+        [
+         1790909340,
+         "4294967296"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-worker",
+        "namespace": "thoras",
+        "workload": "thoras-worker"
+       },
+       "values": [
+        [
+         1790908800,
+         "4294967296"
+        ],
+        [
+         1790908860,
+         "4294967296"
+        ],
+        [
+         1790908920,
+         "4294967296"
+        ],
+        [
+         1790908980,
+         "4294967296"
+        ],
+        [
+         1790909040,
+         "4294967296"
+        ],
+        [
+         1790909100,
+         "4294967296"
+        ],
+        [
+         1790909160,
+         "4294967296"
+        ],
+        [
+         1790909220,
+         "4294967296"
+        ],
+        [
+         1790909280,
+         "4294967296"
+        ],
+        [
+         1790909340,
+         "4294967296"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "timescaledb",
+        "namespace": "thoras",
+        "workload": "metrics-collector"
+       },
+       "values": [
+        [
+         1790908800,
+         "17179869184"
+        ],
+        [
+         1790908860,
+         "17179869184"
+        ],
+        [
+         1790908920,
+         "17179869184"
+        ],
+        [
+         1790908980,
+         "17179869184"
+        ],
+        [
+         1790909040,
+         "17179869184"
+        ],
+        [
+         1790909100,
+         "17179869184"
+        ],
+        [
+         1790909160,
+         "17179869184"
+        ],
+        [
+         1790909220,
+         "17179869184"
+        ],
+        [
+         1790909280,
+         "17179869184"
+        ],
+        [
+         1790909340,
+         "17179869184"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_limits%7Bresource%3D%22memory%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "container": "timescaledb",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-db"
+       },
+       "values": [
+        [
+         1790908800,
+         "2147483648"
+        ],
+        [
+         1790908860,
+         "2147483648"
+        ],
+        [
+         1790908920,
+         "2147483648"
+        ],
+        [
+         1790908980,
+         "2147483648"
+        ],
+        [
+         1790909040,
+         "2147483648"
+        ],
+        [
+         1790909100,
+         "2147483648"
+        ],
+        [
+         1790909160,
+         "2147483648"
+        ],
+        [
+         1790909220,
+         "2147483648"
+        ],
+        [
+         1790909280,
+         "2147483648"
+        ],
+        [
+         1790909340,
+         "2147483648"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_requests%7Bresource%3D%22cpu%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "container": "coredns",
+        "namespace": "kube-system",
+        "workload": "coredns"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.1"
+        ],
+        [
+         1790908860,
+         "0.1"
+        ],
+        [
+         1790908920,
+         "0.1"
+        ],
+        [
+         1790908980,
+         "0.1"
+        ],
+        [
+         1790909040,
+         "0.1"
+        ],
+        [
+         1790909100,
+         "0.1"
+        ],
+        [
+         1790909160,
+         "0.1"
+        ],
+        [
+         1790909220,
+         "0.1"
+        ],
+        [
+         1790909280,
+         "0.1"
+        ],
+        [
+         1790909340,
+         "0.1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "metrics-server",
+        "namespace": "kube-system",
+        "workload": "metrics-server"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.1"
+        ],
+        [
+         1790908860,
+         "0.1"
+        ],
+        [
+         1790908920,
+         "0.1"
+        ],
+        [
+         1790908980,
+         "0.1"
+        ],
+        [
+         1790909040,
+         "0.1"
+        ],
+        [
+         1790909100,
+         "0.1"
+        ],
+        [
+         1790909160,
+         "0.1"
+        ],
+        [
+         1790909220,
+         "0.1"
+        ],
+        [
+         1790909280,
+         "0.1"
+        ],
+        [
+         1790909340,
+         "0.1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "oauth2-proxy",
+        "namespace": "thoras",
+        "workload": "thoras-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.01"
+        ],
+        [
+         1790908860,
+         "0.01"
+        ],
+        [
+         1790908920,
+         "0.01"
+        ],
+        [
+         1790908980,
+         "0.01"
+        ],
+        [
+         1790909040,
+         "0.01"
+        ],
+        [
+         1790909100,
+         "0.01"
+        ],
+        [
+         1790909160,
+         "0.01"
+        ],
+        [
+         1790909220,
+         "0.01"
+        ],
+        [
+         1790909280,
+         "0.01"
+        ],
+        [
+         1790909340,
+         "0.01"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "sleeper",
+        "namespace": "sp-mimir-test",
+        "workload": "demo-deploy"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.05"
+        ],
+        [
+         1790908860,
+         "0.05"
+        ],
+        [
+         1790908920,
+         "0.05"
+        ],
+        [
+         1790908980,
+         "0.05"
+        ],
+        [
+         1790909040,
+         "0.05"
+        ],
+        [
+         1790909100,
+         "0.05"
+        ],
+        [
+         1790909160,
+         "0.05"
+        ],
+        [
+         1790909220,
+         "0.05"
+        ],
+        [
+         1790909280,
+         "0.05"
+        ],
+        [
+         1790909340,
+         "0.05"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-api-server-v2",
+        "namespace": "thoras",
+        "workload": "thoras-api-server-v2"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.128"
+        ],
+        [
+         1790908860,
+         "0.128"
+        ],
+        [
+         1790908920,
+         "0.128"
+        ],
+        [
+         1790908980,
+         "0.128"
+        ],
+        [
+         1790909040,
+         "0.128"
+        ],
+        [
+         1790909100,
+         "0.128"
+        ],
+        [
+         1790909160,
+         "0.128"
+        ],
+        [
+         1790909220,
+         "0.128"
+        ],
+        [
+         1790909280,
+         "0.128"
+        ],
+        [
+         1790909340,
+         "0.128"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-blob-api",
+        "namespace": "thoras",
+        "workload": "metrics-collector"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.016"
+        ],
+        [
+         1790908860,
+         "0.016"
+        ],
+        [
+         1790908920,
+         "0.016"
+        ],
+        [
+         1790908980,
+         "0.016"
+        ],
+        [
+         1790909040,
+         "0.016"
+        ],
+        [
+         1790909100,
+         "0.016"
+        ],
+        [
+         1790909160,
+         "0.016"
+        ],
+        [
+         1790909220,
+         "0.016"
+        ],
+        [
+         1790909280,
+         "0.016"
+        ],
+        [
+         1790909340,
+         "0.016"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-config-controller",
+        "namespace": "thoras",
+        "workload": "thoras-config-controller"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.01"
+        ],
+        [
+         1790908860,
+         "0.01"
+        ],
+        [
+         1790908920,
+         "0.01"
+        ],
+        [
+         1790908980,
+         "0.01"
+        ],
+        [
+         1790909040,
+         "0.01"
+        ],
+        [
+         1790909100,
+         "0.01"
+        ],
+        [
+         1790909160,
+         "0.01"
+        ],
+        [
+         1790909220,
+         "0.01"
+        ],
+        [
+         1790909280,
+         "0.01"
+        ],
+        [
+         1790909340,
+         "0.01"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-api",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-api"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.1"
+        ],
+        [
+         1790908860,
+         "0.1"
+        ],
+        [
+         1790908920,
+         "0.1"
+        ],
+        [
+         1790908980,
+         "0.1"
+        ],
+        [
+         1790909040,
+         "0.1"
+        ],
+        [
+         1790909100,
+         "0.1"
+        ],
+        [
+         1790909160,
+         "0.1"
+        ],
+        [
+         1790909220,
+         "0.1"
+        ],
+        [
+         1790909280,
+         "0.1"
+        ],
+        [
+         1790909340,
+         "0.1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-config-controller",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-config-controller"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.01"
+        ],
+        [
+         1790908860,
+         "0.01"
+        ],
+        [
+         1790908920,
+         "0.01"
+        ],
+        [
+         1790908980,
+         "0.01"
+        ],
+        [
+         1790909040,
+         "0.01"
+        ],
+        [
+         1790909100,
+         "0.01"
+        ],
+        [
+         1790909160,
+         "0.01"
+        ],
+        [
+         1790909220,
+         "0.01"
+        ],
+        [
+         1790909280,
+         "0.01"
+        ],
+        [
+         1790909340,
+         "0.01"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-dashboard",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.05"
+        ],
+        [
+         1790908860,
+         "0.05"
+        ],
+        [
+         1790908920,
+         "0.05"
+        ],
+        [
+         1790908980,
+         "0.05"
+        ],
+        [
+         1790909040,
+         "0.05"
+        ],
+        [
+         1790909100,
+         "0.05"
+        ],
+        [
+         1790909160,
+         "0.05"
+        ],
+        [
+         1790909220,
+         "0.05"
+        ],
+        [
+         1790909280,
+         "0.05"
+        ],
+        [
+         1790909340,
+         "0.05"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-dashboard",
+        "namespace": "thoras",
+        "workload": "thoras-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.1"
+        ],
+        [
+         1790908860,
+         "0.1"
+        ],
+        [
+         1790908920,
+         "0.1"
+        ],
+        [
+         1790908980,
+         "0.1"
+        ],
+        [
+         1790909040,
+         "0.1"
+        ],
+        [
+         1790909100,
+         "0.1"
+        ],
+        [
+         1790909160,
+         "0.1"
+        ],
+        [
+         1790909220,
+         "0.1"
+        ],
+        [
+         1790909280,
+         "0.1"
+        ],
+        [
+         1790909340,
+         "0.1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-forecast-worker",
+        "namespace": "thoras",
+        "workload": "thoras-forecast-worker"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-operator",
+        "namespace": "thoras",
+        "workload": "thoras-operator"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.1"
+        ],
+        [
+         1790908860,
+         "0.1"
+        ],
+        [
+         1790908920,
+         "0.1"
+        ],
+        [
+         1790908980,
+         "0.1"
+        ],
+        [
+         1790909040,
+         "0.1"
+        ],
+        [
+         1790909100,
+         "0.1"
+        ],
+        [
+         1790909160,
+         "0.1"
+        ],
+        [
+         1790909220,
+         "0.1"
+        ],
+        [
+         1790909280,
+         "0.1"
+        ],
+        [
+         1790909340,
+         "0.1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-worker",
+        "namespace": "thoras",
+        "workload": "thoras-worker"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.128"
+        ],
+        [
+         1790908860,
+         "0.128"
+        ],
+        [
+         1790908920,
+         "0.128"
+        ],
+        [
+         1790908980,
+         "0.128"
+        ],
+        [
+         1790909040,
+         "0.128"
+        ],
+        [
+         1790909100,
+         "0.128"
+        ],
+        [
+         1790909160,
+         "0.128"
+        ],
+        [
+         1790909220,
+         "0.128"
+        ],
+        [
+         1790909280,
+         "0.128"
+        ],
+        [
+         1790909340,
+         "0.128"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "timescaledb",
+        "namespace": "thoras",
+        "workload": "metrics-collector"
+       },
+       "values": [
+        [
+         1790908800,
+         "1.024"
+        ],
+        [
+         1790908860,
+         "1.024"
+        ],
+        [
+         1790908920,
+         "1.024"
+        ],
+        [
+         1790908980,
+         "1.024"
+        ],
+        [
+         1790909040,
+         "1.024"
+        ],
+        [
+         1790909100,
+         "1.024"
+        ],
+        [
+         1790909160,
+         "1.024"
+        ],
+        [
+         1790909220,
+         "1.024"
+        ],
+        [
+         1790909280,
+         "1.024"
+        ],
+        [
+         1790909340,
+         "1.024"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_requests%7Bresource%3D%22cpu%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "container": "sleeper",
+        "namespace": "sp-mimir-test",
+        "workload": "demo-sts"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.05"
+        ],
+        [
+         1790908860,
+         "0.05"
+        ],
+        [
+         1790908920,
+         "0.05"
+        ],
+        [
+         1790908980,
+         "0.05"
+        ],
+        [
+         1790909040,
+         "0.05"
+        ],
+        [
+         1790909100,
+         "0.05"
+        ],
+        [
+         1790909160,
+         "0.05"
+        ],
+        [
+         1790909220,
+         "0.05"
+        ],
+        [
+         1790909280,
+         "0.05"
+        ],
+        [
+         1790909340,
+         "0.05"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "timescaledb",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-db"
+       },
+       "values": [
+        [
+         1790908800,
+         "0.25"
+        ],
+        [
+         1790908860,
+         "0.25"
+        ],
+        [
+         1790908920,
+         "0.25"
+        ],
+        [
+         1790908980,
+         "0.25"
+        ],
+        [
+         1790909040,
+         "0.25"
+        ],
+        [
+         1790909100,
+         "0.25"
+        ],
+        [
+         1790909160,
+         "0.25"
+        ],
+        [
+         1790909220,
+         "0.25"
+        ],
+        [
+         1790909280,
+         "0.25"
+        ],
+        [
+         1790909340,
+         "0.25"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_requests%7Bresource%3D%22memory%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "container": "coredns",
+        "namespace": "kube-system",
+        "workload": "coredns"
+       },
+       "values": [
+        [
+         1790908800,
+         "73400320"
+        ],
+        [
+         1790908860,
+         "73400320"
+        ],
+        [
+         1790908920,
+         "73400320"
+        ],
+        [
+         1790908980,
+         "73400320"
+        ],
+        [
+         1790909040,
+         "73400320"
+        ],
+        [
+         1790909100,
+         "73400320"
+        ],
+        [
+         1790909160,
+         "73400320"
+        ],
+        [
+         1790909220,
+         "73400320"
+        ],
+        [
+         1790909280,
+         "73400320"
+        ],
+        [
+         1790909340,
+         "73400320"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "metrics-server",
+        "namespace": "kube-system",
+        "workload": "metrics-server"
+       },
+       "values": [
+        [
+         1790908800,
+         "209715200"
+        ],
+        [
+         1790908860,
+         "209715200"
+        ],
+        [
+         1790908920,
+         "209715200"
+        ],
+        [
+         1790908980,
+         "209715200"
+        ],
+        [
+         1790909040,
+         "209715200"
+        ],
+        [
+         1790909100,
+         "209715200"
+        ],
+        [
+         1790909160,
+         "209715200"
+        ],
+        [
+         1790909220,
+         "209715200"
+        ],
+        [
+         1790909280,
+         "209715200"
+        ],
+        [
+         1790909340,
+         "209715200"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "oauth2-proxy",
+        "namespace": "thoras",
+        "workload": "thoras-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "33554432"
+        ],
+        [
+         1790908860,
+         "33554432"
+        ],
+        [
+         1790908920,
+         "33554432"
+        ],
+        [
+         1790908980,
+         "33554432"
+        ],
+        [
+         1790909040,
+         "33554432"
+        ],
+        [
+         1790909100,
+         "33554432"
+        ],
+        [
+         1790909160,
+         "33554432"
+        ],
+        [
+         1790909220,
+         "33554432"
+        ],
+        [
+         1790909280,
+         "33554432"
+        ],
+        [
+         1790909340,
+         "33554432"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "sleeper",
+        "namespace": "sp-mimir-test",
+        "workload": "demo-deploy"
+       },
+       "values": [
+        [
+         1790908800,
+         "67108864"
+        ],
+        [
+         1790908860,
+         "67108864"
+        ],
+        [
+         1790908920,
+         "67108864"
+        ],
+        [
+         1790908980,
+         "67108864"
+        ],
+        [
+         1790909040,
+         "67108864"
+        ],
+        [
+         1790909100,
+         "67108864"
+        ],
+        [
+         1790909160,
+         "67108864"
+        ],
+        [
+         1790909220,
+         "67108864"
+        ],
+        [
+         1790909280,
+         "67108864"
+        ],
+        [
+         1790909340,
+         "67108864"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-api-server-v2",
+        "namespace": "thoras",
+        "workload": "thoras-api-server-v2"
+       },
+       "values": [
+        [
+         1790908800,
+         "1073741824"
+        ],
+        [
+         1790908860,
+         "1073741824"
+        ],
+        [
+         1790908920,
+         "1073741824"
+        ],
+        [
+         1790908980,
+         "1073741824"
+        ],
+        [
+         1790909040,
+         "1073741824"
+        ],
+        [
+         1790909100,
+         "1073741824"
+        ],
+        [
+         1790909160,
+         "1073741824"
+        ],
+        [
+         1790909220,
+         "1073741824"
+        ],
+        [
+         1790909280,
+         "1073741824"
+        ],
+        [
+         1790909340,
+         "1073741824"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-blob-api",
+        "namespace": "thoras",
+        "workload": "metrics-collector"
+       },
+       "values": [
+        [
+         1790908800,
+         "134217728"
+        ],
+        [
+         1790908860,
+         "134217728"
+        ],
+        [
+         1790908920,
+         "134217728"
+        ],
+        [
+         1790908980,
+         "134217728"
+        ],
+        [
+         1790909040,
+         "134217728"
+        ],
+        [
+         1790909100,
+         "134217728"
+        ],
+        [
+         1790909160,
+         "134217728"
+        ],
+        [
+         1790909220,
+         "134217728"
+        ],
+        [
+         1790909280,
+         "134217728"
+        ],
+        [
+         1790909340,
+         "134217728"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-config-controller",
+        "namespace": "thoras",
+        "workload": "thoras-config-controller"
+       },
+       "values": [
+        [
+         1790908800,
+         "67108864"
+        ],
+        [
+         1790908860,
+         "67108864"
+        ],
+        [
+         1790908920,
+         "67108864"
+        ],
+        [
+         1790908980,
+         "67108864"
+        ],
+        [
+         1790909040,
+         "67108864"
+        ],
+        [
+         1790909100,
+         "67108864"
+        ],
+        [
+         1790909160,
+         "67108864"
+        ],
+        [
+         1790909220,
+         "67108864"
+        ],
+        [
+         1790909280,
+         "67108864"
+        ],
+        [
+         1790909340,
+         "67108864"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-api",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-api"
+       },
+       "values": [
+        [
+         1790908800,
+         "268435456"
+        ],
+        [
+         1790908860,
+         "268435456"
+        ],
+        [
+         1790908920,
+         "268435456"
+        ],
+        [
+         1790908980,
+         "268435456"
+        ],
+        [
+         1790909040,
+         "268435456"
+        ],
+        [
+         1790909100,
+         "268435456"
+        ],
+        [
+         1790909160,
+         "268435456"
+        ],
+        [
+         1790909220,
+         "268435456"
+        ],
+        [
+         1790909280,
+         "268435456"
+        ],
+        [
+         1790909340,
+         "268435456"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-config-controller",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-config-controller"
+       },
+       "values": [
+        [
+         1790908800,
+         "67108864"
+        ],
+        [
+         1790908860,
+         "67108864"
+        ],
+        [
+         1790908920,
+         "67108864"
+        ],
+        [
+         1790908980,
+         "67108864"
+        ],
+        [
+         1790909040,
+         "67108864"
+        ],
+        [
+         1790909100,
+         "67108864"
+        ],
+        [
+         1790909160,
+         "67108864"
+        ],
+        [
+         1790909220,
+         "67108864"
+        ],
+        [
+         1790909280,
+         "67108864"
+        ],
+        [
+         1790909340,
+         "67108864"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-console-dashboard",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "67108864"
+        ],
+        [
+         1790908860,
+         "67108864"
+        ],
+        [
+         1790908920,
+         "67108864"
+        ],
+        [
+         1790908980,
+         "67108864"
+        ],
+        [
+         1790909040,
+         "67108864"
+        ],
+        [
+         1790909100,
+         "67108864"
+        ],
+        [
+         1790909160,
+         "67108864"
+        ],
+        [
+         1790909220,
+         "67108864"
+        ],
+        [
+         1790909280,
+         "67108864"
+        ],
+        [
+         1790909340,
+         "67108864"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-dashboard",
+        "namespace": "thoras",
+        "workload": "thoras-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "134217728"
+        ],
+        [
+         1790908860,
+         "134217728"
+        ],
+        [
+         1790908920,
+         "134217728"
+        ],
+        [
+         1790908980,
+         "134217728"
+        ],
+        [
+         1790909040,
+         "134217728"
+        ],
+        [
+         1790909100,
+         "134217728"
+        ],
+        [
+         1790909160,
+         "134217728"
+        ],
+        [
+         1790909220,
+         "134217728"
+        ],
+        [
+         1790909280,
+         "134217728"
+        ],
+        [
+         1790909340,
+         "134217728"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-forecast-worker",
+        "namespace": "thoras",
+        "workload": "thoras-forecast-worker"
+       },
+       "values": [
+        [
+         1790908800,
+         "268435456"
+        ],
+        [
+         1790908860,
+         "268435456"
+        ],
+        [
+         1790908920,
+         "268435456"
+        ],
+        [
+         1790908980,
+         "268435456"
+        ],
+        [
+         1790909040,
+         "268435456"
+        ],
+        [
+         1790909100,
+         "268435456"
+        ],
+        [
+         1790909160,
+         "268435456"
+        ],
+        [
+         1790909220,
+         "268435456"
+        ],
+        [
+         1790909280,
+         "268435456"
+        ],
+        [
+         1790909340,
+         "268435456"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-operator",
+        "namespace": "thoras",
+        "workload": "thoras-operator"
+       },
+       "values": [
+        [
+         1790908800,
+         "1073741824"
+        ],
+        [
+         1790908860,
+         "1073741824"
+        ],
+        [
+         1790908920,
+         "1073741824"
+        ],
+        [
+         1790908980,
+         "1073741824"
+        ],
+        [
+         1790909040,
+         "1073741824"
+        ],
+        [
+         1790909100,
+         "1073741824"
+        ],
+        [
+         1790909160,
+         "1073741824"
+        ],
+        [
+         1790909220,
+         "1073741824"
+        ],
+        [
+         1790909280,
+         "1073741824"
+        ],
+        [
+         1790909340,
+         "1073741824"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "thoras-worker",
+        "namespace": "thoras",
+        "workload": "thoras-worker"
+       },
+       "values": [
+        [
+         1790908800,
+         "1073741824"
+        ],
+        [
+         1790908860,
+         "1073741824"
+        ],
+        [
+         1790908920,
+         "1073741824"
+        ],
+        [
+         1790908980,
+         "1073741824"
+        ],
+        [
+         1790909040,
+         "1073741824"
+        ],
+        [
+         1790909100,
+         "1073741824"
+        ],
+        [
+         1790909160,
+         "1073741824"
+        ],
+        [
+         1790909220,
+         "1073741824"
+        ],
+        [
+         1790909280,
+         "1073741824"
+        ],
+        [
+         1790909340,
+         "1073741824"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "timescaledb",
+        "namespace": "thoras",
+        "workload": "metrics-collector"
+       },
+       "values": [
+        [
+         1790908800,
+         "3221225472"
+        ],
+        [
+         1790908860,
+         "3221225472"
+        ],
+        [
+         1790908920,
+         "3221225472"
+        ],
+        [
+         1790908980,
+         "3221225472"
+        ],
+        [
+         1790909040,
+         "3221225472"
+        ],
+        [
+         1790909100,
+         "3221225472"
+        ],
+        [
+         1790909160,
+         "3221225472"
+        ],
+        [
+         1790909220,
+         "3221225472"
+        ],
+        [
+         1790909280,
+         "3221225472"
+        ],
+        [
+         1790909340,
+         "3221225472"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=avg+by+%28namespace%2C+workload%2C+container%29+%28%0A++max+by+%28namespace%2C+pod%2C+container%29+%28%0A++++kube_pod_container_resource_requests%7Bresource%3D%22memory%22%7D%0A++++%2A+on+%28namespace%2C+pod%29+group_left+%28%29+max+by+%28namespace%2C+pod%29+%28kube_pod_status_phase%7Bphase%3D%22Running%22%7D+%3D%3D+1%29%0A++%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "container": "sleeper",
+        "namespace": "sp-mimir-test",
+        "workload": "demo-sts"
+       },
+       "values": [
+        [
+         1790908800,
+         "67108864"
+        ],
+        [
+         1790908860,
+         "67108864"
+        ],
+        [
+         1790908920,
+         "67108864"
+        ],
+        [
+         1790908980,
+         "67108864"
+        ],
+        [
+         1790909040,
+         "67108864"
+        ],
+        [
+         1790909100,
+         "67108864"
+        ],
+        [
+         1790909160,
+         "67108864"
+        ],
+        [
+         1790909220,
+         "67108864"
+        ],
+        [
+         1790909280,
+         "67108864"
+        ],
+        [
+         1790909340,
+         "67108864"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "container": "timescaledb",
+        "namespace": "thoras-console",
+        "workload": "thoras-console-db"
+       },
+       "values": [
+        [
+         1790908800,
+         "536870912"
+        ],
+        [
+         1790908860,
+         "536870912"
+        ],
+        [
+         1790908920,
+         "536870912"
+        ],
+        [
+         1790908980,
+         "536870912"
+        ],
+        [
+         1790909040,
+         "536870912"
+        ],
+        [
+         1790909100,
+         "536870912"
+        ],
+        [
+         1790909160,
+         "536870912"
+        ],
+        [
+         1790909220,
+         "536870912"
+        ],
+        [
+         1790909280,
+         "536870912"
+        ],
+        [
+         1790909340,
+         "536870912"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=max+by+%28namespace%2C+workload%29+%28label_replace%28kube_deployment_spec_replicas%7B%7D%2C+%22workload%22%2C+%22%241%22%2C+%22deployment%22%2C+%22%28.%2B%29%22%29%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "namespace": "cert-manager",
+        "workload": "cert-manager"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "cert-manager",
+        "workload": "cert-manager-cainjector"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "cert-manager",
+        "workload": "cert-manager-webhook"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "kube-system",
+        "workload": "coredns"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "kube-system",
+        "workload": "metrics-server"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "sp-mimir-test",
+        "workload": "demo-deploy"
+       },
+       "values": [
+        [
+         1790908800,
+         "2"
+        ],
+        [
+         1790908860,
+         "2"
+        ],
+        [
+         1790908920,
+         "2"
+        ],
+        [
+         1790908980,
+         "2"
+        ],
+        [
+         1790909040,
+         "2"
+        ],
+        [
+         1790909100,
+         "2"
+        ],
+        [
+         1790909160,
+         "2"
+        ],
+        [
+         1790909220,
+         "2"
+        ],
+        [
+         1790909280,
+         "2"
+        ],
+        [
+         1790909340,
+         "2"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "sp-mimir-test",
+        "workload": "kube-state-metrics"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "sp-mimir-test",
+        "workload": "mimir"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "sp-mimir-test",
+        "workload": "prometheus"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "monitoring",
+        "workload": "ksm"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "monitoring",
+        "workload": "prometheus-server"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "thoras-console",
+        "workload": "thoras-console-api"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "thoras-console",
+        "workload": "thoras-console-config-controller"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "thoras-console",
+        "workload": "thoras-console-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "thoras",
+        "workload": "metrics-collector"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "thoras",
+        "workload": "thoras-api-server-v2"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "thoras",
+        "workload": "thoras-config-controller"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "thoras",
+        "workload": "thoras-dashboard"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "thoras",
+        "workload": "thoras-forecast-worker"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "thoras",
+        "workload": "thoras-operator"
+       },
+       "values": [
+        [
+         1790908800,
+         "2"
+        ],
+        [
+         1790908860,
+         "2"
+        ],
+        [
+         1790908920,
+         "2"
+        ],
+        [
+         1790908980,
+         "2"
+        ],
+        [
+         1790909040,
+         "2"
+        ],
+        [
+         1790909100,
+         "2"
+        ],
+        [
+         1790909160,
+         "2"
+        ],
+        [
+         1790909220,
+         "2"
+        ],
+        [
+         1790909280,
+         "2"
+        ],
+        [
+         1790909340,
+         "2"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "thoras",
+        "workload": "thoras-worker"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=max+by+%28namespace%2C+workload%29+%28label_replace%28kube_statefulset_replicas%7B%7D%2C+%22workload%22%2C+%22%241%22%2C+%22statefulset%22%2C+%22%28.%2B%29%22%29%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "namespace": "sp-mimir-test",
+        "workload": "demo-sts"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      },
+      {
+       "metric": {
+        "namespace": "thoras-console",
+        "workload": "thoras-console-db"
+       },
+       "values": [
+        [
+         1790908800,
+         "1"
+        ],
+        [
+         1790908860,
+         "1"
+        ],
+        [
+         1790908920,
+         "1"
+        ],
+        [
+         1790908980,
+         "1"
+        ],
+        [
+         1790909040,
+         "1"
+        ],
+        [
+         1790909100,
+         "1"
+        ],
+        [
+         1790909160,
+         "1"
+        ],
+        [
+         1790909220,
+         "1"
+        ],
+        [
+         1790909280,
+         "1"
+        ],
+        [
+         1790909340,
+         "1"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=max+by+%28node%29+%28kube_node_status_allocatable%7Bresource%3D%22cpu%22%7D%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "node": "minikube"
+       },
+       "values": [
+        [
+         1790908800,
+         "8"
+        ],
+        [
+         1790908860,
+         "8"
+        ],
+        [
+         1790908920,
+         "8"
+        ],
+        [
+         1790908980,
+         "8"
+        ],
+        [
+         1790909040,
+         "8"
+        ],
+        [
+         1790909100,
+         "8"
+        ],
+        [
+         1790909160,
+         "8"
+        ],
+        [
+         1790909220,
+         "8"
+        ],
+        [
+         1790909280,
+         "8"
+        ],
+        [
+         1790909340,
+         "8"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=max+by+%28node%29+%28kube_node_status_allocatable%7Bresource%3D%22memory%22%7D%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": [
+      {
+       "metric": {
+        "node": "minikube"
+       },
+       "values": [
+        [
+         1790908800,
+         "20927549440"
+        ],
+        [
+         1790908860,
+         "20927549440"
+        ],
+        [
+         1790908920,
+         "20927549440"
+        ],
+        [
+         1790908980,
+         "20927549440"
+        ],
+        [
+         1790909040,
+         "20927549440"
+        ],
+        [
+         1790909100,
+         "20927549440"
+        ],
+        [
+         1790909160,
+         "20927549440"
+        ],
+        [
+         1790909220,
+         "20927549440"
+        ],
+        [
+         1790909280,
+         "20927549440"
+        ],
+        [
+         1790909340,
+         "20927549440"
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=sum+by+%28namespace%2C+workload%2C+container%29+%28%0A++%28max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_status_restarts_total%7B%7D%29+-+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_status_restarts_total%7B%7D+offset+60s%29+%3E+0%29%0A++%2A+on+%28namespace%2C+pod%2C+container%29+group_left+%28%29+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_status_last_terminated_reason%7Breason%3D%22OOMKilled%22%7D%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22ReplicaSet%22%7D%2C+%22replicaset%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A++%2A+on+%28namespace%2C+replicaset%29+group_left+%28workload%29%0A++max+by+%28namespace%2C+replicaset%2C+workload%29+%28label_replace%28kube_replicaset_owner%7Bowner_kind%3D%22Deployment%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": []
+    }
+   }
+  },
+  "/api/v1/query_range?end=1790909340\u0026query=sum+by+%28namespace%2C+workload%2C+container%29+%28%0A++%28max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_status_restarts_total%7B%7D%29+-+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_status_restarts_total%7B%7D+offset+60s%29+%3E+0%29%0A++%2A+on+%28namespace%2C+pod%2C+container%29+group_left+%28%29+max+by+%28namespace%2C+pod%2C+container%29+%28kube_pod_container_status_last_terminated_reason%7Breason%3D%22OOMKilled%22%7D%29%0A++%2A+on+%28namespace%2C+pod%29+group_left+%28workload%29+max+by+%28namespace%2C+pod%2C+workload%29+%28%0A++label_replace%28kube_pod_owner%7Bowner_kind%3D%22StatefulSet%22%7D%2C+%22workload%22%2C+%22%241%22%2C+%22owner_name%22%2C+%22%28.%2B%29%22%29%0A%29%0A%29\u0026start=1790906640\u0026step=60": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "matrix",
+     "result": []
+    }
+   }
+  },
+  "/api/v1/status/buildinfo?": {
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "application": "Grafana Mimir",
+     "version": "2.17.0",
+     "revision": "e150acbc",
+     "branch": "HEAD",
+     "goVersion": "go1.24.4",
+     "features": {
+      "ruler_config_api": "true",
+      "alertmanager_config_api": "true",
+      "query_sharding": "false",
+      "federated_rules": "false"
+     }
+    }
+   }
+  }
+ }
+}
