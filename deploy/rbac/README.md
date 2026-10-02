@@ -53,4 +53,4 @@ Deleting the Secret revokes that token within seconds, once the API server's tok
     kubectl delete -f deploy/rbac/poll.yaml
     kubectl delete namespace savings-preview
 
-Use the file you applied in place of `poll.yaml`.
+Use the file you applied in place of `poll.yaml`. After the discovery-then-namespaced setup, also run `kubectl delete clusterrole savings-preview-discovery`.
