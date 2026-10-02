@@ -1,0 +1,43 @@
+# Read-only access for both `savings-preview poll` and
+# `savings-preview prometheus`. Applying poll.yaml and prometheus.yaml
+# together grants the same access.
+# Create the namespace first: kubectl create namespace savings-preview
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: savings-preview
+  namespace: savings-preview
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: savings-preview
+rules:
+  - apiGroups: [""]
+    resources: [pods, nodes, services]
+    verbs: [list]
+  - apiGroups: [apps]
+    resources: [replicasets, deployments, statefulsets]
+    verbs: [list]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods]
+    verbs: [list]
+  - apiGroups: [monitoring.coreos.com]
+    resources: [prometheuses, prometheusagents]
+    verbs: [list]
+  - apiGroups: [""]
+    resources: [services/proxy]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: savings-preview
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: savings-preview
+subjects:
+  - kind: ServiceAccount
+    name: savings-preview
+    namespace: savings-preview

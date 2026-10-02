@@ -1,0 +1,39 @@
+# Read-only access for `savings-preview prometheus`, with store discovery.
+# Create the namespace first: kubectl create namespace savings-preview
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: savings-preview
+  namespace: savings-preview
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: savings-preview-prometheus
+rules:
+  # Discovery: find the store among the cluster's services.
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [list]
+  # Discovery, optional: Prometheus Operator resources rank the stores and
+  # show agent-mode instances. Remove this rule if the operator is not installed.
+  - apiGroups: [monitoring.coreos.com]
+    resources: [prometheuses, prometheusagents]
+    verbs: [list]
+  # Queries: HTTP GET to the store through the API server's service proxy.
+  - apiGroups: [""]
+    resources: [services/proxy]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: savings-preview-prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: savings-preview-prometheus
+subjects:
+  - kind: ServiceAccount
+    name: savings-preview
+    namespace: savings-preview

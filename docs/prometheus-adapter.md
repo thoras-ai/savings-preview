@@ -39,6 +39,8 @@ The kubeconfig identity needs:
 - `list` on `services` in all namespaces, for discovery.
 - `list` on `prometheuses` and `prometheusagents` (`monitoring.coreos.com`), optional.
 
+[`deploy/rbac/`](../deploy/rbac/) has ServiceAccounts and roles with exactly this access, and [security.md](security.md) describes what the program reads and writes.
+
 ## History
 
 Before pulling, the adapter finds how far back the container usage series go. When the store has `prometheus_tsdb_lowest_timestamp_seconds` and the usage metric has no data before that time, the search starts there; otherwise (for example behind Thanos, where the metric describes a sidecar) it is ignored. The adapter then binary-searches on the usage metric itself, which assumes the data is continuous: an outage at a probe point makes the start look later than it is. It pulls from that point, never from before the requested window, and reports when the store holds less than asked for.
