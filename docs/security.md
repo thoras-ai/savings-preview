@@ -94,6 +94,15 @@ It contains no Secrets, environment variables, logs, images, annotations, labels
 
 Nowhere, unless you send it. The program makes no network requests other than to the API server, the `--url` store, Google Cloud Monitoring and Google's token endpoint with `--project`, or the Datadog API. The report page (`scripts/build_report.py`, also built into the binary) is one offline HTML file that reads the output file in the browser and makes no network requests. The copy published on GitHub Pages (`build_report.py --site`) also fetches its two sample files from the same site when one is picked; a file opened there is read in the browser and not uploaded. `run` serves the page and the compact file on 127.0.0.1 on a random port until you press Ctrl-C; the server answers only requests addressed to that address, so it cannot be reached from other machines or read by a web page under another name. Sharing the output file or the zip with Thoras is a separate step that you choose to take.
 
+## How releases are built
+
+- Release binaries are built by GitHub Actions from a tag on `main`, after the full CI run. `checksums.txt` on each release has the SHA-256 of every archive and SBOM, and `install.sh` and the Homebrew formula check the archive against it before installing.
+- Each archive has a CycloneDX SBOM, `savings-preview_<tag>_<os>_<arch>.cdx.json`, listing the Go modules and the Go release built into its binary. Feed it to your vulnerability scanner, or run `govulncheck -mode binary` on the binary itself.
+- CI runs `govulncheck` on every pull request and nightly, and fails when the code calls a function with a known vulnerability, in a dependency or in the Go standard library.
+- Every GitHub Action the workflows use is pinned to a commit, and Dependabot proposes updates to the actions, the Go modules and the CI tools each week.
+
+[releasing.md](releasing.md#sboms) has the details.
+
 ## How to check this
 
 1. Build from source: `go build -o bin/savings-preview ./cmd/savings-preview`. The Kubernetes calls are in `internal/kube`, `internal/adapters/prometheus/discover.go` and `internal/adapters/polling/run.go`.

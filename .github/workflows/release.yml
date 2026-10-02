@@ -55,6 +55,13 @@ jobs:
         with:
           name: binaries
           path: dist/release/bin/
+      # Builds the SBOM generator pinned in tools/go.mod. No cache, so nothing
+      # saved by another workflow run goes into the release.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          check-latest: true
+          cache: false
       - run: scripts/release.sh package "$GITHUB_REF_NAME"
       - run: python3 scripts/release_notes.py "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > dist/release/notes.md
       # The release stays a draft until the Homebrew formula, which needs the
@@ -67,7 +74,7 @@ jobs:
           if [[ $GITHUB_REF_NAME == *-* ]]; then prerelease=(--prerelease); fi
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
             --verify-tag --title "$GITHUB_REF_NAME" --notes-file dist/release/notes.md "${prerelease[@]}" \
-            dist/release/*.tar.gz dist/release/install.sh dist/release/checksums.txt
+            dist/release/*.tar.gz dist/release/*.cdx.json dist/release/install.sh dist/release/checksums.txt
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
             --json tagName,assets > dist/release/release.json
           python3 scripts/homebrew_formula.py "$GITHUB_REF_NAME" \

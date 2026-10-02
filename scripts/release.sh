@@ -2,7 +2,7 @@
 # Build and package the savings-preview release binaries.
 #
 #   scripts/release.sh build VERSION     binaries in dist/release/bin/
-#   scripts/release.sh package VERSION   archives, install.sh and checksums.txt in dist/release/
+#   scripts/release.sh package VERSION   archives, SBOMs, install.sh and checksums.txt in dist/release/
 #
 # The two steps are separate so the binaries can be signed in between.
 set -euo pipefail
@@ -28,9 +28,10 @@ build)
 	done
 	;;
 package)
-	rm -f "$OUT"/*.tar.gz "$OUT/install.sh" "$OUT/checksums.txt"
+	rm -f "$OUT"/*.tar.gz "$OUT"/*.cdx.json "$OUT/install.sh" "$OUT/checksums.txt"
 	stage=$(mktemp -d)
 	trap 'rm -rf "$stage"' EXIT
+	go build -modfile=tools/go.mod -o "$stage/cyclonedx-gomod" github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod
 	for p in $PLATFORMS; do
 		os=${p%/*} arch=${p#*/}
 		name=savings-preview_${version}_${os}_${arch}
@@ -40,8 +41,13 @@ package)
 		chmod 755 "$stage/$name/savings-preview"
 		cp README.md "$stage/$name/"
 		tar -C "$stage" -czf "$OUT/$name.tar.gz" "$name"
+		# The SBOM lists the modules and Go version recorded in the binary.
+		# GOOS and GOARCH set the platform in its package URLs, which
+		# otherwise name the machine running the release.
+		GOOS=$os GOARCH=$arch "$stage/cyclonedx-gomod" bin -json -std -version "$version" \
+			-output "$OUT/$name.cdx.json" "$stage/$name/savings-preview"
 	done
-	(cd "$OUT" && shasum -a 256 -- *.tar.gz > checksums.txt)
+	(cd "$OUT" && shasum -a 256 -- *.tar.gz *.cdx.json > checksums.txt)
 	cp scripts/install.sh "$OUT/install.sh"
 	cat "$OUT/checksums.txt"
 	;;

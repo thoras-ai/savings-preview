@@ -26,6 +26,7 @@ No flag was removed or renamed, and no flag default changed.
 - Reports from limited history or a single snapshot are marked provisional, with a banner and figures rounded and marked with ~.
 - The report draws peak and mean usage, shows fidelity notes and short spans, has an Auto, Light and Dark theme switch, and opens a dropped `.otlp.json`, `savings-preview.zip` or `report.html`. It is also published on GitHub Pages with two samples.
 - Each release carries `install.sh`, which installs the right binary after checking it against `checksums.txt`, and a Homebrew formula, `savings-preview.rb`. Since the repository is private, `install.sh` needs a logged-in `gh` or `GITHUB_TOKEN` or `GH_TOKEN`, and the formula needs `HOMEBREW_GITHUB_API_TOKEN`. See the README and [releasing.md](docs/releasing.md).
+- Each archive has a CycloneDX SBOM next to it, `savings-preview_<tag>_<os>_<arch>.cdx.json`, listing the Go modules and Go release in its binary. `checksums.txt` lists the SBOMs as well as the archives, so check a partial download with `shasum -a 256 -c --ignore-missing checksums.txt`. See [releasing.md](docs/releasing.md#sboms).
 - Setup guides for Datadog ([datadog-adapter.md](docs/datadog-adapter.md)) and Grafana Cloud ([prometheus-adapter.md](docs/prometheus-adapter.md)), each checked against a live account, with scrubbed recordings that the tests replay.
 
 ### Fixes

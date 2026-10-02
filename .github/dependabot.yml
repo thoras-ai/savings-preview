@@ -1,0 +1,33 @@
+version: 2
+updates:
+  # Moves each SHA-pinned action to the commit of its newest release and
+  # updates the version comment next to it.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      kubernetes:
+        patterns: ["k8s.io/*", "sigs.k8s.io/*"]
+      aws-sdk:
+        patterns: ["github.com/aws/*"]
+
+  # The release and CI tools. A tool directive lists its module as an
+  # indirect requirement, which Dependabot skips unless allowed by name.
+  - package-ecosystem: gomod
+    directory: /tools
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-name: golang.org/x/vuln
+        dependency-type: all
+      - dependency-name: github.com/CycloneDX/cyclonedx-gomod
+        dependency-type: all
