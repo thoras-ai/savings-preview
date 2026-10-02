@@ -1,6 +1,6 @@
 # Security
 
-Savings Preview is a command-line program that runs on your machine with a kubeconfig you choose. It installs nothing in the cluster, changes nothing in it, and sends nothing anywhere except requests to your Kubernetes API server (or to a metrics store URL you pass with `--url`, or to the Datadog API with `savings-preview datadog`), apart from any credential plugin your kubeconfig runs, such as `aws eks get-token`. A kubeconfig for the ServiceAccount in `deploy/rbac/` holds a token and runs no plugin. Everything it produces stays in local files.
+Savings Preview is a command-line program that runs on your machine with a kubeconfig you choose. It installs nothing in the cluster, changes nothing in it, and sends nothing anywhere except requests to your Kubernetes API server (or to a metrics store URL you pass with `--url`, to Google Cloud Monitoring for a project you pass with `--project`, or to the Datadog API with `savings-preview datadog`), apart from any credential plugin your kubeconfig runs, such as `aws eks get-token`. A kubeconfig for the ServiceAccount in `deploy/rbac/` holds a token and runs no plugin. Everything it produces stays in local files.
 
 ## What it reads
 
@@ -18,7 +18,9 @@ Reads usage history from a Prometheus-compatible store (Prometheus, Thanos Query
 
 Through the proxy it calls only these read endpoints of the store: `/api/v1/query`, `/api/v1/query_range`, `/api/v1/status/buildinfo` and `/api/v1/status/config`. The last one is read only to report where an agent-mode Prometheus sends its data; the URLs are printed with credentials removed. The queries select kube-state-metrics and cAdvisor series: container CPU and memory usage, resource requests and limits, pod owners and phase, replica counts, node allocatable, restarts and OOM kills.
 
-The exact PromQL is in `internal/adapters/prometheus/queries.go`. Each series comes back with all of its labels, some of which carry container images; the program keeps only namespace, pod, container, workload and node and drops the rest.
+With `--project` (or a `monitoring.googleapis.com` URL) it reads Google Cloud Monitoring instead and needs no Kubernetes access. It gets an OAuth access token with the `monitoring.read` scope from Google Application Default Credentials or the service account key in `--google-credentials-file`, which means a request to Google's token endpoint or to the metadata server, and sends it to `monitoring.googleapis.com`. There it calls `/api/v1/query` and `/api/v1/query_range` for the project, and `/api/v1/status/buildinfo`, which Cloud Monitoring does not serve. The Monitoring Viewer role (`roles/monitoring.viewer`) is enough; [prometheus-adapter.md](prometheus-adapter.md#google-managed-prometheus-and-gke) shows how to grant it. The token is not printed or logged.
+
+The exact PromQL is in `internal/adapters/prometheus/queries.go`, and for GKE system metrics in `internal/adapters/prometheus/gke.go`. Each series comes back with all of its labels, some of which carry container images; the program keeps only namespace, pod, container, workload and node and drops the rest.
 
 #### The service proxy grant
 
@@ -73,7 +75,7 @@ It contains no Secrets, environment variables, logs, images, annotations, labels
 
 ## Where the data goes
 
-Nowhere, unless you send it. The program makes no network requests other than to the API server, the `--url` store, or the Datadog API. The report page (`scripts/build_report.py`, also built into the binary) is one offline HTML file that reads the output file in the browser and makes no network requests. The copy published on GitHub Pages (`build_report.py --site`) also fetches its two sample files from the same site when one is picked; a file opened there is read in the browser and not uploaded. `run` serves the page and the compact file on 127.0.0.1 on a random port until you press Ctrl-C; the server answers only requests addressed to that address, so it cannot be reached from other machines or read by a web page under another name. Sharing the output file or the zip with Thoras is a separate step that you choose to take.
+Nowhere, unless you send it. The program makes no network requests other than to the API server, the `--url` store, Google Cloud Monitoring and Google's token endpoint with `--project`, or the Datadog API. The report page (`scripts/build_report.py`, also built into the binary) is one offline HTML file that reads the output file in the browser and makes no network requests. The copy published on GitHub Pages (`build_report.py --site`) also fetches its two sample files from the same site when one is picked; a file opened there is read in the browser and not uploaded. `run` serves the page and the compact file on 127.0.0.1 on a random port until you press Ctrl-C; the server answers only requests addressed to that address, so it cannot be reached from other machines or read by a web page under another name. Sharing the output file or the zip with Thoras is a separate step that you choose to take.
 
 ## How to check this
 

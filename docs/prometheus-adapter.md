@@ -1,6 +1,6 @@
 # Prometheus adapter
 
-`savings-preview prometheus` reads a cluster's usage history from a Prometheus-compatible store and writes the OTel file described in [contract.md](contract.md). It reaches an in-cluster store through the Kubernetes API server, so nothing is installed in the cluster and no port-forward is needed. Stores outside the cluster, such as Mimir, Grafana Cloud and Amazon Managed Prometheus, are queried directly by URL; see [Stores outside the cluster](#stores-outside-the-cluster).
+`savings-preview prometheus` reads a cluster's usage history from a Prometheus-compatible store and writes the OTel file described in [contract.md](contract.md). It reaches an in-cluster store through the Kubernetes API server, so nothing is installed in the cluster and no port-forward is needed. Stores outside the cluster, such as Mimir, Grafana Cloud, Amazon Managed Prometheus and Google Managed Prometheus, are queried directly by URL; see [Stores outside the cluster](#stores-outside-the-cluster).
 
 ```
 savings-preview prometheus [--context NAME] [--days 14] [--step 1m] [--out savings-preview.otlp.json]
@@ -14,10 +14,13 @@ savings-preview prometheus [--context NAME] [--days 14] [--step 1m] [--out savin
 | `--step` | 1m | Resolution. Use `5m` for large clusters. |
 | `--target` | discovered | `[https:]namespace/service:port[/path-prefix]`, skips discovery. An `http://` or `https://` URL is the same as `--url`. |
 | `--url` | none | Query a store directly instead of through the API server. Requires `--cluster-name`. |
-| `--backend` | detected from the URL | `prometheus`, `mimir`, `grafana-cloud` or `amp`, for `--url`. |
+| `--backend` | detected from the URL | `prometheus`, `mimir`, `grafana-cloud`, `amp` or `gmp`, for `--url`. |
 | `--tenant` | none | Mimir tenant, sent as `X-Scope-OrgID`. Implies `--backend mimir`. |
 | `--bearer-token-file`, `--basic-auth-file`, `--header-file` | none | Credentials for `--url`, read from a file so they stay out of shell history and process listings: a token, `user:password`, or `Name: value` lines. The environment variables `SAVINGS_PREVIEW_BEARER_TOKEN`, `SAVINGS_PREVIEW_BASIC_AUTH` and `SAVINGS_PREVIEW_HEADERS` hold the same values; a file takes precedence over its variable. |
 | `--aws-region` | from the URL | Region of an Amazon Managed Prometheus workspace whose URL does not name it. |
+| `--project` | none | Google Cloud project to read from Google Managed Prometheus, in place of `--url`. Implies `--backend gmp`. |
+| `--google-credentials-file` | Application Default Credentials | Service account key for Google Managed Prometheus. |
+| `--gke-metrics` | `auto` | What to read from Google Managed Prometheus: `prometheus` (cAdvisor and kube-state-metrics series), `system` (GKE system metrics), or `auto` (the first when the project has both cAdvisor and `kube_pod_owner` series, else the second). |
 | `--max-query-range` | the backend's limit | Longest time range the store accepts in one query, counting range selectors. |
 | `--selector` | none | Label matchers added to every query, such as `cluster="prod-us"`, to read one cluster from a store that holds several. Values may be left unquoted (`cluster=prod-us`). |
 | `--list` | off | Print what discovery finds and exit. |
@@ -103,11 +106,11 @@ Instance type, region and capacity type come from node labels, so kube-state-met
 
 ## Stores outside the cluster
 
-`--url` (or a URL in `--target`) queries a store directly, without the API server. The kubeconfig is not used, so `--cluster-name` is required. `savings-preview run` takes the same flags; it names the cluster after the kubeconfig's when it can read one, and a failing `--url` stops it rather than falling back to polling. The backend is detected from the host: `aps-workspaces.REGION.amazonaws.com` is Amazon Managed Prometheus, `*.grafana.net` is Grafana Cloud, a `--tenant` means Mimir, and anything else is a plain Prometheus-compatible store. `--backend` overrides the detection. The query or remote-write URL a console shows is accepted as well as the base URL.
+`--url` (or a URL in `--target`) queries a store directly, without the API server. The kubeconfig is not used, so `--cluster-name` is required. `savings-preview run` takes the same flags; it names the cluster after the kubeconfig's when it can read one, and a failing `--url` stops it rather than falling back to polling. The backend is detected from the host: `aps-workspaces.REGION.amazonaws.com` is Amazon Managed Prometheus, `*.grafana.net` is Grafana Cloud, `monitoring.googleapis.com` is Google Managed Prometheus, a `--tenant` means Mimir, and anything else is a plain Prometheus-compatible store. `--backend` overrides the detection. The query or remote-write URL a console shows is accepted as well as the base URL.
 
-Credentials never come from flags. Bearer tokens, basic auth and extra headers are read from files or environment variables, and Amazon credentials from the standard AWS chain. They are not printed or logged; the store URL is printed without user info or query string.
+Credentials never come from flags. Bearer tokens, basic auth and extra headers are read from files or environment variables, Amazon credentials from the standard AWS chain, and Google credentials from Application Default Credentials or a key file. They are not printed or logged; the store URL is printed without user info or query string.
 
-Credentials plug in through `prometheus.Auth`, which wraps the HTTP client: `Header`, `Basic`, `Bearer` and `SigV4`, combined with `Chain`. Google and Azure OAuth are not implemented; `prometheus.Unsupported` marks where they go.
+Credentials plug in through `prometheus.Auth`, which wraps the HTTP client: `Header`, `Basic`, `Bearer`, `SigV4` and `Google`, combined with `Chain`. Azure OAuth is not implemented; `prometheus.Unsupported` marks where it goes.
 
 Every store is checked for the labels the queries join on, as described in [Missing data](#missing-data). On Grafana Cloud the check matters most, because Adaptive Metrics can aggregate labels away.
 
@@ -287,3 +290,55 @@ AWS_PROFILE=readonly savings-preview prometheus \
 
 - **Limits:** a query may cover at most 95 days. Range queries are split by day, which also keeps each one within the per-24-hour sample and series budgets.
 - **Metrics:** the workspace holds whatever was remote-written. The AWS managed scraper's sample configuration has no kube-state-metrics job, and without kube-state-metrics the run stops (see [Missing data](#missing-data)).
+
+### Google Managed Prometheus and GKE
+
+```
+savings-preview prometheus --project PROJECT_ID --cluster-name prod-us
+savings-preview run --project PROJECT_ID --selector 'cluster_name="prod-us"'
+```
+
+Google Cloud Monitoring answers PromQL for a whole project at `https://monitoring.googleapis.com/v1/projects/PROJECT_ID/location/global/prometheus`. `--project` builds that URL; the URL itself, or the query URL the console shows, works as `--url` too. The same endpoint serves two kinds of data, and `--gke-metrics` picks one:
+
+- **Managed Prometheus series** (`prometheus`): cAdvisor and kube-state-metrics series collected by Managed Prometheus, read with the same queries as any other store. GKE's managed kube-state-metrics package does not include `kube_pod_owner` or `kube_pod_container_resource_requests`, so this needs a kube-state-metrics the customer runs and scrapes with Managed Prometheus.
+- **GKE system metrics** (`system`): the `kubernetes.io/container/*` and `kubernetes.io/node/*` metrics GKE writes to Cloud Monitoring, free and on by default. In PromQL they are named `kubernetes_io:container_cpu_core_usage_time` and so on.
+
+With `auto`, the default, the run reads Managed Prometheus series when the project has both cAdvisor usage and `kube_pod_owner`, and GKE system metrics otherwise. Most GKE projects end up on system metrics.
+
+- **Credentials:** an OAuth access token from Google Application Default Credentials: `GOOGLE_APPLICATION_CREDENTIALS` (a service account key, or a workload identity federation configuration), the `gcloud auth application-default login` user, or the metadata server, which is how workload identity on GKE and a VM's service account are reached. `--google-credentials-file` names a service account key instead; it must be a key of type `service_account`. The token has the `monitoring.read` scope. Bearer tokens, basic auth and `--tenant` are refused for this backend. Headers from `--header-file` are still sent, for example `X-Goog-User-Project` to bill queries to another project.
+- **What the customer grants:** the Monitoring Viewer role (`roles/monitoring.viewer`) on the project that holds the cluster's metrics, for a service account or a user. For a key file:
+
+  ```
+  gcloud iam service-accounts create savings-preview --project PROJECT_ID
+  gcloud projects add-iam-policy-binding PROJECT_ID \
+    --member serviceAccount:savings-preview@PROJECT_ID.iam.gserviceaccount.com --role roles/monitoring.viewer
+  gcloud iam service-accounts keys create key.json \
+    --iam-account savings-preview@PROJECT_ID.iam.gserviceaccount.com
+  savings-preview run --project PROJECT_ID --google-credentials-file key.json
+  ```
+
+  A user who already has the role can run `gcloud auth application-default login` and skip the key. Delete the key when the run is done.
+- **Several clusters:** a project often holds several clusters. Managed Prometheus series name the cluster in the `cluster` label and system metrics in `cluster_name`; `--selector` accepts either name and applies it to both kinds of series. With system metrics, the run stops when the selected series hold more than one `cluster_name` or `location`, as described in [Stores with several clusters](#stores-with-several-clusters).
+- **Resolution:** Cloud Monitoring keeps about six weeks at full resolution and older data at 10-minute steps. With `--days` above 42 and a step under 10 minutes, the older days have gaps, and the run warns; pull at most 42 days or use `--step 10m`.
+- **Limits:** the documentation states no range or point cap for the PromQL API, only a 200 MB response cap. Range queries are split by day.
+
+#### GKE system metrics
+
+| Contract metric | System metric |
+| --- | --- |
+| `container.cpu.usage` | `rate(kubernetes_io:container_cpu_core_usage_time[5m])` |
+| `container.memory.working_set` | `kubernetes_io:container_memory_used_bytes{memory_type="non-evictable"}` |
+| `k8s.container.cpu.request.desired`, `k8s.container.memory.request.desired` | `kubernetes_io:container_cpu_request_cores`, `kubernetes_io:container_memory_request_bytes` |
+| `k8s.container.cpu.limit.desired`, `k8s.container.memory.limit.desired` | `kubernetes_io:container_cpu_limit_cores`, `kubernetes_io:container_memory_limit_bytes` |
+| `k8s.deployment.pod.desired`, `k8s.statefulset.pod.desired` | `kube_deployment_spec_replicas`, `kube_statefulset_replicas` from GKE's managed kube-state-metrics |
+| `k8s.node.cpu.allocatable`, `k8s.node.memory.allocatable` | `kubernetes_io:node_cpu_allocatable_cores`, `kubernetes_io:node_memory_allocatable_bytes` |
+
+- Container queries select `monitored_resource="k8s_container"` and node queries `monitored_resource="k8s_node"`. A container belongs to the Deployment or StatefulSet named by its `metadata_system_top_level_controller_name` and `metadata_system_top_level_controller_type` labels; containers of other controllers are left out. Without these labels the run stops.
+- The kubelet's working set has no system metric of its own. The non-evictable part of used memory is the closest match.
+- Replica counts come from GKE's managed kube-state-metrics, on by default on Standard clusters from 1.29.2-gke.2000 and Autopilot clusters from 1.27.4-gke.900. Without it, the run warns and lists the replica counts as missing. When Managed Prometheus renamed the series' `namespace` label to `exported_namespace`, that label is used.
+- Request metrics can take up to two minutes to become queryable, so the pull ends three minutes before now.
+- Node resources take `cloud.provider` `gcp` and `cloud.region` from the node's `location` label (a zone's region for a zonal cluster). The instance type and capacity type are not in the metrics and are `unknown`.
+- OOM kills are not read.
+- Resources carry `thoras.source` `gke`.
+
+With Managed Prometheus series, the run stops when `kube_pod_owner` has an `exported_namespace` label: Managed Prometheus replaced the pods' namespace with that of kube-state-metrics, so pods cannot be mapped to workloads. Scrape kube-state-metrics with a ClusterPodMonitoring, which keeps the label, or read system metrics.
