@@ -83,7 +83,7 @@
     } : { cores: model.constants.DEFAULT_NODE.cores, gib: model.constants.DEFAULT_NODE.gib, fromNodes: false };
     var cpuNodes = t.cores / avg.cores, memNodes = t.gib / avg.gib, freed = Math.min(cpuNodes, memNodes);
     var types = {};
-    nodes.forEach(function (n) { types[n.hostType === 'unknown' ? '' : n.hostType] = true; });
+    nodes.forEach(function (n) { if (n.hostType && n.hostType !== 'unknown') types[n.hostType] = true; });
     var counted = t.counted > 0;
     return {
       nodes: nodes.length, types: Object.keys(types).length, priced: data.pricing.priced,
@@ -92,7 +92,7 @@
       mem: { req: counted ? t.reqGiB : NaN, target: counted ? t.reqGiB - t.gib : NaN, used: counted ? t.useGiB : NaN, waste: t.gib },
       mix: mix(nodes),
       freed: { nodes: freed, cpu: cpuNodes, mem: memNodes, whole: Math.min(Math.floor(freed + 1e-9), nodes.length || Infinity), avg: avg },
-      left: t.workloads - t.counted,
+      left: data.workloads.filter(function (p) { return p.status === 'excluded' && (!st.namespaces || st.namespaces.indexOf(p.ns) >= 0); }).length,
       filtered: !!st.namespaces, ranged: !!st.range,
       spot: nodes.some(function (n) { return n.capacity === 'spot' && model.nodePrices[n.hostType] !== undefined; }),
       regions: nodes.some(function (n) { return n.region && n.region !== 'us-east-1' && model.nodePrices[n.hostType] !== undefined; }),
@@ -117,7 +117,8 @@
   // A tile too narrow for both figures breaks the line between them.
   function pair(cores, gib, approx) {
     if (!isFinite(cores)) return '–';
-    return amount(cores, approx) + '\u00a0cores · ' + amount(gib, approx) + '\u00a0GiB';
+    var c = amount(cores, approx);
+    return c + (c.replace('~', '') === '1' ? '\u00a0core · ' : '\u00a0cores · ') + amount(gib, approx) + '\u00a0GiB';
   }
 
   function share(s, key) {
@@ -128,7 +129,7 @@
   function tiles(s, approx) {
     var edge = approx ? 'provisional' : 'default';
     var priced = s.priced === s.nodes ? (s.nodes === 1 ? 'priced' : 'all priced') : s.priced ? s.priced + ' priced' : 'none priced';
-    var nodesContext = s.nodes ? s.types + ' instance ' + ui.plural(s.types, 'type') + ', ' + priced : 'The file lists no nodes';
+    var nodesContext = !s.nodes ? 'The file lists no nodes' : s.types ? s.types + ' instance ' + ui.plural(s.types, 'type') + ', ' + priced : 'Instance type not stated';
     var over = s.ranged ? 'Across all nodes, averaged over the time range' : 'Across all nodes, averaged over the window';
     return '<div class="kpis">' +
       ui.kpiTile({ label: 'Nodes in the file', value: String(s.nodes), context: nodesContext }) +
@@ -144,7 +145,7 @@
   // against requests when the file has no nodes.
   function bar(label, r, cap, unit, approx) {
     var scale = cap || r.req;
-    var figures = amount(r.used, approx) + ' used · ' + amount(r.target, approx) + ' target · ' + amount(r.req, approx) + ' req' +
+    var figures = amount(r.used, approx) + ' used · ' + amount(r.target, approx) + ' right-sized · ' + amount(r.req, approx) + ' req' +
       (cap ? ' · ' + amount(cap, false) + ' ' + unit : ' ' + unit);
     var aria = label + ': ' + figures.replace(/ · /g, ', ').replace(' req', ' requested') + (cap ? ' allocatable' : '');
     return '<div class="cap-label">' + label + '</div>' +
@@ -165,12 +166,17 @@
       notes.push('Workloads request more ' + over.join(' and ') + ' than the nodes in the file can allocate. Requests count every desired replica, ' +
         'including pods that could not be scheduled, and the file may not list every node the workloads ran on.');
     }
+    var under = [s.cpu.used > s.cpu.target ? 'CPU' : '', s.mem.used > s.mem.target ? 'memory' : ''].filter(Boolean);
+    if (under.length) {
+      notes.push('Workloads use more ' + under.join(' and ') + ' than right-sized requests in total, because some use more than they request. ' +
+        'Right-sizing caps each workload at its current request, so it lowers requests and never raises them.');
+    }
     if (s.left) {
       notes.push(s.left + ' ' + ui.plural(s.left, 'workload') + ' with too little data ' + (s.left === 1 ? 'is' : 'are') +
         ' not in the requested and used figures, so the cluster reserves more than shown.');
     }
     var body = isFinite(s.cpu.req) ?
-      '<div class="legend cap-legend"><span><i class="cap-swatch cap-used"></i>Used</span><span><i class="cap-swatch cap-target"></i>Target (usage + headroom)</span>' +
+      '<div class="legend cap-legend"><span><i class="cap-swatch cap-used"></i>Used</span><span><i class="cap-swatch cap-target"></i>Right-sized requests</span>' +
       '<span><i class="cap-swatch cap-req"></i>Requested</span></div>' +
       '<div class="cap-grid">' + bar('CPU', s.cpu, a && a.cores, 'cores', approx) + bar('Memory', s.mem, a && a.gib, 'GiB', approx) + '</div>' :
       '<p class="empty">No workload has complete data, so there is nothing to compare with the nodes.</p>';
@@ -208,8 +214,8 @@
     var of = avg.fromNodes ? 'of ' + s.nodes + ', as capacity freed at the average node ' + size :
       'as capacity freed at the default node ' + size + ', because the file lists no nodes';
     var whole = f.whole >= 1 ?
-      fig(f.whole + ' whole ' + ui.plural(f.whole, 'node'), 'could be removed at the average size, if the cluster autoscaler packs the remaining requests onto fewer nodes.') :
-      fig('Less than one node', 'Not enough freed capacity to remove a whole node of the average size, so right-sizing alone would not lower the node bill.');
+      fig(f.whole + ' whole ' + ui.plural(f.whole, 'node'), 'could be removed at the ' + (avg.fromNodes ? 'average' : 'default') + ' node size, if the cluster autoscaler packs the remaining requests onto fewer nodes.') :
+      fig('Less than one node', 'Not enough freed capacity to remove a whole node of the ' + (avg.fromNodes ? 'average' : 'default') + ' size, so right-sizing alone would not lower the node bill.');
     return '<div class="card"><h2>Nodes that could be freed</h2><div class="sub">' + (s.filtered ? 'Waste in the selected namespaces' : 'Waste') + ' expressed as node equivalents</div>' +
       '<div class="cl-freed">' + fig(nodeFigure(f.nodes, approx) + ' ' + ui.plural(f.nodes === 1 ? 1 : 2, 'node'), esc(of)) + whole + '</div>' +
       '<p class="cl-note">Freed requests lower the bill only when the cluster autoscaler removes nodes. CPU waste alone would free ' +

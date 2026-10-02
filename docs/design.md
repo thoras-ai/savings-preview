@@ -134,7 +134,7 @@ A row of options in a fully rounded track (`--surface-inset` with a `--border-li
 
 ### Capacity bar
 
-A flat bar for one resource against a capacity: the nodes' allocatable CPU or memory, or the requests when the file has no nodes. Three layers start at the left edge: requests hatched in ruby-400, the right-sized target in iris-300 (iris-500 in dark), and usage in zinc-800 (zinc-200 in dark) on top. The track is `--surface-inset` with a 1px `--border-emphasized` edge, and a layer larger than the capacity stops at the edge. The figures sit to the right in Roboto Mono 12px `--text-light`, and the legend above names each layer with a matching swatch.
+A flat bar for one resource against a capacity: the nodes' allocatable CPU or memory, or the requests when the file has no nodes. Three layers start at the left edge: requests hatched in ruby-400, right-sized requests in iris-300 (iris-500 in dark), which are the target capped at each workload's current request, so requests minus right-sized requests is the waste,, and usage in zinc-800 (zinc-200 in dark) on top. The track is `--surface-inset` with a 1px `--border-emphasized` edge, and a layer larger than the capacity stops at the edge. The figures sit to the right in Roboto Mono 12px `--text-light`, and the legend above names each layer with a matching swatch.
 
 ### Alert
 

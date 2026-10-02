@@ -224,3 +224,42 @@ test('an amount too small for two decimals is not shown as zero', () => {
   const html = cluster.markup(figures(data).s, false);
   assert.match(html, /&lt;0\.01 cores · &lt;0\.01 GiB/);
 });
+
+test('a workload using more than it requests is explained, since right-sized requests never rise', () => {
+  const data = model.prepare(doc({ workloads: [{ cpu: 0.3, mem: 0.1, cpuReq: 0.2, memReq: 1 }], nodes: [{ type: 'm5.xlarge', cores: 4, gib: 16 }] }));
+  const { s } = figures(data);
+  assert.ok(s.cpu.used > s.cpu.target);
+  close(s.cpu.target, 0.2);
+  const html = cluster.markup(s, false);
+  assert.match(html, /Right-sized requests/);
+  assert.match(html, /use more CPU than right-sized requests in total/);
+  assert.doesNotMatch(html, /use more CPU and memory/);
+});
+
+test('one core reads in the singular, rounded or not', () => {
+  const data = model.prepare(doc({ n: 1, workloads: [{ cpu: 0.2, mem: 1, cpuReq: 1.04, memReq: 2, tier: 3 }] }));
+  assert.match(cluster.markup(figures(data).s, true), /~1 core · ~2 GiB/);
+  assert.match(cluster.markup(figures(data).s, false), />1 core · 2 GiB</);
+});
+
+test('nodes without an instance type are not counted as a type', () => {
+  const data = model.prepare(doc({ workloads: [{ cpu: 1, mem: 1, cpuReq: 2, memReq: 2 }], nodes: [{ type: 'unknown', cores: 4, gib: 16 }] }));
+  const s = figures(data).s;
+  assert.strictEqual(s.types, 0);
+  assert.match(cluster.markup(s, false), /Instance type not stated/);
+});
+
+test('workloads outside the time range are not described as lacking data', () => {
+  const data = model.prepare(fixture());
+  const t = model.compute(data).series.t;
+  const s = figures(data, '#from=' + t[10] + '&to=' + t[20]).s;
+  assert.strictEqual(s.left, 1);
+  assert.strictEqual(figures(data, '#ns=shop').s.left, 0);
+});
+
+test('without nodes the whole-node copy names the default node size', () => {
+  const data = model.prepare(doc({ workloads: [{ cpu: 0.1, mem: 0.1, cpuReq: 10, memReq: 40 }] }));
+  const html = cluster.markup(figures(data).s, false);
+  assert.match(html, /removed at the default node size/);
+  assert.doesNotMatch(html, /average/);
+});
