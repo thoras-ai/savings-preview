@@ -173,7 +173,7 @@ func (c *compactor) resource(rm *resourceIn) (contract.Resource, error) {
 	in := map[string][]contract.Point{}
 	var names []string
 	for _, sm := range rm.ScopeMetrics {
-		if v := sm.Scope.Version; v != contract.ScopeVersion {
+		if v := sm.Scope.Version; v != "" && v != contract.ScopeVersion {
 			return res, fmt.Errorf("the file is contract version %q and this release reads only %s; collect the data again with this release", v, contract.ScopeVersion)
 		}
 		for _, m := range sm.Metrics {

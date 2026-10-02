@@ -2,7 +2,17 @@
 
 ## Files written by v0.1.0 must be collected again
 
-This release writes contract version 1.0.0, the first stable version of the file format (see [contract.md](contract.md)). It cannot read data files written by v0.1.0: the report page, `savings-preview export --compact` and `scripts/validate_contract.py` reject them. Run this release against the cluster to collect the data again.
+**What changes.** This release writes contract version 1.0.0, the first stable version of the file format (see [contract.md](contract.md)), and reads only that version. The report page, `savings-preview export --compact` and `scripts/validate_contract.py` reject data files written by v0.1.0, including the data inside a v0.1.0 `report.html` dropped onto the page. `savings-preview export` without `--compact` still writes the data out of a v0.1.0 `report.html`, as it is, and only v0.1.0 tools read the file it writes.
+
+**Who it affects.** Anyone with data files, zips or `report.html` pages written by v0.1.0 who wants to open them with this release.
+
+**Why.** v0.1.0 labeled its files 1.2.0. With the current format numbered 1.0.0, a check on the major version alone cannot tell a v0.1.0 file from a later 1.x file, so readers check the exact version.
+
+**How to upgrade.** Run this release against the cluster to collect the data again. When the readings directory of a v0.1.0 poll is still on disk, export it instead: `savings-preview export -o savings-preview.otlp.json savings-preview.otlp.json.readings` writes a 1.0.0 file from the readings. Data from Prometheus-compatible stores and Datadog needs a new run.
+
+**How to tell which you have.** The `version` of the `scope` in a v0.1.0 file is `1.2.0`. The page reports "This file is contract version 1.2.0 and this page reads only 1.0.0", `export --compact` reports `the file is contract version "1.2.0" and this release reads only 1.0.0`, and the validator reports `scope version must be 1.0.0`.
+
+**How to roll back.** A v0.1.0 `report.html` still opens on its own, since it carries its own page. The v0.1.0 binary and its page read v0.1.0 files.
 
 ## The zip carries its data once, inside report.html
 

@@ -152,7 +152,7 @@ A reader averaging a held series over time weights each point by the time until 
 
 ## Versioning
 
-The scope `version` names the contract a file follows. Readers and the validator accept only the versions they know. A change that existing readers cannot handle bumps the major version.
+The scope `version` names the contract a file follows. Each release reads only the versions it knows and rejects other files with a message naming the version. A change that keeps every existing file valid with the same meaning bumps the minor version; any other change bumps the major version. Minor versions 1.1 to 1.3 are not used, because files from development builds before 1.0.0 carry them.
 
 ## Out of scope
 
