@@ -1,18 +1,32 @@
 # Upgrading from v0.1.0
 
+## Files written by v0.1.0 must be collected again
+
+**What changes.** This release writes contract version 1.0.0, the first stable version of the file format (see [contract.md](contract.md)), and reads only that version. The report page, `savings-preview export --compact` and `scripts/validate_contract.py` reject data files written by v0.1.0, including the data inside a v0.1.0 `report.html` dropped onto the page. `savings-preview export` without `--compact` still writes the data out of a v0.1.0 `report.html`, as it is, and only v0.1.0 tools read the file it writes.
+
+**Who it affects.** Anyone with data files, zips or `report.html` pages written by v0.1.0 who wants to open them with this release.
+
+**Why.** v0.1.0 labeled its files 1.2.0. With the current format numbered 1.0.0, a check on the major version alone cannot tell a v0.1.0 file from a later 1.x file, so readers check the exact version.
+
+**How to upgrade.** Run this release against the cluster to collect the data again. When the readings directory of a v0.1.0 poll is still on disk, export it instead: `savings-preview export -o savings-preview.otlp.json savings-preview.otlp.json.readings` writes a 1.0.0 file from the readings. Data from Prometheus-compatible stores and Datadog needs a new run.
+
+**How to tell which you have.** The `version` of the `scope` in a v0.1.0 file is `1.2.0`. The page reports "This file is contract version 1.2.0 and this page reads only 1.0.0", `export --compact` reports `the file is contract version "1.2.0" and this release reads only 1.0.0`, and the validator reports `scope version must be 1.0.0`.
+
+**How to roll back.** A v0.1.0 `report.html` still opens on its own, since it carries its own page. The v0.1.0 binary and its page read v0.1.0 files.
+
 ## The zip carries its data once, inside report.html
 
-**What changes.** In v0.1.0 the zip written by `run` held `savings-preview.otlp.json`, the full contract file, as well as `summary.json` and `report.html`, which carried the same data again. The zip now holds only `summary.json` and `report.html`, and the data inside `report.html` is a compact copy at 15-minute steps (contract 1.3.0, see [contract.md](contract.md#compact-files)). The full file is not in the zip. It stays next to the zip on the machine that ran the tool, and `summary.json` names it in `full_data`.
+**What changes.** In v0.1.0 the zip written by `run` held `savings-preview.otlp.json`, the full contract file, as well as `summary.json` and `report.html`, which carried the same data again. The zip now holds only `summary.json` and `report.html`, and the data inside `report.html` is a compact copy at 15-minute steps (see [contract.md](contract.md#compact-files)). The full file is not in the zip. It stays next to the zip on the machine that ran the tool, and `summary.json` names it in `full_data`.
 
-**Who it affects.** Anyone who takes `savings-preview.otlp.json` out of a zip: their tools find no such entry. Anyone who reads compact data with the v0.1.0 report page or validator, or with their own scripts: readers that do not handle `thoras.held_metrics` treat the requests and replica counts of a compact file as mostly missing and misprice it, and the v0.1.0 validator rejects the fidelity tier of compact resources that claim tier 1 or 2 (data at 300 seconds or finer over 7 days or more). People who open `report.html` or read `summary.json` keep working: `report.html` carries a page that reads compact files, and `summary.json` keeps its fields, though its totals now come from the compact file (see below).
+**Who it affects.** Anyone who takes `savings-preview.otlp.json` out of a zip: their tools find no such entry. People who open `report.html` or read `summary.json` keep working: `report.html` carries a page that reads compact files, and `summary.json` keeps its fields, though its totals now come from the compact file (see below).
 
 **Why.** Fourteen days of 1-minute data for 1,000 workload-containers is about 6.3 GB, which a browser cannot load and an email cannot carry. The compact copy is about 330 MB, and the zip holding it twice was 91 MB; with the data once it is 46 MB. A gzipped copy of the data file inside the zip would not help, since the zip already compresses each entry.
 
-**How to upgrade.** Write the data file out of the page with `savings-preview export -o savings-preview.otlp.json report.html`; the zip comment gives the same command. The file it writes is the compact copy. Read it with the report page or `scripts/validate_contract.py` from this release or later, and have scripts handle `thoras.held_metrics` (a held point's value lasts until the next point) and `thoras.source_step_seconds`, as [contract.md](contract.md#held-metrics) describes. For full-resolution data, ask for the file named in `summary.json` `full_data.file`, or run `savings-preview export` on the poll readings.
+**How to upgrade.** Write the data file out of the page with `savings-preview export -o savings-preview.otlp.json report.html`; the zip comment gives the same command. The file it writes is the compact copy. For full-resolution data, ask for the file named in `summary.json` `full_data.file`, or run `savings-preview export` on the poll readings.
 
 **How to tell which you have.** A new zip has no `savings-preview.otlp.json` entry, its `summary.json` has `compact_step_seconds` and `full_data`, and its archive comment (`unzip -z`) says that `report.html` carries a compact copy. A v0.1.0 zip has the data file and none of these.
 
-**How to roll back.** Run v0.1.0 to get a zip with the full file, or send the full file from disk alongside the zip. `savings-preview export` also takes a v0.1.0 `report.html` and writes out the full file it carries.
+**How to roll back.** Run v0.1.0 to get a zip with the full file, or send the full file from disk alongside the zip.
 
 ## summary.json
 

@@ -192,8 +192,11 @@ class RejectTest(unittest.TestCase):
         self.assertHas("capacity_type")
 
     def test_scope_version(self):
-        self.app["scopeMetrics"][0]["scope"]["version"] = "2.0.0"
-        self.assertHas("scope version")
+        for version in ("1.2.0", "2.0.0"):
+            with self.subTest(version=version):
+                self.setUp()
+                self.app["scopeMetrics"][0]["scope"]["version"] = version
+                self.assertHas("scope version must be 1.0.0")
 
     def test_datapoint_attributes_rejected(self):
         metrics(self.app)[0]["gauge"]["dataPoints"][0]["attributes"] = [

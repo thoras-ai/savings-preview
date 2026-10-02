@@ -20,13 +20,11 @@ With [gh](https://cli.github.com) logged in:
 
     gh release download -R thoras-ai/savings-preview -p install.sh -O - | VERSION=v0.2.0 INSTALL_DIR=~/bin sh
 
-Without gh, the script downloads through the GitHub API with `curl`, using `GITHUB_TOKEN` or `GH_TOKEN`. The token needs read access to the repository's contents.
+Without gh, download `install.sh` from the release page and run it with a token. The script then downloads through the GitHub API with `curl`, using `GITHUB_TOKEN` or `GH_TOKEN`. The token needs read access to the repository's contents.
 
-With Homebrew, once the tap is published (see `docs/releasing.md`):
+    GITHUB_TOKEN=<token> sh install.sh
 
-    brew tap thoras-ai/tap https://github.com/thoras-ai/homebrew-tap
-    export HOMEBREW_GITHUB_API_TOKEN=$(gh auth token)
-    brew install thoras-ai/tap/savings-preview
+A Homebrew release is coming.
 
 Or download an archive from the release page, check it with `shasum -a 256 -c checksums.txt --ignore-missing`, and put the `savings-preview` binary on `PATH`.
 

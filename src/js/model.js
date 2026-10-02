@@ -8,6 +8,7 @@
   var PEAK_WINDOW_SECONDS = 900;
   var TARGET_HEADROOM = 1.1;
   var DEFAULT_NODE = { cores: 4, gib: 16, hourly: 0.192 };
+  var CONTRACT_VERSION = '1.0.0';
 
   // On-demand Linux list prices in USD per hour, AWS us-east-1.
   var NODE_PRICES = {
@@ -99,7 +100,9 @@
       if (rm.schemaUrl && !contract.schemaUrl) contract.schemaUrl = String(rm.schemaUrl);
       var series = {};
       (rm.scopeMetrics || []).forEach(function (sm) {
-        if (sm.scope && sm.scope.version && !contract.version) contract.version = String(sm.scope.version);
+        var version = sm.scope && sm.scope.version ? String(sm.scope.version) : '';
+        if (version && version !== CONTRACT_VERSION) throw new Error('This file is contract version ' + version + ' and this page reads only ' + CONTRACT_VERSION + '. Collect the data again with the current savings-preview.');
+        if (version && !contract.version) contract.version = version;
         (sm.metrics || []).forEach(function (m) { series[m.name] = readSeries(m); });
       });
       var kind = a['k8s.deployment.name'] ? 'deployment' : a['k8s.statefulset.name'] ? 'statefulset' : null;

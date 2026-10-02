@@ -14,7 +14,7 @@ import (
 const (
 	SchemaURL    = "https://opentelemetry.io/schemas/1.44.0"
 	ScopeName    = "thoras.savings_preview"
-	ScopeVersion = "1.3.0"
+	ScopeVersion = "1.0.0"
 	day          = 86400
 )
 
