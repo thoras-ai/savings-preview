@@ -6,8 +6,9 @@ A read-only CLI that reads a cluster's existing usage history, writes it as one 
 - `fixtures/savings-preview.otlp.json`: a synthetic file that follows the contract. Regenerate it with `python3 scripts/gen_fixture.py`.
 - `scripts/validate_contract.py FILE`: checks a file against the contract.
 - `src/` and `scripts/build_report.py`: the report page. It reads one contract file and shows spend, savings, a requested-versus-target chart and a workload table.
+- `docs/prometheus-adapter.md`: the Prometheus adapter. Build it with `go build -o bin/savings-preview ./cmd/savings-preview`.
 
-Run the tests with `python3 -m unittest discover -s tests`. Python 3, standard library only.
+Run the Go tests with `go test ./...`, the contract tests with `python3 -m unittest discover -s tests`, and the page tests with `node --test tests/report_model.test.js`. The scripts need Python 3 and the standard library only.
 
 ## Report page
 
@@ -24,5 +25,3 @@ To try it with the fixture:
 The savings math is in `src/js/model.js`. The target is 1.1 times the trailing 15-minute maximum of usage, per workload. Waste is the request above the target. Cost is the larger of the CPU and memory cost, priced from the node resources when their instance types are in the built-in AWS price table, and from a 4-core, 16 GiB, $0.192 per hour node otherwise. A container missing a required series is listed but not counted.
 
 `src/styles/primitives.css` and `src/styles/semantic.css` are copies of the dashboard's design tokens (`dashboard/src/styles/tokens/`). Re-copy them to pick up token changes; `zinc.css` supplies the Tailwind zinc values they reference.
-
-Run the page tests with `node --test tests/report_model.test.js`.
