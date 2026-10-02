@@ -7,6 +7,7 @@ A read-only CLI that reads a cluster's existing usage history, writes it as one 
 - `scripts/validate_contract.py FILE`: checks a file against the contract.
 - `src/` and `scripts/build_report.py`: the report page. It reads one contract file and shows spend, savings, a requested-versus-target chart and a workload table.
 - `docs/prometheus-adapter.md`: the Prometheus adapter. Build it with `go build -o bin/savings-preview ./cmd/savings-preview`.
+- `docs/releasing.md`: how a `v*` tag becomes a GitHub release with binaries and checksums.
 
 Run the Go tests with `go test ./...`, the contract tests with `python3 -m unittest discover -s tests`, and the page tests with `node --test tests/report_model.test.js`. The scripts need Python 3 and the standard library only.
 
