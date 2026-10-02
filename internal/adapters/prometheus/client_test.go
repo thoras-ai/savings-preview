@@ -93,11 +93,13 @@ func TestRetriesServerErrors(t *testing.T) {
 		return 200, vector(1)
 	}
 	c := f.client(t)
+	var waits []time.Duration
+	c.sleep = func(_ context.Context, d time.Duration) error { waits = append(waits, d); return nil }
 	if _, err := c.Query(context.Background(), "x", time.Time{}); err != nil {
 		t.Fatal(err)
 	}
-	if n != 2 {
-		t.Errorf("want one retry, got %d requests", n)
+	if n != 2 || len(waits) != 1 || waits[0] != 500*time.Millisecond {
+		t.Errorf("want one retry after 500ms, got %d requests and waits %v", n, waits)
 	}
 }
 

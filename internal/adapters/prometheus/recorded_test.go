@@ -106,7 +106,7 @@ func loadRecording(t *testing.T, name string) *recording {
 func TestReplayMimir(t *testing.T) {
 	rec := loadRecording(t, "testdata/mimir.json")
 	p := &replayer{r: rec}
-	file, rep, err := Run(context.Background(), Options{Client: &Client{G: p, Retries: 1}, Cluster: "minikube",
+	file, rep, err := Run(context.Background(), Options{Client: &Client{G: p, Retries: 1, sleep: noSleep}, Cluster: "minikube",
 		Days: rec.Days, Step: time.Duration(rec.StepS) * time.Second, Now: time.Unix(rec.Now, 0), Concurrency: 1})
 	if err != nil {
 		t.Fatalf("%v (requests not in the recording: %v)", err, p.missed)
