@@ -10,12 +10,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
+	"runtime/metrics"
 	"slices"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/thoras-ai/savings-preview/internal/contract"
 	"github.com/thoras-ai/savings-preview/internal/savings"
@@ -305,7 +305,9 @@ func TestCompactFixture(t *testing.T) {
 
 func TestCompactSynthetic(t *testing.T) {
 	var full bytes.Buffer
-	if err := (synth{workloads: 10, days: 7, step: 60}).write(&full); err != nil {
+	// Five workloads cover each case synth makes: workload 0 scales with
+	// load, 1 and 4 change their requests and 3 has an outage.
+	if err := (synth{workloads: 5, days: 2, step: 60}).write(&full); err != nil {
 		t.Fatal(err)
 	}
 	small, st := compactBytes(t, full.Bytes())
@@ -324,7 +326,7 @@ func TestCompactSynthetic(t *testing.T) {
 	if got := c["ns-3/app-3/app"].attrs["thoras.held_metrics"]; !slices.Contains(got.([]string), contract.CPURequest) {
 		t.Errorf("app-3 shares its outage with its usage, so its requests hold across it: %v", got)
 	}
-	if _, held := c["ns-3/app-3"].attrs["thoras.held_metrics"]; held || len(c["ns-3/app-3"].metrics[contract.DeploymentPods]) < 600 {
+	if _, held := c["ns-3/app-3"].attrs["thoras.held_metrics"]; held || len(c["ns-3/app-3"].metrics[contract.DeploymentPods]) < 2*96-12 {
 		t.Error("the replica count of app-3 has a gap, so it stays dense")
 	}
 	checkTotals(t, full.Bytes(), small, 0.002, 0.015)
@@ -485,49 +487,58 @@ type countingWriter struct{ n int64 }
 
 func (c *countingWriter) Write(p []byte) (int, error) { c.n += int64(len(p)); return len(p), nil }
 
-// TestCompactLarge compacts 14 days of 1-minute data for 1,000
-// workload-containers as a stream and checks the size of the result and that
-// memory stays bounded.
-func TestCompactLarge(t *testing.T) {
-	if testing.Short() || raceDetector {
-		t.Skip("takes about a minute")
-	}
-	var peak atomic.Uint64
-	stop := make(chan struct{})
-	sampled := make(chan struct{})
-	go func() {
-		defer close(sampled)
-		var ms runtime.MemStats
-		for {
-			select {
-			case <-stop:
-				return
-			case <-time.After(25 * time.Millisecond):
-			}
-			runtime.ReadMemStats(&ms)
-			if ms.HeapInuse > peak.Load() {
-				peak.Store(ms.HeapInuse)
-			}
-		}
-	}()
+// compactHeap compacts s as a stream and returns how far the live heap grew
+// above where it started, sampled as the input is read, with the sizes of the
+// input and the output. A low GC target makes collections frequent, so the
+// live heap of the last collection stays close to what is held.
+func compactHeap(t *testing.T, s synth) (growth uint64, in, out int64) {
+	t.Helper()
+	defer debug.SetGCPercent(debug.SetGCPercent(5))
+	live := []metrics.Sample{{Name: "/gc/heap/live:bytes"}}
+	runtime.GC()
+	metrics.Read(live)
+	base, peak := live[0].Value.Uint64(), live[0].Value.Uint64()
 	pr, pw := io.Pipe()
 	var full, small countingWriter
-	go func() { pw.CloseWithError(synth{workloads: 500, days: 14, step: 60}.write(io.MultiWriter(pw, &full))) }()
-	start := time.Now()
-	st, err := Compact(pr, &small, DefaultStep)
-	close(stop)
-	<-sampled
-	if err != nil {
+	go func() { pw.CloseWithError(s.write(io.MultiWriter(pw, &full))) }()
+	r := sampledReader{r: pr, sample: func() {
+		metrics.Read(live)
+		peak = max(peak, live[0].Value.Uint64())
+	}}
+	if _, err := Compact(&r, &small, DefaultStep); err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("%d resources: %.0f MB of 1-minute data to %.0f MB at 15 minutes in %s, peak heap %.0f MB",
-		st.Resources, float64(full.n)/1e6, float64(small.n)/1e6, time.Since(start).Round(time.Second), float64(peak.Load())/1e6)
-	if small.n > 400e6 {
-		t.Errorf("compact file is %d bytes", small.n)
+	return peak - base, full.n, small.n
+}
+
+type sampledReader struct {
+	r      io.Reader
+	n      int
+	sample func()
+}
+
+func (s *sampledReader) Read(p []byte) (int, error) {
+	if s.n++; s.n%16 == 0 {
+		s.sample()
 	}
-	// The heap includes the generator, which runs in the same process.
-	if p := peak.Load(); p > 1<<30 {
-		t.Errorf("peak heap %d bytes", p)
+	return s.r.Read(p)
+}
+
+// TestCompactStreams compacts a day of 1-minute data for 4 and for 32
+// workload-containers and checks that the heap does not grow with the number
+// of resources, and that the result is a fraction of the input.
+func TestCompactStreams(t *testing.T) {
+	few, fewIn, fewOut := compactHeap(t, synth{workloads: 2, days: 1, step: 60})
+	many, manyIn, manyOut := compactHeap(t, synth{workloads: 16, days: 1, step: 60})
+	t.Logf("heap growth %.1f MB compacting %.1f MB to %.1f MB, %.1f MB compacting %.1f MB to %.1f MB",
+		float64(few)/1e6, float64(fewIn)/1e6, float64(fewOut)/1e6, float64(many)/1e6, float64(manyIn)/1e6, float64(manyOut)/1e6)
+	// The heap includes the generator, which runs in the same process and
+	// holds one resource at a time.
+	if many > few+4<<20 || many > uint64(manyIn)/2 {
+		t.Errorf("heap grew %d bytes for %d bytes of input and %d for %d", few, fewIn, many, manyIn)
+	}
+	if manyOut > manyIn/8 {
+		t.Errorf("compact file is %d bytes from %d", manyOut, manyIn)
 	}
 }
 
