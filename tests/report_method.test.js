@@ -90,6 +90,7 @@ test('a polled file reads as provisional, with its rolled-up peaks named', () =>
   assert.ok(printed.includes('print-provisional'));
   assert.ok(text(printed).includes(ui.money(ctx.result.totals.savings, true)));
   assert.match(ui.money(ctx.result.totals.savings, true), /^~/);
+  assert.ok(text(printed).includes('priced at the default node, 4 cores, 16 GiB, $0.192 per hour, averaged'));
 });
 
 test('the printed summary shows the totals the parity test checks against the Go figures', () => {

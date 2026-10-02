@@ -43,7 +43,7 @@
     return 'is left out: ' + reason.charAt(0).toLowerCase() + reason.slice(1);
   }
 
-    function confidence(r, level, st) {
+  function confidence(r, level, st) {
     var t = r.totals, out = '<p>' + ui.confidencePill(level) + ' ' + esc(summary.confidenceText(r.fidelity, level, st.peakMinutes)) + '</p>';
     var left = r.workloads.filter(function (w) { return !w.series; });
     if (left.length) {
@@ -89,11 +89,18 @@
     }).join('') + '</div></div>';
   }
 
+  function pricedWith(p) {
+    var d = SP.model.constants.DEFAULT_NODE;
+    if (p.custom) return 'at ' + p.basis;
+    if (!p.priced) return 'at the default node, ' + d.cores + ' cores, ' + d.gib + ' GiB, $' + d.hourly + ' per hour';
+    return 'from the node inventory (' + p.basis + ')';
+  }
+
   function method(r, st) {
     var scope = st.namespaces ? ' Only the namespaces ' + st.namespaces.join(', ') + ' are counted.' : '';
     return '<div class="print-box"><h2>How the figure is computed</h2><p>' + esc('Target is ' + ui.num(1 + st.headroom, 2) + ' times the highest usage in any ' +
       st.peakMinutes + '-minute window, per workload, for CPU and memory. Waste is the amount requested above the target. A workload’s cost is the larger of its CPU and memory cost, priced ' +
-      (r.pricing.custom ? 'at ' + r.pricing.basis : 'from the node inventory (' + r.pricing.basis + ')') + ', averaged over ' + (st.range ? 'the selected time range' : 'the window') + ' and annualized at 8,760 hours. Replica counts are taken as they were; horizontal scaling is out of scope.' + scope) + '</p></div>';
+      pricedWith(r.pricing) + ', averaged over ' + (st.range ? 'the selected time range' : 'the window') + ' and annualized at 8,760 hours. Replica counts are taken as they were; horizontal scaling is out of scope.' + scope) + '</p></div>';
   }
 
   // now is the print date; tests pass a fixed one.
