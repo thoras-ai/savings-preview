@@ -44,7 +44,7 @@ Run every test with `make test`, or the Go tests with `go test ./...`, the contr
 
 `python3 scripts/build_report.py [OUTDIR]` writes `OUTDIR/index.html` (default `dist/`): one file with the scripts, styles and fonts inlined. It makes no network requests, so it works offline.
 
-The page is one report in six numbered sections, read top to bottom: summary, where the money is, workloads, cluster and nodes, assumptions, and data and method. A bar under the header lists them and underlines the one in view. Where the money is and cluster and nodes are placeholders for now; assumptions lists the settings in effect, and data and method lists the workloads the totals leave out. The page reads the file once and recomputes every section when a setting changes. The settings live in the URL hash, so a link opens the same view; each key is written only when it differs from its default:
+The page is one report in six numbered sections, read top to bottom: summary, where the money is, workloads, cluster and nodes, assumptions, and data and method. A bar under the header lists them and underlines the one in view. Workloads lists every workload in the file, with a filter and pages of 50; selecting one opens its drill-down: requested, usage and target over time with OOM kills marked, the per-pod requests Thoras would set, and what could make the saving smaller or unsafe (OOM kills, limits below the peak-safe value, provisional data). Where the money is and cluster and nodes are placeholders for now; assumptions lists the settings in effect, and data and method lists the workloads the totals leave out. The page reads the file once and recomputes every section when a setting changes. The settings live in the URL hash, so a link opens the same view; each key is written only when it differs from its default:
 
 | Key | Meaning | Default |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ The page is one report in six numbered sections, read top to bottom: summary, wh
 | `ns` | Namespaces to count, comma separated | All |
 | `from`, `to` | Time range, in Unix seconds | The whole file |
 | `cost` | Loaded cost of an engineer per year, in USD | `200000` |
-| `workload` | Workload in focus, as `namespace/kind/name` | None |
+| `workload` | Workload whose drill-down the workloads section shows, as `namespace/kind/name` | None |
 
 For example, `index.html#section=workloads&headroom=20&ns=shop,data`. A value that does not parse is ignored. With the defaults, the totals match the CLI's `summary.json`.
 

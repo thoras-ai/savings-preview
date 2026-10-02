@@ -459,17 +459,24 @@ type jsResult struct {
 	} `json:"fidelity"`
 	Basis  string             `json:"basis"`
 	Totals map[string]float64 `json:"totals"`
+	Rows   map[string]float64 `json:"rows"`
 }
 
 // The page loads a file once and recomputes it whenever a lever changes, so
 // the script computes with other levers first and then with the defaults.
+// rows sums the workloads section's figures over the workloads it counts.
 const nodeScript = `const fs = require('fs');
 const model = require(process.argv[2]);
-const out = process.argv.slice(3).map(f => {
+const workloads = require(process.argv[3]);
+const out = process.argv.slice(4).map(f => {
   const data = model.prepare(JSON.parse(fs.readFileSync(f, 'utf8')));
   model.compute(data, { headroom: 1.5, peakWindow: 3600, rates: { perCore: 1, perGiB: 1 } });
   const r = model.compute(data, model.defaultLevers);
-  return { cluster: r.cluster, fidelity: r.fidelity, basis: r.pricing.basis, totals: r.totals };
+  const rows = { spend: 0, savings: 0, cores: 0, gib: 0 };
+  workloads.rows(data, r).filter(w => w.status !== 'excluded').forEach(w => {
+    rows.spend += w.annualSpend; rows.savings += w.annualSavings; rows.cores += w.wasteCores; rows.gib += w.wasteGiB;
+  });
+  return { cluster: r.cluster, fidelity: r.fidelity, basis: r.pricing.basis, totals: r.totals, rows };
 });
 process.stdout.write(JSON.stringify(out));
 `
@@ -480,6 +487,10 @@ func TestParityWithModelJS(t *testing.T) {
 		t.Skip("node not on PATH")
 	}
 	modelJS, err := filepath.Abs("../../src/js/model.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workloadsJS, err := filepath.Abs("../../src/js/section-workloads.js")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -504,7 +515,7 @@ func TestParityWithModelJS(t *testing.T) {
 	if err := os.WriteFile(script, []byte(nodeScript), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command(nodeBin, append([]string{script, modelJS}, files...)...).Output()
+	out, err := exec.Command(nodeBin, append([]string{script, modelJS, workloadsJS}, files...)...).Output()
 	if err != nil {
 		t.Fatalf("node: %v", err)
 	}
@@ -546,6 +557,10 @@ func TestParityWithModelJS(t *testing.T) {
 				{"reqGiB", got.Totals.RequestedGiB, w.Totals["reqGiB"]},
 				{"workloads", float64(got.Totals.Workloads), w.Totals["workloads"]},
 				{"counted", float64(got.Totals.Counted), w.Totals["counted"]},
+				{"workload rows spend", got.Totals.AnnualSpend, w.Rows["spend"]},
+				{"workload rows savings", got.Totals.AnnualSavings, w.Rows["savings"]},
+				{"workload rows wasteCores", got.Totals.WasteCores, w.Rows["cores"]},
+				{"workload rows wasteGiB", got.Totals.WasteGiB, w.Rows["gib"]},
 			}
 			for _, n := range nums {
 				if !same(n.got, n.want) {
