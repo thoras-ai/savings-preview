@@ -6,12 +6,34 @@ A read-only CLI that reads a cluster's existing usage history, writes it as one 
 
 The report page is also published at https://curly-dollop-gw8yzn1.pages.github.io/. The site is private: it needs a GitHub login with access to the thoras-ai organization. It opens a `savings-preview.otlp.json`, a `savings-preview.zip` or a `report.html` in the browser, and nothing is uploaded.
 
+## Install
+
+The repository is private, so every download needs a GitHub login or token with access to it.
+
+With [gh](https://cli.github.com) logged in:
+
+    gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh
+
+`install.sh` picks the archive for this machine (macOS or Linux, amd64 or arm64), checks it against the release's `checksums.txt`, and installs `savings-preview` into `~/.local/bin` when that is on `PATH`, or `/usr/local/bin` otherwise. It asks before using sudo, and stops without installing anything when a checksum is missing or does not match. Set `VERSION=v0.2.0` to install a release other than the latest, and `INSTALL_DIR` to install somewhere else:
+
+    gh release download -R thoras-ai/savings-preview -p install.sh -O - | VERSION=v0.2.0 INSTALL_DIR=~/bin sh
+
+Without gh, the script downloads through the GitHub API with `curl`, using `GITHUB_TOKEN` or `GH_TOKEN`. The token needs read access to the repository's contents.
+
+With Homebrew, once the tap is published (see `docs/releasing.md`):
+
+    brew tap thoras-ai/tap https://github.com/thoras-ai/homebrew-tap
+    export HOMEBREW_GITHUB_API_TOKEN=$(gh auth token)
+    brew install thoras-ai/tap/savings-preview
+
+Or download an archive from the release page, check it with `shasum -a 256 -c checksums.txt --ignore-missing`, and put the `savings-preview` binary on `PATH`.
+
 ## Quickstart
 
     make build                      # bin/savings-preview-{darwin,linux}-{amd64,arm64}
     ./bin/savings-preview-darwin-arm64 --context my-cluster
 
-Or build for this machine only with `go build -o bin/savings-preview ./cmd/savings-preview`. The binary carries the report page, so it needs nothing next to it.
+Or build for this machine only with `go build -o bin/savings-preview ./cmd/savings-preview`. The binary carries the report page, so it needs nothing next to it. An installed release runs the same way: `savings-preview --context my-cluster`.
 
 Before the first run, `savings-preview check` with the same flags answers in a few seconds whether the run can work and how well:
 
@@ -39,12 +61,13 @@ It prints the identity the kubeconfig gives, the result of `kubectl auth can-i` 
 - `src/` and `scripts/build_report.py`: the report page. It reads one contract file and shows spend, savings, a requested-versus-target chart and a workload table.
 - `docs/security.md`: what the CLI reads and writes, where its output goes, and how to check. `deploy/rbac/` has read-only ServiceAccounts for each source.
 - `docs/prometheus-adapter.md`: the Prometheus adapter. Build it with `go build -o bin/savings-preview ./cmd/savings-preview`.
-- `docs/releasing.md`: how a `v*` tag becomes a GitHub release with binaries and checksums.
+- `docs/releasing.md`: how a `v*` tag becomes a GitHub release with binaries, checksums, the install script and the Homebrew formula, and how to publish the formula to the tap.
+- `scripts/install.sh` and `packaging/homebrew/savings-preview.rb`: the install script and the Homebrew formula template that each release carries.
 - `docs/poll-adapter.md`: the poll adapter, for clusters with no usage history. It reads the cluster at an interval and keeps the readings on disk.
 - `docs/datadog-adapter.md`: the Datadog adapter. It reads the history from the Datadog metrics query API with an API key and an application key.
 - `docs/design.md`: the design rules the report page follows, and how to re-sync the design tokens in `design/`.
 
-Run every test with `make test`, or the Go tests with `go test ./...`, the contract tests with `python3 -m unittest discover -s tests`, and the page tests with `node --test 'tests/**/*.test.js'`. `make test-all` also runs `go vet` and the Go tests under the race detector. The scripts need Python 3 and the standard library only.
+Run every test with `make test`, or the Go tests with `go test ./...`, the contract, install script and formula tests with `python3 -m unittest discover -s tests`, and the page tests with `node --test 'tests/**/*.test.js'`. `make test-all` also runs `go vet` and the Go tests under the race detector. The scripts need Python 3 and the standard library only.
 
 ## Report page
 

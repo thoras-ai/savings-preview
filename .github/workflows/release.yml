@@ -54,12 +54,20 @@ jobs:
           name: binaries
           path: dist/release/bin/
       - run: scripts/release.sh package "$GITHUB_REF_NAME"
+      # The release stays a draft until the Homebrew formula, which needs the
+      # asset URLs, is attached, so a failure never leaves a partial release.
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           prerelease=()
           if [[ $GITHUB_REF_NAME == *-* ]]; then prerelease=(--prerelease); fi
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
             --verify-tag --title "$GITHUB_REF_NAME" --generate-notes "${prerelease[@]}" \
-            dist/release/*.tar.gz dist/release/checksums.txt
+            dist/release/*.tar.gz dist/release/install.sh dist/release/checksums.txt
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,assets > dist/release/release.json
+          python3 scripts/homebrew_formula.py "$GITHUB_REF_NAME" \
+            dist/release/checksums.txt dist/release/release.json > dist/release/savings-preview.rb
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" dist/release/savings-preview.rb
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
