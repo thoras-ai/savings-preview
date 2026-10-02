@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 PLATFORMS := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64
 
-.PHONY: build demo test test-all clean
+.PHONY: build demo test test-all vulncheck clean
 
 build:
 	@mkdir -p bin
@@ -27,6 +27,10 @@ test-all: demo
 	python3 -m unittest discover -s tests
 	node --test 'tests/**/*.test.js'
 	python3 scripts/validate_contract.py fixtures/savings-preview.otlp.json
+
+# vulncheck downloads the Go vulnerability database, so it is not part of test.
+vulncheck:
+	go tool -modfile=tools/go.mod govulncheck ./...
 
 # demo writes the demo cluster sample that the site build and its tests read.
 demo:

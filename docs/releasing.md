@@ -2,9 +2,9 @@
 
 Pushing a tag that starts with `v` runs `.github/workflows/release.yml`:
 
-1. **checks** runs the CI workflow (`.github/workflows/ci.yml`): `go vet`, `go test`, `go test -race`, the Python and Node tests, and the fixture check against the contract. Pull requests run the same jobs except `go test -race`, which runs on pushes to `main`, nightly, on demand and here, so a release never skips it.
+1. **checks** runs the CI workflow (`.github/workflows/ci.yml`): `go vet`, `go test`, `go test -race`, `govulncheck`, the Python and Node tests, and the fixture check against the contract. Pull requests run the same jobs except `go test -race`, which runs on pushes to `main`, nightly, on demand and here, so a release never skips it.
 2. **build** fails unless the tagged commit is on `main` and `CHANGELOG.md` has a section for the tag. It then runs `scripts/release.sh build <tag>`, which cross-compiles `darwin/amd64`, `darwin/arm64`, `linux/amd64` and `linux/arm64` binaries with `CGO_ENABLED=0` and the tag passed as `-X main.version=<tag>`. It uploads them as the `binaries` workflow artifact. CI and the release use the latest Go 1.26 patch release, not the minimum version in `go.mod`; change `go-version` in both workflows when moving to a new minor version.
-3. **publish** downloads the binaries, runs `scripts/release.sh package <tag>`, and creates a draft GitHub release for the tag. `scripts/release_notes.py` takes the release notes from the tag's `CHANGELOG.md` section, rewriting relative links to point at the tag; a prerelease tag such as `v1.2.0-rc.1` uses its own section when there is one and the `v1.2.0` section otherwise. It then fills in the Homebrew formula from the draft's asset URLs and `checksums.txt` with `scripts/homebrew_formula.py`, attaches it, and publishes the release. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a prerelease.
+3. **publish** downloads the binaries, runs `scripts/release.sh package <tag>`, which also writes an SBOM for each archive, and creates a draft GitHub release for the tag. `scripts/release_notes.py` takes the release notes from the tag's `CHANGELOG.md` section, rewriting relative links to point at the tag; a prerelease tag such as `v1.2.0-rc.1` uses its own section when there is one and the `v1.2.0` section otherwise. It then fills in the Homebrew formula from the draft's asset URLs and `checksums.txt` with `scripts/homebrew_formula.py`, attaches it, and publishes the release. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a prerelease.
 
 The `-X main.version` flag sets a `version` variable in `cmd/savings-preview`. The linker ignores it when the variable does not exist, so a binary built from a commit without that variable reports no version.
 
@@ -12,7 +12,8 @@ The release assets are:
 
 - one `savings-preview_<tag>_<os>_<arch>.tar.gz` per platform, holding the `savings-preview` binary and `README.md`;
 - `install.sh`, a copy of `scripts/install.sh`;
-- `checksums.txt`, with the SHA-256 sums of the archives;
+- one `savings-preview_<tag>_<os>_<arch>.cdx.json` per archive, the SBOM of the binary in it (see below);
+- `checksums.txt`, with the SHA-256 sums of the archives and the SBOMs;
 - `savings-preview.rb`, the Homebrew formula for this release.
 
 ## Cutting a release
@@ -33,7 +34,29 @@ Then update the Homebrew tap as described below.
     scripts/release.sh build v0.1.0-local
     scripts/release.sh package v0.1.0-local
 
-The output lands in `dist/release/`. Check a download with `shasum -a 256 -c checksums.txt` in the directory that holds the archives, adding `--ignore-missing` when only some of them are there.
+The output lands in `dist/release/`. The package step builds the SBOM generator pinned in `tools/go.mod`, which downloads its modules the first time. Check a download with `shasum -a 256 -c checksums.txt` in the directory that holds the archives, adding `--ignore-missing` when only some of them are there.
+
+## SBOMs
+
+Each archive has a [CycloneDX](https://cyclonedx.org) 1.6 JSON SBOM next to it, written by `cyclonedx-gomod bin` from the build information Go records in the binary. It lists the Go modules linked into the binary with their versions, and the Go release as a `std` component, all with package URLs for the archive's platform, plus the binary's hashes and build settings. The binary is the one inside the archive, so a signing job added between **build** and **publish** is covered.
+
+Check an SBOM with any CycloneDX tool, for example `grype sbom:savings-preview_v0.3.0_linux_amd64.cdx.json`. To check a binary against the Go vulnerability database directly, run `go tool -modfile=tools/go.mod govulncheck -mode binary path/to/savings-preview` from a checkout.
+
+## Vulnerability checks
+
+The `govulncheck` CI job runs `govulncheck ./...` with the latest Go 1.26 patch release, as the release build does. It fails when the code calls a function with a known vulnerability in a dependency or in the standard library, and lists, without failing, vulnerabilities in packages that are imported but not called. It runs alongside the other jobs on every pull request, push to `main`, nightly run and release.
+
+Pull requests read a copy of the vulnerability database that the nightly run saves in the Actions cache each day, and download it from `vuln.go.dev` when there is none for the day. All other runs download it. The govulncheck binary is cached by `tools/go.sum`.
+
+To run the same check locally: `make vulncheck`. When it fails on the standard library, update Go: the fix is in a newer patch release, which CI picks up on its own. When it fails on a module, upgrade it with `go get module@version` and `go mod tidy`.
+
+## Tools and dependency updates
+
+`tools/go.mod` pins the Go tools CI and the release use, `govulncheck` and `cyclonedx-gomod`, as `tool` directives. It is a separate module so that the tools' dependencies never change the versions linked into `savings-preview`. Run them with `go tool -modfile=tools/go.mod <tool>`.
+
+Every action in `.github/workflows/` is pinned to a commit, with its release tag in a comment. `tests/test_workflows.py` fails on an action referenced by tag or branch.
+
+Dependabot (`.github/dependabot.yml`) opens pull requests each week for the actions, the modules in `go.mod`, and the tools in `tools/go.mod`. Action updates come as one pull request, as do the Kubernetes and the AWS SDK modules. When adding a tool, add its module to the `allow` list of the `/tools` entry as well: Dependabot skips modules a `tool` directive lists unless they are allowed by name.
 
 ## The install script
 

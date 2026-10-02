@@ -118,6 +118,68 @@ jobs:
           fi
           go test -count=1 -vet=off $pkgs
 
+  # Fails when the code calls a function with a known vulnerability, in a
+  # dependency or in the standard library of the Go release CI uses. A
+  # vulnerable package that is imported but not called is listed without
+  # failing the job.
+  govulncheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          check-latest: true
+          cache: false
+      # The module sources the scan type-checks.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            /dev/shm/go-build
+            /dev/shm/go-mod
+            !/dev/shm/go-mod/cache/download/**/*.zip
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
+      - id: tool
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /dev/shm/tools
+          key: govulncheck-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('tools/go.sum') }}
+      - if: steps.tool.outputs.cache-hit != 'true'
+        run: go build -modfile=tools/go.mod -o /dev/shm/tools/govulncheck golang.org/x/vuln/cmd/govulncheck
+      - if: github.ref == 'refs/heads/main' && steps.tool.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /dev/shm/tools
+          key: ${{ steps.tool.outputs.cache-primary-key }}
+      # Pull requests use the vulnerability database the nightly run saved
+      # that day, so they do not depend on vuln.go.dev answering. Every other
+      # run downloads the current one.
+      - id: day
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+      - id: vulndb
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /dev/shm/vulndb
+          key: govulndb-${{ steps.day.outputs.day }}
+      - if: steps.vulndb.outputs.cache-hit != 'true'
+        run: |
+          curl -sSfL --retry 3 -o "$RUNNER_TEMP/vulndb.zip" https://vuln.go.dev/vulndb.zip
+          rm -rf /dev/shm/vulndb
+          unzip -q "$RUNNER_TEMP/vulndb.zip" -d /dev/shm/vulndb
+      - if: github.event_name == 'schedule'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /dev/shm/vulndb
+          key: govulndb-${{ steps.day.outputs.day }}
+      - run: /dev/shm/tools/govulncheck -db file:///dev/shm/vulndb ./...
+
   # The race detector makes the suite several times slower, so it runs on
   # main, nightly and before a release rather than on every pull request.
   race:
