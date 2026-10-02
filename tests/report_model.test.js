@@ -145,6 +145,9 @@ test('the fixture produces the expected workload states', () => {
 
 test('files that are not reports are rejected with a clear message', () => {
   assert.throws(() => model.analyze({}), /not a Savings Preview file/);
+  const earlier = fixture();
+  earlier.resourceMetrics[0].scopeMetrics[0].scope.version = '1.2.0';
+  assert.throws(() => model.analyze(earlier), /contract version 1\.2\.0 and this page reads only 1\.0\.0/);
 });
 
 function multi(workloads, nodes = []) {

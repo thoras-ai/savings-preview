@@ -1,13 +1,13 @@
 # Savings Preview OTel contract
 
-Version 1.3.0. Every adapter writes one OTLP-JSON metrics file in this shape, and the report page reads only that file. `scripts/validate_contract.py` checks a file against this document. `fixtures/savings-preview.otlp.json` is a valid example.
+Version 1.0.0. Every adapter writes one OTLP-JSON metrics file in this shape, and the report page reads only that file. `scripts/validate_contract.py` checks a file against this document. `fixtures/savings-preview.otlp.json` is a valid example.
 
 ## Pinned conventions
 
 - OpenTelemetry semantic conventions **1.44.0**. Every `resourceMetrics` and `scopeMetrics` entry carries `schemaUrl` = `https://opentelemetry.io/schemas/1.44.0`.
 - Most of the Kubernetes and container metrics below are still `development` stability upstream. The pinned version is part of the contract: a later semconv rename does not change this file format until the contract version moves.
 - Names with no semantic-convention equivalent live under `thoras.`.
-- Instrumentation scope on every `scopeMetrics`: `name` = `thoras.savings_preview`, `version` = `1.x.y`. A change that old readers cannot handle bumps the major version.
+- Instrumentation scope on every `scopeMetrics`: `name` = `thoras.savings_preview`, `version` = `1.0.0`.
 
 ## File layout
 
@@ -107,7 +107,7 @@ A point summarizing several readings carries their mean in the usage metric. Whe
 
 The fidelity tier of a resource with step spans follows its coarsest step.
 
-A file with step spans is still structurally valid for an earlier reader, to which only the new attribute and metrics are unknown. Such a reader sees points spaced by more than `thoras.step_seconds` in the coarser spans. If it treats each point as covering only `thoras.step_seconds`, it misses most of that time, and if it takes peaks from the usage means it understates them, which overstates savings. Readers must handle `thoras.step_spans` and the peak metrics to price such files correctly. The report page handles both from 1.2.0.
+A reader weights each point by the step of the span it lies in, not by `thoras.step_seconds`. Taking peaks from the usage means instead of the max series understates them, which overstates savings.
 
 An adapter may claim a lower tier than its data supports but not a higher one. The validator rejects a claim the step and span cannot support. For a resource with `thoras.source_step_seconds` the tier is judged on that step instead of the coarsest step of the points.
 
@@ -143,10 +143,6 @@ A resource may list level metrics in `thoras.held_metrics`: `k8s.container.cpu.r
 
 A reader averaging a held series over time weights each point by the time until the next one.
 
-### Readers before 1.3.0
-
-Release v0.1.0 of savings-preview, its report page, its `report.html` and its validator are such readers. A compact file is structurally valid for an earlier reader, to which only the new attributes are unknown. Such a reader sees held series as points far apart, treats the time between them as gaps, and prices only the steps where a level changes, so it misprices the file. The validator before 1.3.0 also rejects the fidelity tier of a compact resource that claims tier 1 or 2 (data at 300 seconds or finer over 7 days or more), since it judges the tier on the 900-second points. Readers must handle `thoras.held_metrics` and `thoras.source_step_seconds` to read compact files. The report page handles both from 1.3.0. Full files written by 1.3.0 adapters use neither attribute and read as before.
-
 ## Missing data
 
 - A series that could not be retrieved is left out of the file, and its metric name is listed in the resource's `thoras.missing_metrics`. Every required metric must be either present or listed, never both and never neither. Only required metrics can be listed.
@@ -154,11 +150,9 @@ Release v0.1.0 of savings-preview, its report page, its `report.html` and its va
 - A container with a required series missing is shown in the report but excluded from savings, because cost is the larger of the CPU and memory cost and cannot be computed from one of them.
 - Optional metrics are simply absent when unavailable, with no declaration.
 
-## Versions
+## Versioning
 
-- 1.1.0 adds the optional `thoras.fidelity_notes` attribute. 1.0.0 files are valid 1.1.0 files.
-- 1.2.0 adds the optional `thoras.step_spans` attribute and the optional `thoras.container.cpu.usage.max` and `thoras.container.memory.working_set.max` metrics. 1.1.0 files are valid 1.2.0 files.
-- 1.3.0 adds the optional `thoras.source_step_seconds` and `thoras.held_metrics` attributes, used by compact files. 1.2.0 files are valid 1.3.0 files.
+The scope `version` names the contract a file follows. Readers and the validator accept only the versions they know. A change that existing readers cannot handle bumps the major version.
 
 ## Out of scope
 

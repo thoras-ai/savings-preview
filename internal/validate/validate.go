@@ -19,9 +19,10 @@ import (
 )
 
 const (
-	schemaURL = "https://opentelemetry.io/schemas/1.44.0"
-	scopeName = "thoras.savings_preview"
-	day       = 86400
+	schemaURL    = "https://opentelemetry.io/schemas/1.44.0"
+	scopeName    = "thoras.savings_preview"
+	scopeVersion = "1.0.0"
+	day          = 86400
 )
 
 type instrument int
@@ -387,8 +388,8 @@ func newChecker() checker {
 			if sc["name"] != scopeName {
 				add("%s: scope name must be %s", where, scopeName)
 			}
-			if v, _ := sc["version"].(string); !strings.HasPrefix(v, "1.") {
-				add("%s: scope version must start with 1.", where)
+			if sc["version"] != scopeVersion {
+				add("%s: scope version must be %s", where, scopeVersion)
 			}
 			if sm["schemaUrl"] != schemaURL {
 				add("%s: scope schemaUrl must be %s", where, schemaURL)

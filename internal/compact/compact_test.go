@@ -475,6 +475,7 @@ func TestCompactErrors(t *testing.T) {
 		`{"other": 1}`:              "no resourceMetrics",
 		`{"resourceMetrics": [{}]}`: "step_seconds",
 		`{"resourceMetrics": [`:     "EOF",
+		`{"resourceMetrics": [{"resource": {"attributes": [{"key": "thoras.step_seconds", "value": {"intValue": "60"}}]}, "scopeMetrics": [{"scope": {"name": "thoras.savings_preview", "version": "1.2.0"}}]}]}`: `contract version "1.2.0"`,
 	} {
 		_, err := Compact(strings.NewReader(in), io.Discard, DefaultStep)
 		if err == nil || !strings.Contains(err.Error(), want) {

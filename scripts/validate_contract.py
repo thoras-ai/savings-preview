@@ -10,7 +10,7 @@ import sys
 
 SCHEMA_URL = "https://opentelemetry.io/schemas/1.44.0"
 SCOPE_NAME = "thoras.savings_preview"
-CONTRACT_MAJOR = "1"
+CONTRACT_VERSION = "1.0.0"
 TIERS = (1, 2, 3)
 DAY = 86400
 
@@ -301,8 +301,8 @@ def validate(doc):
             sc = sm.get("scope") or {}
             if sc.get("name") != SCOPE_NAME:
                 errors.append("%s: scope name must be %s" % (where, SCOPE_NAME))
-            if not str(sc.get("version", "")).startswith(CONTRACT_MAJOR + "."):
-                errors.append("%s: scope version must start with %s." % (where, CONTRACT_MAJOR))
+            if sc.get("version") != CONTRACT_VERSION:
+                errors.append("%s: scope version must be %s" % (where, CONTRACT_VERSION))
             if sm.get("schemaUrl") != SCHEMA_URL:
                 errors.append("%s: scope schemaUrl must be %s" % (where, SCHEMA_URL))
             for metric in sm.get("metrics") or []:

@@ -380,7 +380,10 @@ func mutations() []mutation {
 		}, "capacity_type"},
 		{"scope version", func(t *testing.T, doc, app, worker obj) {
 			scope(app)["scope"].(obj)["version"] = "2.0.0"
-		}, "scope version"},
+		}, "scope version must be 1.0.0"},
+		{"earlier scope version", func(t *testing.T, doc, app, worker obj) {
+			scope(app)["scope"].(obj)["version"] = "1.2.0"
+		}, "scope version must be 1.0.0"},
 		{"datapoint attributes rejected", func(t *testing.T, doc, app, worker obj) {
 			points(metrics(app)[0].(obj))[0].(obj)["attributes"] = []any{
 				obj{"key": "cpu.mode", "value": obj{"stringValue": "user"}}}
