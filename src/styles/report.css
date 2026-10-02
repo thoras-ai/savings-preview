@@ -319,6 +319,82 @@ button.tm-cell:hover { filter: brightness(0.94); }
 .steps li + li { margin-top: var(--primitive-space-8); }
 .steps strong { font-weight: var(--primitive-weight-medium); }
 
+/* Section 3: workloads. The list, then the drill-down for one workload. */
+.wl-intro { color: var(--text-light); margin: var(--primitive-space-4) 0 0; max-width: 70ch; }
+.wl-search input {
+  height: 32px; width: 260px; max-width: 100%; padding: 0 var(--primitive-space-12);
+  background: var(--surface-default); color: var(--text-default); font: inherit;
+  border: 1px solid var(--border-light); border-radius: var(--primitive-radius-4);
+}
+.wl-search input:focus-visible, .wl-link:focus-visible, .wl-back:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.wl-table tbody tr[data-id] { cursor: pointer; transition: background-color var(--primitive-duration-150) var(--primitive-ease-in-out); }
+.wl-table tbody tr[data-id]:hover { background: var(--surface-inset); }
+.wl-table td { vertical-align: middle; }
+.wl-table .wl-sub { font-family: var(--primitive-font-mono); }
+.wl-link { color: var(--text-default); text-decoration: none; font-weight: var(--primitive-weight-medium); }
+.wl-link:hover { color: var(--text-brand); text-decoration: underline; }
+[data-theme="dark"] .wl-link:hover { color: var(--primitive-brand-300); }
+tr.excluded .wl-link { color: var(--text-light); }
+.wl-reason { font-size: var(--primitive-text-xs); }
+.table-plain th { padding: var(--primitive-space-8) var(--primitive-space-12); }
+.wl-pager { display: flex; justify-content: space-between; align-items: center; gap: var(--primitive-space-16); padding-top: var(--primitive-space-12); color: var(--text-light); font-variant-numeric: tabular-nums; }
+.wl-pager-buttons { display: flex; gap: var(--primitive-space-8); }
+.pager {
+  height: 24px; padding: 0 var(--primitive-space-16); cursor: pointer;
+  background: var(--surface-default); border: 1px solid var(--border-default); border-radius: var(--primitive-radius-full);
+  font-size: var(--primitive-text-xs); font-weight: var(--primitive-weight-medium);
+  transition: background-color var(--primitive-duration-150) var(--primitive-ease-in-out);
+}
+.pager:hover:not(:disabled) { background: var(--surface-inset); }
+.pager:disabled { background: var(--surface-inset); color: var(--text-disabled); border-color: var(--border-lighter); cursor: default; }
+.pill-danger { background: var(--primitive-ruby-100); color: var(--primitive-ruby-950); }
+.pill-outline { background: var(--surface-inset); color: var(--text-light); box-shadow: inset 0 0 0 1px var(--border-lighter); }
+
+.wl-head { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--primitive-space-16); flex-wrap: wrap; margin-top: var(--primitive-space-16); }
+.wl-back { font-weight: var(--primitive-weight-medium); text-decoration: none; }
+.wl-back:hover { text-decoration: underline; }
+.wl-title { margin: var(--primitive-space-4) 0 0; font-size: var(--primitive-text-xl); line-height: var(--primitive-leading-tight); font-weight: var(--primitive-weight-medium); }
+.wl-pills { display: flex; gap: var(--primitive-space-8); }
+.wl-figs { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--primitive-space-16); }
+.wl-figs-provisional { border: 1px dashed var(--primitive-mango-400); box-shadow: none; }
+.wl-fig { min-width: 0; }
+.wl-fig.sep { border-left: 1px solid var(--border-lighter); padding-left: var(--primitive-space-16); }
+.wl-fig-label { font-size: var(--primitive-text-xs); color: var(--text-light); }
+.wl-fig-value { font-size: var(--primitive-text-md); font-variant-numeric: tabular-nums; }
+.wl-note { color: var(--text-light); font-size: var(--primitive-text-xs); margin: var(--primitive-space-8) 0 0; }
+.wl-detail .pair > .card { min-width: 0; }
+.risks { display: flex; flex-direction: column; gap: var(--primitive-space-8); margin-top: var(--primitive-space-12); }
+.risks p { margin: 0; }
+.risk { border-radius: var(--primitive-radius-8); padding: var(--primitive-space-8) var(--primitive-space-12); }
+.risk-danger { background: var(--surface-danger); color: var(--text-on-danger); }
+.risk-caution { background: var(--surface-caution); color: var(--text-on-caution); }
+.risk-info { background: var(--surface-info); color: var(--text-on-info); }
+
+/* Drill-down chart: requested azure, usage brand with a thin peak line, target iris dashed, OOM kills ruby. */
+.chart-detail .line-a { stroke: var(--primitive-azure-500); }
+.chart-detail .line-b { stroke: var(--primitive-iris-500); }
+.chart-detail .line-u { stroke: var(--primitive-brand-500); stroke-width: 2; }
+.chart-detail .line-p { stroke: var(--primitive-brand-500); stroke-width: 1; }
+.chart-detail .marker line { stroke: var(--primitive-ruby-500); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart-detail .marker circle { fill: var(--primitive-ruby-500); }
+.chart-detail .dot-a { fill: var(--primitive-azure-500); }
+.chart-detail .dot-b { fill: var(--primitive-iris-500); }
+.chart-detail .dot-u, .chart-detail .dot-p { fill: var(--primitive-brand-500); }
+.wl-detail .swatch-a { border-color: var(--primitive-azure-500); }
+.wl-detail .swatch-b { border-color: var(--primitive-iris-500); }
+.wl-detail .swatch-u, .wl-detail .swatch-p { border-color: var(--primitive-brand-500); }
+.wl-detail .swatch-p { border-top-width: 1px; }
+.swatch-oom { border-color: var(--primitive-ruby-500); border-top-style: dashed; }
+[data-theme="dark"] .chart-detail .line-a, [data-theme="dark"] .wl-detail .swatch-a { stroke: var(--primitive-azure-400); border-color: var(--primitive-azure-400); }
+[data-theme="dark"] .chart-detail .line-b, [data-theme="dark"] .wl-detail .swatch-b { stroke: var(--primitive-iris-400); border-color: var(--primitive-iris-400); }
+[data-theme="dark"] .chart-detail .line-u, [data-theme="dark"] .chart-detail .line-p, [data-theme="dark"] .wl-detail .swatch-u, [data-theme="dark"] .wl-detail .swatch-p { stroke: var(--primitive-brand-400); border-color: var(--primitive-brand-400); }
+[data-theme="dark"] .chart-detail .marker line, [data-theme="dark"] .swatch-oom { stroke: var(--primitive-ruby-400); border-color: var(--primitive-ruby-400); }
+[data-theme="dark"] .chart-detail .marker circle { fill: var(--primitive-ruby-400); }
+[data-theme="dark"] .chart-detail .dot-a { fill: var(--primitive-azure-400); }
+[data-theme="dark"] .chart-detail .dot-b { fill: var(--primitive-iris-400); }
+[data-theme="dark"] .chart-detail .dot-u, [data-theme="dark"] .chart-detail .dot-p { fill: var(--primitive-brand-400); }
+.tip-marker { color: var(--text-danger); }
+
 /* Placeholder for section 5. */
 .settings { display: grid; grid-template-columns: max-content 1fr; gap: var(--primitive-space-8) var(--primitive-space-24); margin: var(--primitive-space-16) 0; }
 .settings dt { color: var(--text-light); }
@@ -391,6 +467,8 @@ button.tm-cell:hover { filter: brightness(0.94); }
   .meanings { grid-template-columns: 1fr; }
   .rank { grid-template-columns: 1fr auto; }
   .rank-bar { display: none; }
+  .wl-search, .wl-search input { width: 100%; }
+  .wl-fig.sep { border-left: 0; padding-left: 0; }
 }
 
 /* Section 4: cluster and nodes. The capacity bar layers used over target over

@@ -460,6 +460,7 @@ type jsResult struct {
 	} `json:"fidelity"`
 	Basis  string             `json:"basis"`
 	Totals map[string]float64 `json:"totals"`
+	Rows   map[string]float64 `json:"rows"`
 	// The money section's namespace figures, added up.
 	Money map[string]float64 `json:"money"`
 	// Section holds the figures the cluster and nodes section shows.
@@ -471,21 +472,27 @@ type jsResult struct {
 
 // The page loads a file once and recomputes it whenever a lever changes, so
 // the script computes with other levers first and then with the defaults.
+// rows sums the workloads section's figures over the workloads it counts.
 const nodeScript = `const fs = require('fs');
 const path = require('path');
 const model = require(process.argv[2]);
 const money = require(process.argv[3]);
 const section = require(path.join(path.dirname(process.argv[2]), 'section-cluster.js'));
+const workloads = require(path.join(path.dirname(process.argv[2]), 'section-workloads.js'));
 const out = process.argv.slice(4).map(f => {
   const data = model.prepare(JSON.parse(fs.readFileSync(f, 'utf8')));
   model.compute(data, { headroom: 1.5, peakWindow: 3600, rates: { perCore: 1, perGiB: 1 } });
   const r = model.compute(data, model.defaultLevers);
+  const rows = { spend: 0, savings: 0, cores: 0, gib: 0 };
+  workloads.rows(data, r).filter(w => w.status !== 'excluded').forEach(w => {
+    rows.spend += w.annualSpend; rows.savings += w.annualSavings; rows.cores += w.wasteCores; rows.gib += w.wasteGiB;
+  });
   const ns = { savings: 0, spend: 0 };
   money.summarize(r).namespaces.forEach(n => { ns.savings += n.savings; ns.spend += n.spend; });
   const s = section.summarize(data, r, { range: null, namespaces: null });
   const counted = r.totals.counted > 0;
   return {
-    cluster: r.cluster, fidelity: r.fidelity, basis: r.pricing.basis, totals: r.totals, money: ns, prices: model.nodePrices,
+    cluster: r.cluster, fidelity: r.fidelity, basis: r.pricing.basis, totals: r.totals, money: ns, rows, prices: model.nodePrices,
     section: counted ? { ReqCores: s.cpu.req, ReqGiB: s.mem.req, WasteCores: s.cpu.req - s.cpu.target, WasteGiB: s.mem.req - s.mem.target } : {}
   };
 });
@@ -570,6 +577,10 @@ func TestParityWithModelJS(t *testing.T) {
 				{"reqGiB", got.Totals.RequestedGiB, w.Totals["reqGiB"]},
 				{"workloads", float64(got.Totals.Workloads), w.Totals["workloads"]},
 				{"counted", float64(got.Totals.Counted), w.Totals["counted"]},
+				{"workload rows spend", got.Totals.AnnualSpend, w.Rows["spend"]},
+				{"workload rows savings", got.Totals.AnnualSavings, w.Rows["savings"]},
+				{"workload rows wasteCores", got.Totals.WasteCores, w.Rows["cores"]},
+				{"workload rows wasteGiB", got.Totals.WasteGiB, w.Rows["gib"]},
 				{"section reqCores", got.Totals.RequestedCores, w.Section.ReqCores},
 				{"section reqGiB", got.Totals.RequestedGiB, w.Section.ReqGiB},
 				{"section wasteCores", got.Totals.WasteCores, w.Section.WasteCores},
