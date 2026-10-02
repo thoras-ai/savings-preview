@@ -333,6 +333,9 @@ tr.excluded .wl-link { color: var(--text-light); }
 .chart-detail .line-p { stroke: var(--primitive-brand-500); stroke-width: 1; }
 .chart-detail .marker line { stroke: var(--primitive-ruby-500); stroke-width: 1; stroke-dasharray: 3 3; }
 .chart-detail .marker circle { fill: var(--primitive-ruby-500); }
+.chart-detail .dot-a { fill: var(--primitive-azure-500); }
+.chart-detail .dot-b { fill: var(--primitive-iris-500); }
+.chart-detail .dot-u, .chart-detail .dot-p { fill: var(--primitive-brand-500); }
 .wl-detail .swatch-a { border-color: var(--primitive-azure-500); }
 .wl-detail .swatch-b { border-color: var(--primitive-iris-500); }
 .wl-detail .swatch-u, .wl-detail .swatch-p { border-color: var(--primitive-brand-500); }
