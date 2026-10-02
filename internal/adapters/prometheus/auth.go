@@ -1,18 +1,25 @@
 package prometheus
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
 	"golang.org/x/oauth2/google"
 )
 
@@ -176,22 +183,143 @@ func NewGoogle(ctx context.Context, credentialsFile string) (*Google, error) {
 }
 
 func (g *Google) Wrap(hc *http.Client) (*http.Client, error) {
-	if g.Source == nil {
-		return nil, fmt.Errorf("Google: no token source")
+	return withToken(hc, g.Source, "Google")
+}
+
+func withToken(hc *http.Client, src oauth2.TokenSource, name string) (*http.Client, error) {
+	if src == nil {
+		return nil, fmt.Errorf("%s: no token source", name)
 	}
 	return withRequest(hc, func(r *http.Request) error {
-		tok, err := g.Source.Token()
+		tok, err := src.Token()
 		if err != nil {
-			return fmt.Errorf("Google credentials: %w", err)
+			return fmt.Errorf("%s credentials: %w", name, err)
 		}
 		tok.SetAuthHeader(r)
 		return nil
 	}), nil
 }
 
-// Unsupported stands in for a managed-backend scheme that is not implemented yet.
-type Unsupported struct{ Scheme string }
+// Azure sends an Entra ID access token, as Azure Monitor managed Prometheus
+// requires.
+type Azure struct {
+	Source oauth2.TokenSource
+}
 
-func (u Unsupported) Wrap(*http.Client) (*http.Client, error) {
-	return nil, fmt.Errorf("authentication scheme %q is not implemented", u.Scheme)
+func (a *Azure) Wrap(hc *http.Client) (*http.Client, error) {
+	return withToken(hc, a.Source, "Azure")
+}
+
+// AzureCredentials select how NewAzure gets a token. With a client ID and
+// secret, it uses the client credentials grant of that app registration in
+// TenantID. Without them, it asks the Azure CLI for a token of the signed-in
+// user or managed identity, in TenantID when one is given.
+type AzureCredentials struct {
+	TenantID, ClientID, ClientSecret string
+	// Login is the Entra ID authority; empty for the one of the audience's
+	// cloud.
+	Login string
+	// CLI runs the Azure CLI with args and returns its standard output; nil
+	// runs az.
+	CLI func(ctx context.Context, args ...string) ([]byte, error)
+}
+
+// azureLogins are the Entra ID authorities of the Azure clouds, by the
+// domain of their Prometheus audience.
+var azureLogins = map[string]string{
+	"https://prometheus.monitor.azure.com": "https://login.microsoftonline.com",
+	"https://prometheus.monitor.azure.us":  "https://login.microsoftonline.us",
+	"https://prometheus.monitor.azure.cn":  "https://login.chinacloudapi.cn",
+}
+
+var tenantID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]*$`)
+
+// NewAzure returns an Auth that sends Entra ID tokens for audience.
+func NewAzure(ctx context.Context, audience string, c AzureCredentials) (*Azure, error) {
+	if c.TenantID != "" && !tenantID.MatchString(c.TenantID) {
+		return nil, fmt.Errorf("%q is not an Entra ID tenant ID or domain", c.TenantID)
+	}
+	if c.ClientID != "" || c.ClientSecret != "" {
+		switch {
+		case c.ClientID == "":
+			return nil, errors.New("an Azure client secret needs the client ID of its app registration")
+		case c.ClientSecret == "":
+			return nil, errors.New("an Azure client ID needs the client secret of its app registration")
+		case c.TenantID == "":
+			return nil, errors.New("an Azure app registration needs the tenant ID it belongs to")
+		}
+		login := c.Login
+		if login == "" {
+			login = azureLogins[audience]
+		}
+		if login == "" {
+			login = azureLogins[AzureAudience]
+		}
+		cc := clientcredentials.Config{
+			ClientID:     c.ClientID,
+			ClientSecret: c.ClientSecret,
+			TokenURL:     strings.TrimRight(login, "/") + "/" + c.TenantID + "/oauth2/v2.0/token",
+			Scopes:       []string{audience + "/.default"},
+			AuthStyle:    oauth2.AuthStyleInParams,
+		}
+		return &Azure{Source: cc.TokenSource(ctx)}, nil
+	}
+	run := c.CLI
+	if run == nil {
+		run = runAz
+	}
+	return &Azure{Source: oauth2.ReuseTokenSource(nil, &azCLISource{ctx: ctx, run: run, resource: audience, tenant: c.TenantID})}, nil
+}
+
+// azCLISource gets tokens from az account get-access-token.
+type azCLISource struct {
+	ctx              context.Context
+	run              func(ctx context.Context, args ...string) ([]byte, error)
+	resource, tenant string
+}
+
+func (s *azCLISource) Token() (*oauth2.Token, error) {
+	args := []string{"account", "get-access-token", "--resource", s.resource, "--output", "json"}
+	if s.tenant != "" {
+		args = append(args, "--tenant", s.tenant)
+	}
+	out, err := s.run(s.ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	var r struct {
+		AccessToken string `json:"accessToken"`
+		ExpiresOn   string `json:"expiresOn"`  // local time, in every CLI version
+		ExpiresAt   int64  `json:"expires_on"` // unix seconds, in CLI 2.54 and later
+	}
+	if err := json.Unmarshal(out, &r); err != nil || r.AccessToken == "" {
+		return nil, errors.New("az account get-access-token printed no access token")
+	}
+	tok := &oauth2.Token{AccessToken: r.AccessToken, TokenType: "Bearer"}
+	switch {
+	case r.ExpiresAt > 0:
+		tok.Expiry = time.Unix(r.ExpiresAt, 0)
+	default:
+		if t, err := time.ParseInLocation("2006-01-02 15:04:05.999999", r.ExpiresOn, time.Local); err == nil {
+			tok.Expiry = t
+		} else {
+			// Ask again in a few minutes rather than keep a token of
+			// unknown lifetime.
+			tok.Expiry = time.Now().Add(5 * time.Minute)
+		}
+	}
+	return tok, nil
+}
+
+func runAz(ctx context.Context, args ...string) ([]byte, error) {
+	var stdout, stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "az", args...)
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, errors.New("the Azure CLI (az) is not installed: install it and run az login, or use an app registration's client secret")
+		}
+		return nil, fmt.Errorf("az account get-access-token: %w: %s", err, truncate(stderr.String(), 300))
+	}
+	return stdout.Bytes(), nil
 }

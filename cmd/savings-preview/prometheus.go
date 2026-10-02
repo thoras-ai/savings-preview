@@ -97,7 +97,7 @@ func runPrometheus(args []string) error {
 		store.MaxRange = direct.maxRange
 	}
 
-	client := &prometheus.Client{G: getter, Selector: matchers, MaxRange: store.MaxRange}
+	client := &prometheus.Client{G: getter, Selector: matchers, MaxRange: store.MaxRange, OneMetricPerQuery: store.OneMetricPerQuery}
 	f, rep, err := prometheus.Run(ctx, prometheus.Options{Client: client, Cluster: clusterName, Days: *days, Step: *step,
 		Concurrency: *concurrency, Log: logf, AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud, GKE: direct.gkeMode(store)})
 	if err != nil {
@@ -202,6 +202,7 @@ type directFlags struct {
 	url, backend, tenant                        string
 	tokenFile, basicFile, headerFile, awsRegion string
 	project, googleCreds, gkeMetrics            string
+	azureTenant, azureClientID, azureSecretFile string
 	maxRange                                    time.Duration
 }
 
@@ -218,6 +219,9 @@ func addDirectFlags(fs *flag.FlagSet) *directFlags {
 	fs.StringVar(&d.googleCreds, "google-credentials-file", "", "service account key for Google Managed Prometheus (default: Google Application Default Credentials)")
 	fs.StringVar(&d.gkeMetrics, "gke-metrics", "", "metrics to read from Google Managed Prometheus: "+strings.Join(prometheus.GKEModes, ", ")+
 		" (default: auto, which reads cAdvisor and kube-state-metrics series when the project has both, else GKE system metrics)")
+	fs.StringVar(&d.azureTenant, "azure-tenant-id", "", "Entra ID tenant of the app registration or login for Azure Monitor managed Prometheus (or set "+envAzureTenant+")")
+	fs.StringVar(&d.azureClientID, "azure-client-id", "", "client ID of an app registration for Azure Monitor managed Prometheus (or set "+envAzureClient+"); without one, the Azure CLI login is used")
+	fs.StringVar(&d.azureSecretFile, "azure-client-secret-file", "", "file holding the app registration's client secret (or set "+envAzureSecret+")")
 	fs.DurationVar(&d.maxRange, "max-query-range", 0, "longest time range the store accepts in one query (default: the backend's limit, if any)")
 	return d
 }
@@ -255,8 +259,9 @@ func (d *directFlags) check(target *string) error {
 	if d.url == "" && d.backend == prometheus.BackendGMP {
 		return errors.New("--backend gmp needs --project or --url")
 	}
-	if d.url == "" && (d.backend != "" || d.tenant != "" || d.headerFile != "" || d.awsRegion != "" || d.googleCreds != "") {
-		return errors.New("--backend, --tenant, --header-file, --aws-region and --google-credentials-file apply only with --url")
+	if d.url == "" && (d.backend != "" || d.tenant != "" || d.headerFile != "" || d.awsRegion != "" || d.googleCreds != "" ||
+		d.azureTenant != "" || d.azureClientID != "" || d.azureSecretFile != "") {
+		return errors.New("--backend, --tenant, --header-file, --aws-region, --google-credentials-file and the --azure flags apply only with --url")
 	}
 	if d.gkeMetrics != "" && !slices.Contains(prometheus.GKEModes, d.gkeMetrics) {
 		return fmt.Errorf("--gke-metrics must be one of %s, not %q", strings.Join(prometheus.GKEModes, ", "), d.gkeMetrics)
@@ -282,7 +287,11 @@ func (d *directFlags) open(ctx context.Context) (prometheus.Getter, prometheus.B
 	if (d.googleCreds != "" || d.gkeMetrics != "") && store.Name != prometheus.BackendGMP {
 		return nil, store, fmt.Errorf("--google-credentials-file and --gke-metrics apply to Google Managed Prometheus, not to %s", store.Name)
 	}
-	auth, err := directAuth(ctx, store, credentialFiles{token: d.tokenFile, basic: d.basicFile, headers: d.headerFile, google: d.googleCreds}, d.tenant)
+	if (d.azureTenant != "" || d.azureClientID != "" || d.azureSecretFile != "") && store.Name != prometheus.BackendAzure {
+		return nil, store, fmt.Errorf("--azure-tenant-id, --azure-client-id and --azure-client-secret-file apply to Azure Monitor managed Prometheus, not to %s", store.Name)
+	}
+	auth, err := directAuth(ctx, store, credentialFiles{token: d.tokenFile, basic: d.basicFile, headers: d.headerFile, google: d.googleCreds,
+		azureTenant: d.azureTenant, azureClientID: d.azureClientID, azureSecret: d.azureSecretFile}, d.tenant)
 	if err != nil {
 		return nil, store, err
 	}
@@ -307,6 +316,11 @@ func hasAuthorization(chain prometheus.Chain) bool {
 		}
 	}
 	return false
+}
+
+// newAzure builds Entra ID authentication; tests replace it.
+var newAzure = func(ctx context.Context, audience string, c prometheus.AzureCredentials) (prometheus.Auth, error) {
+	return prometheus.NewAzure(ctx, audience, c)
 }
 
 // newGoogle loads Google credentials; tests replace it.
@@ -334,7 +348,17 @@ const (
 	envHeaders = "SAVINGS_PREVIEW_HEADERS"
 )
 
-type credentialFiles struct{ token, basic, headers, google string }
+// The variables the Azure SDKs and CLI read for a service principal.
+const (
+	envAzureTenant = "AZURE_TENANT_ID"
+	envAzureClient = "AZURE_CLIENT_ID"
+	envAzureSecret = "AZURE_CLIENT_SECRET"
+)
+
+type credentialFiles struct {
+	token, basic, headers, google           string
+	azureTenant, azureClientID, azureSecret string // azureSecret is a file
+}
 
 // directAuth builds the authentication for a store reached by URL.
 // Credentials come from files or environment variables, never from flags, so
@@ -354,7 +378,7 @@ func directAuth(ctx context.Context, store prometheus.Backend, files credentialF
 		chain = append(chain, hs...)
 	}
 	if tenant != "" {
-		if store.Name == prometheus.BackendAMP || store.Name == prometheus.BackendGrafanaCloud || store.Name == prometheus.BackendGMP {
+		if store.Name == prometheus.BackendAMP || store.Name == prometheus.BackendGrafanaCloud || store.Name == prometheus.BackendGMP || store.Name == prometheus.BackendAzure {
 			return nil, fmt.Errorf("--tenant applies to Mimir, not to %s", store.Name)
 		}
 		chain = append(chain, prometheus.Header{Name: prometheus.TenantHeader, Value: tenant})
@@ -399,6 +423,39 @@ func directAuth(ctx context.Context, store prometheus.Backend, files credentialF
 			return g, nil
 		}
 		return append(chain, g), nil
+	case prometheus.BackendAzure:
+		explicit := files.azureClientID != "" || files.azureSecret != ""
+		if authz != nil || hasAuthorization(chain) {
+			// A token given directly, such as one from az account
+			// get-access-token, is used as is.
+			if explicit || files.azureTenant != "" {
+				return nil, errors.New("use only one of --azure-tenant-id, --azure-client-id or --azure-client-secret-file and a bearer token or Authorization header")
+			}
+			break
+		}
+		creds := prometheus.AzureCredentials{TenantID: files.azureTenant, ClientID: files.azureClientID}
+		if creds.TenantID == "" {
+			creds.TenantID = strings.TrimSpace(os.Getenv(envAzureTenant))
+		}
+		if creds.ClientID == "" {
+			creds.ClientID = strings.TrimSpace(os.Getenv(envAzureClient))
+		}
+		if creds.ClientSecret, err = credential(files.azureSecret, envAzureSecret); err != nil {
+			return nil, err
+		}
+		if creds.ClientSecret == "" && !explicit {
+			// AZURE_CLIENT_ID alone names a managed identity or a workload
+			// identity to the Azure SDKs; the CLI login decides here.
+			creds.ClientID = ""
+		}
+		a, err := newAzure(ctx, store.Audience, creds)
+		if err != nil {
+			return nil, err
+		}
+		if len(chain) == 0 {
+			return a, nil
+		}
+		return append(chain, a), nil
 	case prometheus.BackendGrafanaCloud:
 		if authz == nil {
 			return nil, fmt.Errorf("Grafana Cloud needs basic auth: the instance ID as user and an access policy token with the metrics:read scope as password, in --basic-auth-file or %s", envBasic)
@@ -439,6 +496,8 @@ func directHint(err error, store prometheus.Backend) error {
 			return fmt.Errorf("%w (the AWS identity needs aps:QueryMetrics on the workspace; see docs/prometheus-adapter.md)", err)
 		case prometheus.BackendGMP:
 			return fmt.Errorf("%w (the Google identity needs the Monitoring Viewer role, roles/monitoring.viewer, on project %s; see docs/prometheus-adapter.md)", err, store.Project)
+		case prometheus.BackendAzure:
+			return fmt.Errorf("%w (the Entra ID identity needs the Monitoring Data Reader role on the Azure Monitor workspace; see docs/prometheus-adapter.md)", err)
 		}
 		return fmt.Errorf("%w (pass the store's credentials with --basic-auth-file, --bearer-token-file or --header-file, or %s, %s or %s)", err, envBasic, envBearer, envHeaders)
 	}

@@ -15,10 +15,11 @@ const (
 	BackendGrafanaCloud = "grafana-cloud"
 	BackendAMP          = "amp"
 	BackendGMP          = "gmp"
+	BackendAzure        = "azure"
 )
 
 // Backends lists the names ResolveBackend accepts.
-var Backends = []string{BackendPrometheus, BackendMimir, BackendGrafanaCloud, BackendAMP, BackendGMP}
+var Backends = []string{BackendPrometheus, BackendMimir, BackendGrafanaCloud, BackendAMP, BackendGMP, BackendAzure}
 
 // Backend is a store reached directly by URL, with its query limits.
 type Backend struct {
@@ -26,14 +27,37 @@ type Backend struct {
 	Base     string        // base URL of the Prometheus query API
 	Region   string        // AWS region, for Amazon Managed Prometheus
 	Project  string        // Google Cloud project, for Google Managed Prometheus
+	Audience string        // Entra ID token audience, for Azure Monitor managed Prometheus
 	MaxRange time.Duration // longest time range of one query; zero for none
+	// OneMetricPerQuery is set for stores that reject a query reading more
+	// than one metric, as Azure Monitor managed Prometheus does.
+	OneMetricPerQuery bool
 }
 
 // Query limits of the managed stores.
 const (
 	GrafanaCloudMaxRange = 32 * 24 * time.Hour
 	AMPMaxRange          = 95 * 24 * time.Hour
+	AzureMaxRange        = 32 * 24 * time.Hour
 )
+
+// Azure Monitor workspaces answer PromQL at a host under one of these
+// domains, one per Azure cloud, and accept Entra ID tokens for the audience
+// of the same name.
+var azureDomains = []string{"prometheus.monitor.azure.com", "prometheus.monitor.azure.us", "prometheus.monitor.azure.cn"}
+
+// AzureAudience is the token audience of Azure Monitor managed Prometheus in
+// the public cloud.
+const AzureAudience = "https://prometheus.monitor.azure.com"
+
+func azureDomain(host string) string {
+	for _, d := range azureDomains {
+		if strings.HasSuffix(host, "."+d) {
+			return d
+		}
+	}
+	return ""
+}
 
 var ampHost = regexp.MustCompile(`(?:^|\.)aps-workspaces\.([a-z0-9-]+)\.(?:vpce\.)?amazonaws\.com(?:\.cn)?$`)
 
@@ -57,8 +81,9 @@ func GMPURL(project string) (string, error) {
 
 // ResolveBackend works out the backend for a store URL and normalizes the
 // URL to the base of its query API. name is empty to detect the backend from
-// the host: Amazon Managed Prometheus workspaces, Grafana Cloud stacks and the
-// Google Cloud Monitoring PromQL API are recognized, a tenant implies Mimir,
+// the host: Amazon Managed Prometheus workspaces, Grafana Cloud stacks, the
+// Google Cloud Monitoring PromQL API and Azure Monitor workspaces are
+// recognized, a tenant implies Mimir,
 // and anything else is a plain Prometheus-compatible store.
 func ResolveBackend(rawURL, name string, tenant bool) (Backend, error) {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
@@ -83,6 +108,8 @@ func ResolveBackend(rawURL, name string, tenant bool) (Backend, error) {
 			b.Name = BackendGrafanaCloud
 		case host == GMPHost:
 			b.Name = BackendGMP
+		case azureDomain(host) != "":
+			b.Name = BackendAzure
 		case tenant:
 			b.Name = BackendMimir
 		default:
@@ -118,6 +145,16 @@ func ResolveBackend(rawURL, name string, tenant bool) (Backend, error) {
 			return Backend{}, fmt.Errorf("%s is not a Google Managed Prometheus URL; want https://%s/v1/projects/PROJECT_ID/location/global/prometheus, or pass --project", RedactURL(rawURL), GMPHost)
 		}
 		b.Project = m[1]
+	case BackendAzure:
+		if path != "" {
+			return Backend{}, fmt.Errorf("%s is not an Azure Monitor workspace query endpoint; want https://WORKSPACE.REGION.prometheus.monitor.azure.com, as the workspace overview in the Azure portal shows it", RedactURL(rawURL))
+		}
+		b.Audience = AzureAudience
+		if d := azureDomain(host); d != "" {
+			b.Audience = "https://" + d
+		}
+		b.MaxRange = AzureMaxRange
+		b.OneMetricPerQuery = true
 	default:
 		return Backend{}, fmt.Errorf("unknown backend %q; want one of %s", name, strings.Join(Backends, ", "))
 	}

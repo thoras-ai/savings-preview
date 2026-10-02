@@ -409,7 +409,7 @@ func pullDirect(ctx context.Context, o *runOptions, cluster string, w io.Writer)
 	}
 	name := storeName(store)
 	fmt.Fprintf(w, "pulling %s of history from the %s\n", days(o.days), name)
-	cl := &prometheus.Client{G: g, Selector: o.promSelector, MaxRange: store.MaxRange}
+	cl := &prometheus.Client{G: g, Selector: o.promSelector, MaxRange: store.MaxRange, OneMetricPerQuery: store.OneMetricPerQuery}
 	f, rep, err := prometheus.Run(ctx, prometheus.Options{Client: cl, Cluster: cluster, Days: o.days, Step: o.step, Concurrency: 2,
 		Log: func(string, ...any) {}, AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud, GKE: o.direct.gkeMode(store)})
 	if err != nil {
@@ -514,9 +514,13 @@ func printAccess(w io.Writer, o *runOptions) {
 	switch {
 	case o.source == "poll" || o.source == "datadog":
 	case o.direct.url != "":
-		if b, err := prometheus.ResolveBackend(o.direct.url, o.direct.backend, o.direct.tenant != ""); err == nil && b.Name == prometheus.BackendGMP {
+		b, err := prometheus.ResolveBackend(o.direct.url, o.direct.backend, o.direct.tenant != "")
+		switch {
+		case err == nil && b.Name == prometheus.BackendGMP:
 			fmt.Fprintf(w, "  - query Google Cloud Monitoring in project %s with your Google credentials (read-only queries)\n", b.Project)
-		} else {
+		case err == nil && b.Name == prometheus.BackendAzure:
+			fmt.Fprintf(w, "  - query the Azure Monitor workspace at %s (read-only queries)\n", prometheus.RedactURL(b.Base))
+		default:
 			fmt.Fprintf(w, "  - query the store at %s directly (read-only queries)\n", prometheus.RedactURL(o.direct.url))
 		}
 	default:

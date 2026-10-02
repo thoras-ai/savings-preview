@@ -165,3 +165,105 @@ func TestSigV4CredentialError(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestAzureClientCredentials(t *testing.T) {
+	var form url.Values
+	var tokenPath string
+	tokens := 0
+	login := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		form, tokenPath = r.PostForm, r.URL.Path
+		tokens++
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"token_type":"Bearer","expires_in":3599,"access_token":"entra-token"}`)
+	}))
+	defer login.Close()
+	var authz []string
+	store := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authz = append(authz, r.Header.Get("Authorization"))
+		fmt.Fprint(w, `{"status":"success","data":{"resultType":"vector","result":[]}}`)
+	}))
+	defer store.Close()
+
+	a, err := NewAzure(context.Background(), "https://prometheus.monitor.azure.us",
+		AzureCredentials{TenantID: "contoso.onmicrosoft.com", ClientID: "app-1", ClientSecret: "s3cret", Login: login.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &Client{G: &HTTPGetter{Base: store.URL, Auth: a}, Retries: 1, sleep: noSleep}
+	for range 2 {
+		if _, err := c.Query(context.Background(), "count(up{})", time.Time{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if tokenPath != "/contoso.onmicrosoft.com/oauth2/v2.0/token" || form.Get("grant_type") != "client_credentials" ||
+		form.Get("client_id") != "app-1" || form.Get("client_secret") != "s3cret" || form.Get("scope") != "https://prometheus.monitor.azure.us/.default" {
+		t.Errorf("token request %s %v", tokenPath, form)
+	}
+	if tokens != 1 || len(authz) != 2 || authz[0] != "Bearer entra-token" || authz[1] != authz[0] {
+		t.Errorf("%d token requests, Authorization %v", tokens, authz)
+	}
+}
+
+func TestAzureCLI(t *testing.T) {
+	var calls [][]string
+	out := `{"accessToken":"cli-token","expiresOn":"2026-10-02 08:00:00.000000","expires_on":1790006400,"tokenType":"Bearer"}`
+	a, err := NewAzure(context.Background(), AzureAudience, AzureCredentials{TenantID: "72f988bf-86f1-41af-91ab-2d7cd011db47",
+		CLI: func(_ context.Context, args ...string) ([]byte, error) {
+			calls = append(calls, args)
+			return []byte(out), nil
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := a.Source.Token()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tok.AccessToken != "cli-token" || tok.Expiry.Unix() != 1790006400 {
+		t.Errorf("token %+v", tok)
+	}
+	want := "account get-access-token --resource https://prometheus.monitor.azure.com --output json --tenant 72f988bf-86f1-41af-91ab-2d7cd011db47"
+	if len(calls) != 1 || strings.Join(calls[0], " ") != want {
+		t.Errorf("az calls %q", calls)
+	}
+
+	// Older CLIs print only expiresOn, in local time.
+	src := &azCLISource{ctx: context.Background(), resource: AzureAudience, run: func(context.Context, ...string) ([]byte, error) {
+		return []byte(`{"accessToken":"old-cli","expiresOn":"2026-10-02 08:00:00.000000"}`), nil
+	}}
+	tok, err = src.Token()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := time.Date(2026, 10, 2, 8, 0, 0, 0, time.Local); !tok.Expiry.Equal(want) {
+		t.Errorf("expiry %v, want %v", tok.Expiry, want)
+	}
+
+	src.run = func(context.Context, ...string) ([]byte, error) {
+		return nil, errors.New("Please run 'az login' to setup account.")
+	}
+	if _, err := src.Token(); err == nil || !strings.Contains(err.Error(), "az login") {
+		t.Errorf("got %v", err)
+	}
+	src.run = func(context.Context, ...string) ([]byte, error) { return []byte(`{}`), nil }
+	if _, err := src.Token(); err == nil {
+		t.Error("an empty token was accepted")
+	}
+}
+
+func TestNewAzureRejects(t *testing.T) {
+	for _, c := range []struct {
+		creds AzureCredentials
+		err   string
+	}{
+		{AzureCredentials{TenantID: "t", ClientSecret: "s"}, "needs the client ID"},
+		{AzureCredentials{TenantID: "t", ClientID: "c"}, "needs the client secret"},
+		{AzureCredentials{ClientID: "c", ClientSecret: "s"}, "needs the tenant ID"},
+		{AzureCredentials{TenantID: "../evil", ClientID: "c", ClientSecret: "s"}, "not an Entra ID tenant"},
+	} {
+		if _, err := NewAzure(context.Background(), AzureAudience, c.creds); err == nil || !strings.Contains(err.Error(), c.err) {
+			t.Errorf("%+v: got %v, want %q", c.creds, err, c.err)
+		}
+	}
+}

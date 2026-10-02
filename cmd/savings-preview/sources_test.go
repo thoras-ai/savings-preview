@@ -54,7 +54,19 @@ func TestRunFlagsSources(t *testing.T) {
 	if !strings.Contains(access.String(), "Google Cloud Monitoring in project shop-prod") {
 		t.Errorf("access: %s", access.String())
 	}
+	// --backend azure with --url reads Azure Monitor managed Prometheus.
+	if o, err = runFlags([]string{"--url", "https://ws-1.eastus.prometheus.monitor.azure.com", "--backend", "azure", "--azure-tenant-id", "contoso.onmicrosoft.com",
+		"--azure-client-id", "app-1", "--azure-client-secret-file", "secret.txt"}); err != nil ||
+		o.direct.backend != prometheus.BackendAzure || o.direct.azureTenant != "contoso.onmicrosoft.com" || o.direct.azureClientID != "app-1" || o.direct.azureSecretFile != "secret.txt" {
+		t.Fatalf("--backend azure: %+v, %v", o, err)
+	}
+	access.Reset()
+	printAccess(&access, o)
+	if !strings.Contains(access.String(), "Azure Monitor workspace at https://ws-1.eastus.prometheus.monitor.azure.com") {
+		t.Errorf("access: %s", access.String())
+	}
 	for _, bad := range [][]string{
+		{"--azure-client-id", "app-1"},
 		{"--project", "shop-prod", "--source", "poll"},
 		{"--tenant", "t"},
 		{"--backend", "mimir"},

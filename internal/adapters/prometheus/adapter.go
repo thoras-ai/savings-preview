@@ -96,6 +96,7 @@ type pulled struct {
 	// then come from the node series' labels, in gkeNodes.
 	gke      bool
 	gkeNodes map[string]*contract.Node
+	warnings []string
 }
 
 // Run pulls the history from the store and assembles the contract file.
@@ -109,10 +110,15 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 		return pullGKE(ctx, o, pl.gke, rep)
 	}
 	o.Client = pl.client
-	p, err := pull(ctx, o, rep.Start, pl.src, pl.kinds)
+	pullFn := pull
+	if o.Client.OneMetricPerQuery {
+		pullFn = pullSplit
+	}
+	p, err := pullFn(ctx, o, rep.Start, pl.src, pl.kinds)
 	if err != nil {
 		return nil, rep, err
 	}
+	rep.Warnings = append(rep.Warnings, p.warnings...)
 	f, err := assemble(ctx, o, p, pl.src.requests, rep)
 	if err != nil {
 		return nil, rep, err
@@ -199,6 +205,9 @@ func prepare(ctx context.Context, o Options) (*plan, *Report, error) {
 			}
 			return nil, rep, fmt.Errorf("the store has no per-container usage metrics (container_memory_working_set_bytes with container and image labels); the kubelet cAdvisor job is probably not collected")
 		}
+		if c.OneMetricPerQuery {
+			return nil, rep, fmt.Errorf("the store has no per-container usage metrics (container_memory_working_set_bytes with container and image labels); usage from pod-level series cannot be split between containers on a store that reads one metric per query")
+		}
 		if ok, err := c.present(ctx, PodUsageProbe, o.Now); err != nil {
 			return nil, rep, fmt.Errorf("probe pod metrics: %w", err)
 		} else if !ok {
@@ -223,8 +232,10 @@ func prepare(ctx context.Context, o Options) (*plan, *Report, error) {
 		} else if len(missing) > 0 {
 			return nil, rep, &LabelsMissingError{Metric: "kube_pod_container_info", Labels: missing}
 		}
-	} else if s, err := c.Query(ctx, UnlabeledPods, o.Now); err == nil && len(s) > 0 && len(s[0].Points) > 0 && s[0].Points[0].V > 0 {
-		rep.Warnings = append(rep.Warnings, fmt.Sprintf("%.0f workload pods have pod-level usage but no per-container usage series (their nodes do not label cAdvisor series) and are left out of the usage averages", s[0].Points[0].V))
+	} else if !c.OneMetricPerQuery { // UnlabeledPods joins three metrics
+		if s, err := c.Query(ctx, UnlabeledPods, o.Now); err == nil && len(s) > 0 && len(s[0].Points) > 0 && s[0].Points[0].V > 0 {
+			rep.Warnings = append(rep.Warnings, fmt.Sprintf("%.0f workload pods have pod-level usage but no per-container usage series (their nodes do not label cAdvisor series) and are left out of the usage averages", s[0].Points[0].V))
+		}
 	}
 	hasRestarts, _ := c.present(ctx, RestartsProbe, o.Now)
 	hasPhase, _ := c.present(ctx, PhaseProbe, o.Now)
@@ -258,7 +269,7 @@ func prepare(ctx context.Context, o Options) (*plan, *Report, error) {
 	}
 
 	rep.NoRequests = !hasRequests
-	return &plan{src: sources{requests: hasRequests, podUsage: rep.UsageFromPods, oom: hasRestarts}, kinds: kinds, client: c}, rep, nil
+	return &plan{src: sources{requests: hasRequests, podUsage: rep.UsageFromPods, oom: hasRestarts, phase: hasPhase}, kinds: kinds, client: c}, rep, nil
 }
 
 func spanText(d time.Duration) string {
@@ -280,6 +291,7 @@ type sources struct {
 	requests bool // requests and limits, limited to running pods
 	podUsage bool // usage only from the pod cgroup series
 	oom      bool // container restarts and termination reasons
+	phase    bool // pod phases
 }
 
 func pull(ctx context.Context, o Options, start time.Time, src sources, kinds []string) (*pulled, error) {
