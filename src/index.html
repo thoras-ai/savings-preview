@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thoras Savings Preview</title>
+<style>/*{{CSS}}*/</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">Thoras <span>Savings Preview</span></div>
+</header>
+<main>
+  <section id="loading" class="panel center" hidden>Loading report data…</section>
+
+  <section id="start" class="panel center" hidden>
+    <h1>Open a report file</h1>
+    <p>Choose the OTel metrics file the CLI wrote, or drop it on this page. Nothing leaves your machine.</p>
+    <p id="error" class="error" hidden></p>
+    <label class="button">Choose file<input id="file" type="file" accept=".json,application/json" hidden></label>
+  </section>
+
+  <div id="report" hidden>
+    <div class="heading">
+      <div>
+        <h1 id="cluster"></h1>
+        <div id="fidelity" class="fidelity"></div>
+      </div>
+    </div>
+    <div id="tiles" class="tiles"></div>
+    <div id="notes" class="notes" hidden></div>
+
+    <section id="chart-card" class="card">
+      <div class="card-head">
+        <div>
+          <h2 id="chart-title"></h2>
+          <div id="chart-sub" class="sub"></div>
+        </div>
+        <div class="card-tools">
+          <button id="back" type="button" class="link" hidden>← Whole cluster</button>
+          <div id="tabs" class="tabs" role="tablist"></div>
+        </div>
+      </div>
+      <div id="legend" class="legend"></div>
+      <div id="chart" class="chart-host"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Workloads</h2><div class="sub">Sorted by waste. Select a workload to chart it.</div></div></div>
+      <div class="table-wrap"><table id="table"></table></div>
+    </section>
+    <p id="basis" class="basis"></p>
+  </div>
+</main>
+<script>/*{{JS}}*/</script>
+</body>
+</html>
