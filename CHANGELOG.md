@@ -4,7 +4,7 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 
 ## Unreleased
 
-### Fixed
+### Fixes
 
 - The spend chart on page one no longer goes blank when one container of a workload runs only some of the time, such as an init container, a periodic check or a sidecar that exits. A container with no CPU or memory usage at a step is taken as not running there and adds no usage and no request; before, the whole workload had no value at that step, and the chart left out every bucket where any workload had none. A workload now has no value only where none of its containers has usage.
 - In the chart, a workload with no value in a bucket inside its span takes its nearest value. The bucket is left empty only when the workloads filled this way make up more than 5% of its spend. Empty buckets at the start and end are dropped, so a store with a shorter memory history than CPU history no longer leaves the first hours blank.

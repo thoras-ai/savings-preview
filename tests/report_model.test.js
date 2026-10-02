@@ -280,7 +280,7 @@ test('intermittent containers and late series do not blank the cluster chart', (
   assert.ok(Math.abs(r.series.reqCpu[0] - r.series.reqCpu[24]) < 1e-9);
 });
 
-test('totals for the committed fixtures match the figures before intermittent containers were handled', () => {
+test('totals for the committed fixtures keep their golden values', () => {
   const want = {
     'savings-preview.otlp.json': { spend: 6155.221709224345, savings: 2181.09021553841, reqCores: 14, reqGiB: 44, counted: 3 },
     'minikube-poll.otlp.json': { spend: 1595.0728125, savings: 1468.3183583557436, reqCores: 3.236, reqGiB: 8.78125, counted: 21 }

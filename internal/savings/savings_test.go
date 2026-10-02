@@ -501,7 +501,7 @@ process.stdout.write(JSON.stringify(out));
 
 // A container without both usage values at a step is not running then and
 // adds no request, so the check container's request counts at one step of
-// 192 instead of the workload counting only at that step.
+// 192.
 func TestIntermittentContainers(t *testing.T) {
 	b, err := os.ReadFile("../../fixtures/intermittent.otlp.json")
 	if err != nil {
