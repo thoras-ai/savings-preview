@@ -107,3 +107,50 @@ func TestRedactURL(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// Behind Thanos Query the lowest timestamp describes a sidecar's local TSDB,
+// while the store answers for much longer.
+func TestEarliestDataIgnoresTSDBHintWhenDataExistsBeforeIt(t *testing.T) {
+	now := time.Unix(1_790_000_000, 0)
+	first := now.Add(-10 * 24 * time.Hour)
+	f := &fakeStore{}
+	f.handle = func(path string, q url.Values) (int, any) {
+		if strings.Contains(q.Get("query"), "prometheus_tsdb_lowest_timestamp_seconds") {
+			return 200, vector(float64(now.Add(-2 * time.Hour).Unix()))
+		}
+		if atoi(q.Get("time")) >= first.Unix() {
+			return 200, vector(1)
+		}
+		return 200, empty()
+	}
+	got, _, err := f.client(t).EarliestData(context.Background(), "count(x)", now, 14*24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := first.Sub(got); d < 0 || d > time.Hour {
+		t.Errorf("earliest %v, first sample %v: the hint must not cut the history", got, first)
+	}
+}
+
+func TestEarliestDataNeverStartsAfterTheFirstSample(t *testing.T) {
+	now := time.Unix(1_790_000_000, 0)
+	for _, offset := range []time.Duration{31 * time.Minute, 95 * time.Minute, 5*time.Hour + 17*time.Minute, 49*time.Hour + 59*time.Minute} {
+		first := now.Add(-offset)
+		f := &fakeStore{handle: func(path string, q url.Values) (int, any) {
+			if strings.Contains(q.Get("query"), "prometheus_tsdb_lowest") {
+				return 200, empty()
+			}
+			if atoi(q.Get("time")) >= first.Unix() {
+				return 200, vector(1)
+			}
+			return 200, empty()
+		}}
+		got, _, err := f.client(t).EarliestData(context.Background(), "count(x)", now, 14*24*time.Hour)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.After(first) || first.Sub(got) > time.Hour {
+			t.Errorf("first sample %v ago: start is %v ago", offset, now.Sub(got))
+		}
+	}
+}

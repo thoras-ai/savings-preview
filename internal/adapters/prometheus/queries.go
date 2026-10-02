@@ -17,7 +17,7 @@ const (
 const podToDeployment = `max by (namespace, pod, workload) (
   label_replace(kube_pod_owner{owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.+)")
   * on (namespace, replicaset) group_left (workload)
-  label_replace(kube_replicaset_owner{owner_kind="Deployment"}, "workload", "$1", "owner_name", "(.+)")
+  max by (namespace, replicaset, workload) (label_replace(kube_replicaset_owner{owner_kind="Deployment"}, "workload", "$1", "owner_name", "(.+)"))
 )`
 
 const podToStatefulSet = `max by (namespace, pod, workload) (
@@ -59,7 +59,9 @@ func MemoryUsage(kind string) string {
 
 // Requests is the mean per-pod request for a resource ("cpu" or "memory").
 // kube-state-metrics keeps exporting the requests of finished pods, so the
-// series are limited to pods that are running.
+// series are limited to pods that are running. Every right-hand side of a
+// join is deduplicated so that a second copy of a series, from two scrapes or
+// two kube-state-metrics replicas, does not fail the query.
 func Requests(kind, resource string) string {
 	return perPod("kube_pod_container_resource_requests", kind, resource)
 }
@@ -73,7 +75,7 @@ func perPod(metric, kind, resource string) string {
 	return fmt.Sprintf(`avg by (namespace, workload, container) (
   max by (namespace, pod, container) (
     %s{resource=%q}
-    * on (namespace, pod) group_left () (kube_pod_status_phase{phase="Running"} == 1)
+    * on (namespace, pod) group_left () max by (namespace, pod) (kube_pod_status_phase{phase="Running"} == 1)
   )
   * on (namespace, pod) group_left (workload) %s
 )`, metric, resource, podMap(kind))
@@ -94,10 +96,13 @@ func NodeAllocatable(resource string) string {
 
 // Presence probes.
 const (
-	UsageProbe    = `count(container_memory_working_set_bytes{` + appContainers + `})`
-	CPUProbe      = `count(container_cpu_usage_seconds_total{` + appContainers + `})`
-	RequestsProbe = `count(kube_pod_container_resource_requests)`
-	OwnerProbe    = `count(kube_pod_owner)`
+	UsageProbe      = `count(container_memory_working_set_bytes{` + appContainers + `})`
+	CPUProbe        = `count(container_cpu_usage_seconds_total{` + appContainers + `})`
+	RequestsProbe   = `count(kube_pod_container_resource_requests)`
+	OwnerProbe      = `count(kube_pod_owner)`
+	ReplicaSetProbe = `count(kube_replicaset_owner{owner_kind="Deployment"})`
+	PhaseProbe      = `count(kube_pod_status_phase{phase="Running"})`
+	ClusterCount    = `count(count by (cluster) (kube_pod_owner))`
 )
 
 // NodeInfoAt returns the last known labels and provider id of every node seen

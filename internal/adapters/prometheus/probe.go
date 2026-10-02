@@ -80,7 +80,7 @@ func (c *Client) present(ctx context.Context, q string, at time.Time) (bool, err
 }
 
 // EarliestData finds how far back query has data, no further back than
-// maxBack before now. It returns the earliest time found, rounded to the hour.
+// maxBack before now. It returns a time at or up to an hour before the first sample.
 // When data exists at the far end, that end is returned and full is true.
 func (c *Client) EarliestData(ctx context.Context, query string, now time.Time, maxBack time.Duration) (earliest time.Time, full bool, err error) {
 	ok, err := c.present(ctx, query, now)
@@ -92,11 +92,18 @@ func (c *Client) EarliestData(ctx context.Context, query string, now time.Time, 
 	}
 	far := now.Add(-maxBack)
 	lo := far
-	// Nothing exists before the oldest sample in a Prometheus TSDB, which
-	// narrows the search. Other stores do not have the metric; that is fine.
+	// In a plain Prometheus nothing exists before the oldest sample of its
+	// TSDB, which narrows the search. Behind Thanos the same metric describes
+	// only the local TSDB of a sidecar, while the store answers for much
+	// longer, so the hint is used only when the query really has no data at
+	// that point.
 	if s, qerr := c.Query(ctx, "min(prometheus_tsdb_lowest_timestamp_seconds)", now); qerr == nil && len(s) > 0 && len(s[0].Points) > 0 {
 		if t := time.Unix(int64(s[0].Points[0].V), 0).Add(-time.Hour); t.After(lo) {
-			lo = t
+			if ok, err := c.present(ctx, query, t); err != nil {
+				return time.Time{}, false, err
+			} else if !ok {
+				lo = t
+			}
 		}
 	}
 	if lo.Equal(far) {
@@ -119,7 +126,9 @@ func (c *Client) EarliestData(ctx context.Context, query string, now time.Time, 
 			lo = mid
 		}
 	}
-	return hi.Truncate(time.Hour), false, nil
+	// lo has no data, so the first sample lies between lo and hi. Starting at
+	// lo may include an hour of nothing, but never drops a sample.
+	return lo, false, nil
 }
 
 // Build returns the store's version string, empty if unknown.

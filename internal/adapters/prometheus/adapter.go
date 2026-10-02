@@ -70,8 +70,22 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 	if !hasOwners {
 		return nil, rep, fmt.Errorf("kube-state-metrics is not in the store (no kube_pod_owner series): pods cannot be mapped to workloads, and requests and replica counts are unavailable, so no cost can be computed")
 	}
+	hasPhase, _ := c.present(ctx, PhaseProbe, o.Now)
+	hasReplicaSets, _ := c.present(ctx, ReplicaSetProbe, o.Now)
+	kinds := []string{StatefulSet}
+	if hasReplicaSets {
+		kinds = []string{Deployment, StatefulSet}
+	} else {
+		rep.Warnings = append(rep.Warnings, "kube_replicaset_owner is not in the store: Deployments cannot be mapped from their pods and are left out")
+	}
 	if !hasRequests {
 		rep.Warnings = append(rep.Warnings, "kube-state-metrics exports no container requests (kube_pod_container_resource_requests): requests are unavailable and listed as missing")
+	} else if !hasPhase {
+		hasRequests = false
+		rep.Warnings = append(rep.Warnings, "kube_pod_status_phase is not in the store, so requests cannot be limited to running pods: requests are unavailable and listed as missing")
+	}
+	if s, err := c.Query(ctx, ClusterCount, o.Now); err == nil && len(s) > 0 && len(s[0].Points) > 0 && s[0].Points[0].V > 1 {
+		rep.Warnings = append(rep.Warnings, fmt.Sprintf("the store holds %.0f clusters (label cluster): their workloads are averaged together; point the adapter at a store that holds one cluster", s[0].Points[0].V))
 	}
 
 	maxBack := time.Duration(o.Days) * 24 * time.Hour
@@ -85,7 +99,7 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 		rep.Warnings = append(rep.Warnings, fmt.Sprintf("the store holds about %s of history, less than the %d days asked for", spanText(o.Now.Sub(earliest)), o.Days))
 	}
 
-	p, err := pull(ctx, o, rep.Start, hasRequests)
+	p, err := pull(ctx, o, rep.Start, hasRequests, kinds)
 	if err != nil {
 		return nil, rep, err
 	}
@@ -104,11 +118,12 @@ func spanText(d time.Duration) string {
 }
 
 type job struct {
+	name  string
 	query string
 	into  func([]Series)
 }
 
-func pull(ctx context.Context, o Options, start time.Time, requests bool) (*pulled, error) {
+func pull(ctx context.Context, o Options, start time.Time, requests bool, kinds []string) (*pulled, error) {
 	p := &pulled{
 		cpuUse: map[cKey][]contract.Point{}, memUse: map[cKey][]contract.Point{},
 		cpuReq: map[cKey][]contract.Point{}, memReq: map[cKey][]contract.Point{},
@@ -119,7 +134,7 @@ func pull(ctx context.Context, o Options, start time.Time, requests bool) (*pull
 	var mu sync.Mutex
 	var jobs []job
 	add := func(name, q string, into func([]Series)) {
-		jobs = append(jobs, job{query: name + "\x00" + q, into: into})
+		jobs = append(jobs, job{name: name, query: q, into: into})
 	}
 	cs := func(kind string, dst map[cKey][]contract.Point) func([]Series) {
 		return func(ss []Series) {
@@ -128,7 +143,7 @@ func pull(ctx context.Context, o Options, start time.Time, requests bool) (*pull
 			}
 		}
 	}
-	for _, kind := range []string{Deployment, StatefulSet} {
+	for _, kind := range kinds {
 		kind := kind
 		add(kind+" cpu usage", CPUUsage(kind, o.Step), cs(kind, p.cpuUse))
 		add(kind+" memory usage", MemoryUsage(kind), cs(kind, p.memUse))
@@ -155,6 +170,8 @@ func pull(ctx context.Context, o Options, start time.Time, requests bool) (*pull
 	add("node cpu", NodeAllocatable("cpu"), nodes(p.nodeCPU))
 	add("node memory", NodeAllocatable("memory"), nodes(p.nodeMem))
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	sem := make(chan struct{}, o.Concurrency)
 	errs := make(chan error, len(jobs))
 	var wg sync.WaitGroup
@@ -165,21 +182,22 @@ func pull(ctx context.Context, o Options, start time.Time, requests bool) (*pull
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			name, q, _ := strings.Cut(j.query, "\x00")
 			t0 := time.Now()
-			ss, err := o.Client.QueryRangeChunked(ctx, q, start, o.Now, o.Step, 24*time.Hour)
+			ss, err := o.Client.QueryRangeChunked(ctx, j.query, start, o.Now, o.Step, 24*time.Hour)
 			if err != nil {
-				errs <- fmt.Errorf("%s: %w", name, err)
+				errs <- fmt.Errorf("%s: %w", j.name, err)
+				cancel()
 				return
 			}
 			mu.Lock()
 			j.into(ss)
 			mu.Unlock()
-			o.Log("pulled %s: %d series in %s", name, len(ss), time.Since(t0).Round(time.Millisecond))
+			o.Log("pulled %s: %d series in %s", j.name, len(ss), time.Since(t0).Round(time.Millisecond))
 		}()
 	}
 	wg.Wait()
 	close(errs)
+	// The first error is the cause; the rest are cancellations that followed it.
 	if err := <-errs; err != nil {
 		return nil, err
 	}
@@ -224,10 +242,8 @@ func assemble(ctx context.Context, o Options, p *pulled, requests bool, rep *Rep
 		r := contract.Resource{Common: base, Namespace: k.ns, Kind: k.kind, Workload: k.workload, Container: k.container}
 		wk := wKey{k.kind, k.ns, k.workload}
 		add := func(name string, pts []contract.Point, usage []contract.Point) {
-			if len(pts) == 0 {
-				if name == contract.CPURequest || name == contract.MemoryRequest {
-					pts = zeroFill(usage, p.replicas[wk])
-				}
+			if name == contract.CPURequest || name == contract.MemoryRequest {
+				pts = fillRequests(pts, usage, p.replicas[wk])
 			}
 			if len(pts) == 0 {
 				if spec, _ := contract.SpecOf(name); spec.Required {
@@ -318,22 +334,28 @@ func tierOf(step int, ms []contract.Series) int {
 	return contract.TierFor(step, last-first+int64(step))
 }
 
-// zeroFill returns zero points at the usage timestamps where the workload has
-// a replica count.
-func zeroFill(usage, replicas []contract.Point) []contract.Point {
+// fillRequests adds a zero request at every usage timestamp where the
+// workload has a replica count but the store has no request series. That is a
+// container with no request set, or the time before one was set.
+func fillRequests(req, usage, replicas []contract.Point) []contract.Point {
 	if len(usage) == 0 || len(replicas) == 0 {
-		return nil
+		return req
 	}
-	have := make(map[int64]bool, len(replicas))
-	for _, r := range replicas {
+	have := make(map[int64]bool, len(req))
+	for _, r := range req {
 		have[r.T] = true
 	}
-	var out []contract.Point
+	up := make(map[int64]bool, len(replicas))
+	for _, r := range replicas {
+		up[r.T] = true
+	}
+	out := append([]contract.Point(nil), req...)
 	for _, u := range usage {
-		if have[u.T] {
+		if up[u.T] && !have[u.T] {
 			out = append(out, contract.Point{T: u.T})
 		}
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].T < out[j].T })
 	return out
 }
 

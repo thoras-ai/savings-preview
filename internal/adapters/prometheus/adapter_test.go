@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,7 +19,7 @@ const t0 = 1_790_000_100 // a multiple of 300
 
 // clusterStore answers like a store holding three days of data for one
 // deployment, one statefulset and one node.
-func clusterStore(withOwners, withRequests, requestsForContainers bool) func(string, url.Values) (int, any) {
+func clusterStore(withOwners, withRequests, requestsForContainers bool, drop ...string) func(string, url.Values) (int, any) {
 	first := int64(t0) - 3*86400
 	return func(path string, q url.Values) (int, any) {
 		query := q.Get("query")
@@ -39,6 +40,8 @@ func clusterStore(withOwners, withRequests, requestsForContainers bool) func(str
 					map[string]any{"metric": map[string]string{"node": "n1",
 						"label_node_kubernetes_io_instance_type": "m5.xlarge", "label_topology_kubernetes_io_region": "us-east-1",
 						"label_eks_amazonaws_com_capacityType": "SPOT"}, "value": []any{1.0, "1"}}}}}
+			case dropped(drop, query):
+				return 200, empty()
 			case query == OwnerProbe:
 				if !withOwners {
 					return 200, empty()
@@ -248,5 +251,128 @@ func TestQueriesAvoidDoubleCounting(t *testing.T) {
 	}
 	if !strings.Contains(Requests(Deployment, "cpu"), `kube_pod_status_phase{phase="Running"} == 1`) {
 		t.Error("requests must be limited to running pods")
+	}
+}
+
+func dropped(drop []string, query string) bool {
+	for _, d := range drop {
+		if query == d {
+			return true
+		}
+	}
+	return false
+}
+
+func warnings(rep *Report) string { return strings.Join(rep.Warnings, "\n") }
+
+func TestMissingPhaseMetricMakesRequestsUnavailable(t *testing.T) {
+	f := &fakeStore{handle: clusterStore(true, true, true, PhaseProbe)}
+	file, rep, err := runAgainst(t, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validate(t, file)
+	r := find(file, "shop", Deployment, "web", "app")
+	if len(r.Missing) != 2 || len(series(r, contract.CPURequest)) != 0 {
+		t.Errorf("without the phase metric requests must be missing, not zero: missing=%v", r.Missing)
+	}
+	if !strings.Contains(warnings(rep), "kube_pod_status_phase") {
+		t.Errorf("warnings: %s", warnings(rep))
+	}
+}
+
+func TestMissingReplicaSetOwnerLeavesDeploymentsOutWithAWarning(t *testing.T) {
+	f := &fakeStore{handle: clusterStore(true, true, true, ReplicaSetProbe)}
+	file, rep, err := runAgainst(t, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if find(file, "shop", Deployment, "web", "app") != nil {
+		t.Error("deployments cannot be mapped without kube_replicaset_owner")
+	}
+	if find(file, "shop", StatefulSet, "db", "app") == nil {
+		t.Error("statefulsets do not need it")
+	}
+	if !strings.Contains(warnings(rep), "kube_replicaset_owner") {
+		t.Errorf("warnings: %s", warnings(rep))
+	}
+	for _, q := range f.requests {
+		if strings.Contains(q.Get("query"), "kube_replicaset_owner") && q.Get("start") != "" {
+			t.Error("no Deployment query should be sent")
+			break
+		}
+	}
+}
+
+func TestMultipleClustersInOneStoreWarn(t *testing.T) {
+	h := clusterStore(true, true, true)
+	f := &fakeStore{handle: func(path string, q url.Values) (int, any) {
+		if q.Get("query") == ClusterCount {
+			return 200, vector(3)
+		}
+		return h(path, q)
+	}}
+	_, rep, err := runAgainst(t, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(warnings(rep), "3 clusters") {
+		t.Errorf("warnings: %s", warnings(rep))
+	}
+}
+
+func TestRequestSetPartwayThroughTheWindowIsZeroBefore(t *testing.T) {
+	usage := []contract.Point{{T: 300}, {T: 600}, {T: 900}, {T: 1200}}
+	req := []contract.Point{{T: 900, V: 0.5}, {T: 1200, V: 0.5}}
+	replicas := []contract.Point{{T: 300, V: 1}, {T: 600, V: 1}, {T: 900, V: 1}, {T: 1200, V: 1}}
+	got := fillRequests(req, usage, replicas)
+	want := []contract.Point{{T: 300}, {T: 600}, {T: 900, V: 0.5}, {T: 1200, V: 0.5}}
+	if len(got) != len(want) {
+		t.Fatalf("got %v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("point %d: got %v want %v", i, got[i], want[i])
+		}
+	}
+	// No replica count means kube-state-metrics was not answering: leave the gap.
+	if got := fillRequests(req, usage, replicas[2:]); len(got) != 2 {
+		t.Errorf("gaps without replica counts must stay gaps, got %v", got)
+	}
+}
+
+func TestJoinsDeduplicateTheirRightHandSide(t *testing.T) {
+	for _, q := range []string{CPUUsage(Deployment, time.Minute), Requests(Deployment, "cpu"), Limits(StatefulSet, "memory")} {
+		if strings.Contains(q, "* on (namespace, replicaset) group_left (workload)\n  label_replace") {
+			t.Errorf("the ReplicaSet owner side must be wrapped in max by:\n%s", q)
+		}
+	}
+	if !strings.Contains(podToDeployment, "max by (namespace, replicaset, workload) (label_replace(kube_replicaset_owner") {
+		t.Error("kube_replicaset_owner must be deduplicated before the join")
+	}
+	if !strings.Contains(Requests(Deployment, "cpu"), `group_left () max by (namespace, pod) (kube_pod_status_phase{phase="Running"} == 1)`) {
+		t.Error("kube_pod_status_phase must be deduplicated before the join")
+	}
+}
+
+func TestFirstFailedQueryCancelsTheRest(t *testing.T) {
+	var mu sync.Mutex
+	rangeCalls := 0
+	h := clusterStore(true, true, true)
+	f := &fakeStore{handle: func(path string, q url.Values) (int, any) {
+		if path == "/api/v1/query_range" {
+			mu.Lock()
+			rangeCalls++
+			mu.Unlock()
+			return 422, map[string]any{"status": "error", "errorType": "execution", "error": "boom"}
+		}
+		return h(path, q)
+	}}
+	_, _, err := Run(context.Background(), Options{Client: f.client(t), Cluster: "x", Days: 7, Step: 5 * time.Minute, Now: time.Unix(t0, 0), Concurrency: 1})
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rangeCalls > 2 {
+		t.Errorf("queries kept running after the first failure: %d range calls", rangeCalls)
 	}
 }
