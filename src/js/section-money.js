@@ -161,7 +161,8 @@
     var shown = {};
     list.forEach(function (c) { shown[c.ns || c.key] = true; });
     var keys = sum.namespaces.filter(function (n) { return n.tone !== 'other' && shown[n.name]; }).map(function (n) { return [n.tone, n.name]; });
-    if (list.some(function (c) { return c.tone === 'other'; })) keys.push(['other', view.ns ? 'smaller workloads' : 'other namespaces']);
+    // The shared cell for smaller workloads names itself, so it needs no key.
+    if (list.some(function (c) { return c.tone === 'other' && c.kind !== 'rest'; })) keys.push(['other', view.ns || 'other namespaces']);
     if (list.some(function (c) { return c.kind === 'gap'; })) keys.push(['gap', 'not counted']);
     return '<div class="legend">' + keys.map(function (k) { return '<span><i class="tm-key tm-' + k[0] + '"></i>' + esc(k[1]) + '</span>'; }).join('') + '</div>';
   }

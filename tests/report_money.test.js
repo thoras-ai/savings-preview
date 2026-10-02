@@ -200,3 +200,13 @@ test('the shared cell for smaller workloads gives its share and how to see them'
   assert.match(html, /more workloads<\/b><span>\$[\d,.M]+ · \d+% of savings/);
   assert.match(html, /select one to see all of its workloads/);
 });
+
+test('a drilled namespace without a colour of its own names its key', () => {
+  const r = large(1000), sum = money.summarize(r);
+  const ns = sum.namespaces.find(n => n.tone === 'other').name;
+  const legend = money.html(r, state.DEFAULTS, Object.assign({}, VIEW, { ns }), false, 1100).match(/<div class="legend">(.*?)<\/div>/)[1];
+  assert.match(legend, new RegExp(`tm-other"></i>${ns}<`));
+  assert.doesNotMatch(legend, /smaller workloads|other namespaces/);
+  const all = money.html(r, state.DEFAULTS, Object.assign({}, VIEW, { level: 'workloads' }), false, 1100).match(/<div class="legend">(.*?)<\/div>/)[1];
+  assert.match(all, /other namespaces/);
+});
