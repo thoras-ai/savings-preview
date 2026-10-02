@@ -14,7 +14,7 @@ import (
 const (
 	SchemaURL    = "https://opentelemetry.io/schemas/1.44.0"
 	ScopeName    = "thoras.savings_preview"
-	ScopeVersion = "1.1.0"
+	ScopeVersion = "1.2.0"
 	day          = 86400
 )
 
@@ -38,31 +38,35 @@ type Spec struct {
 
 // Metric names.
 const (
-	CPUUsage         = "container.cpu.usage"
-	MemoryWorkingSet = "container.memory.working_set"
-	CPURequest       = "k8s.container.cpu.request.desired"
-	MemoryRequest    = "k8s.container.memory.request.desired"
-	CPULimit         = "k8s.container.cpu.limit.desired"
-	MemoryLimit      = "k8s.container.memory.limit.desired"
-	OOMKills         = "thoras.container.oom_kills"
-	DeploymentPods   = "k8s.deployment.pod.desired"
-	StatefulSetPods  = "k8s.statefulset.pod.desired"
-	NodeCPU          = "k8s.node.cpu.allocatable"
-	NodeMemory       = "k8s.node.memory.allocatable"
+	CPUUsage            = "container.cpu.usage"
+	MemoryWorkingSet    = "container.memory.working_set"
+	CPUUsageMax         = "thoras.container.cpu.usage.max"
+	MemoryWorkingSetMax = "thoras.container.memory.working_set.max"
+	CPURequest          = "k8s.container.cpu.request.desired"
+	MemoryRequest       = "k8s.container.memory.request.desired"
+	CPULimit            = "k8s.container.cpu.limit.desired"
+	MemoryLimit         = "k8s.container.memory.limit.desired"
+	OOMKills            = "thoras.container.oom_kills"
+	DeploymentPods      = "k8s.deployment.pod.desired"
+	StatefulSetPods     = "k8s.statefulset.pod.desired"
+	NodeCPU             = "k8s.node.cpu.allocatable"
+	NodeMemory          = "k8s.node.memory.allocatable"
 )
 
 var specs = map[string]Spec{
-	CPUUsage:         {CPUUsage, Gauge, "{cpu}", false, true},
-	MemoryWorkingSet: {MemoryWorkingSet, UpDownCounter, "By", true, true},
-	CPURequest:       {CPURequest, UpDownCounter, "{cpu}", false, true},
-	MemoryRequest:    {MemoryRequest, UpDownCounter, "By", true, true},
-	CPULimit:         {CPULimit, UpDownCounter, "{cpu}", false, false},
-	MemoryLimit:      {MemoryLimit, UpDownCounter, "By", true, false},
-	OOMKills:         {OOMKills, DeltaCounter, "{oom_kill}", true, false},
-	DeploymentPods:   {DeploymentPods, UpDownCounter, "{pod}", true, true},
-	StatefulSetPods:  {StatefulSetPods, UpDownCounter, "{pod}", true, true},
-	NodeCPU:          {NodeCPU, UpDownCounter, "{cpu}", false, true},
-	NodeMemory:       {NodeMemory, UpDownCounter, "By", true, true},
+	CPUUsage:            {CPUUsage, Gauge, "{cpu}", false, true},
+	MemoryWorkingSet:    {MemoryWorkingSet, UpDownCounter, "By", true, true},
+	CPUUsageMax:         {CPUUsageMax, Gauge, "{cpu}", false, false},
+	MemoryWorkingSetMax: {MemoryWorkingSetMax, UpDownCounter, "By", true, false},
+	CPURequest:          {CPURequest, UpDownCounter, "{cpu}", false, true},
+	MemoryRequest:       {MemoryRequest, UpDownCounter, "By", true, true},
+	CPULimit:            {CPULimit, UpDownCounter, "{cpu}", false, false},
+	MemoryLimit:         {MemoryLimit, UpDownCounter, "By", true, false},
+	OOMKills:            {OOMKills, DeltaCounter, "{oom_kill}", true, false},
+	DeploymentPods:      {DeploymentPods, UpDownCounter, "{pod}", true, true},
+	StatefulSetPods:     {StatefulSetPods, UpDownCounter, "{pod}", true, true},
+	NodeCPU:             {NodeCPU, UpDownCounter, "{cpu}", false, true},
+	NodeMemory:          {NodeMemory, UpDownCounter, "By", true, true},
 }
 
 // SpecOf returns the spec of a contract metric.
@@ -100,6 +104,13 @@ type Node struct {
 	CapacityType string // on_demand, spot or unknown
 }
 
+// StepSpan says that a resource's points from Start up to End (unix seconds,
+// End exclusive) are spaced Step seconds apart.
+type StepSpan struct {
+	Start, End int64
+	Step       int
+}
+
 // Resource is one container, workload or node. Set Node for a node; otherwise
 // set Namespace, Kind ("deployment" or "statefulset") and Workload, and also
 // Container for a container resource.
@@ -112,6 +123,9 @@ type Resource struct {
 	Node      *Node
 	Missing   []string
 	Notes     []string // thoras.fidelity_notes
+	// StepSpans is set when the points use more than one step; StepSeconds is
+	// then the finest of them.
+	StepSpans []StepSpan
 	Metrics   []Series
 }
 
@@ -162,6 +176,13 @@ func (r *Resource) attrs() []attr {
 	}
 	if len(r.Notes) > 0 {
 		a = append(a, strs("thoras.fidelity_notes", r.Notes))
+	}
+	if len(r.StepSpans) > 0 {
+		spans := make([]string, len(r.StepSpans))
+		for i, sp := range r.StepSpans {
+			spans[i] = fmt.Sprintf("%d/%d/%d", sp.Start, sp.End, sp.Step)
+		}
+		a = append(a, strs("thoras.step_spans", spans))
 	}
 	if r.Node != nil {
 		return append(a,
@@ -248,25 +269,54 @@ func encode(s Series) (metric, error) {
 	return m, nil
 }
 
+type scope struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+type scopeMetrics struct {
+	Scope     scope    `json:"scope"`
+	SchemaURL string   `json:"schemaUrl"`
+	Metrics   []metric `json:"metrics"`
+}
+
+type resourceAttrs struct {
+	Attributes []attr `json:"attributes"`
+}
+
+type resourceMetrics struct {
+	Resource     resourceAttrs  `json:"resource"`
+	SchemaURL    string         `json:"schemaUrl"`
+	ScopeMetrics []scopeMetrics `json:"scopeMetrics"`
+}
+
+func (r *Resource) encode() (resourceMetrics, error) {
+	ser := append([]Series(nil), r.Metrics...)
+	sort.SliceStable(ser, func(a, b int) bool { return ser[a].Name < ser[b].Name })
+	ms := make([]metric, 0, len(ser))
+	for _, s := range ser {
+		if len(s.Points) == 0 {
+			return resourceMetrics{}, fmt.Errorf("%s: metric %s has no points; leave it out and list it as missing", r.sortKey(), s.Name)
+		}
+		m, err := encode(s)
+		if err != nil {
+			return resourceMetrics{}, fmt.Errorf("%s: %w", r.sortKey(), err)
+		}
+		ms = append(ms, m)
+	}
+	return resourceMetrics{
+		Resource:  resourceAttrs{Attributes: r.attrs()},
+		SchemaURL: SchemaURL,
+		ScopeMetrics: []scopeMetrics{{
+			Scope:     scope{ScopeName, ScopeVersion},
+			SchemaURL: SchemaURL,
+			Metrics:   ms,
+		}},
+	}, nil
+}
+
 // Write encodes f as OTLP JSON. Resources and metrics come out in a stable order.
 func (f *File) Write(w io.Writer) error {
-	type scope struct {
-		Name    string `json:"name"`
-		Version string `json:"version"`
-	}
-	type scopeMetrics struct {
-		Scope     scope    `json:"scope"`
-		SchemaURL string   `json:"schemaUrl"`
-		Metrics   []metric `json:"metrics"`
-	}
-	type resource struct {
-		Attributes []attr `json:"attributes"`
-	}
-	type resourceMetrics struct {
-		Resource     resource       `json:"resource"`
-		SchemaURL    string         `json:"schemaUrl"`
-		ScopeMetrics []scopeMetrics `json:"scopeMetrics"`
-	}
 	res := append([]Resource(nil), f.Resources...)
 	sort.SliceStable(res, func(i, j int) bool { return res[i].sortKey() < res[j].sortKey() })
 	var out struct {
@@ -274,29 +324,11 @@ func (f *File) Write(w io.Writer) error {
 	}
 	out.ResourceMetrics = []resourceMetrics{}
 	for i := range res {
-		r := &res[i]
-		ser := append([]Series(nil), r.Metrics...)
-		sort.SliceStable(ser, func(a, b int) bool { return ser[a].Name < ser[b].Name })
-		ms := make([]metric, 0, len(ser))
-		for _, s := range ser {
-			if len(s.Points) == 0 {
-				return fmt.Errorf("%s: metric %s has no points; leave it out and list it as missing", r.sortKey(), s.Name)
-			}
-			m, err := encode(s)
-			if err != nil {
-				return fmt.Errorf("%s: %w", r.sortKey(), err)
-			}
-			ms = append(ms, m)
+		rm, err := res[i].encode()
+		if err != nil {
+			return err
 		}
-		out.ResourceMetrics = append(out.ResourceMetrics, resourceMetrics{
-			Resource:  resource{Attributes: r.attrs()},
-			SchemaURL: SchemaURL,
-			ScopeMetrics: []scopeMetrics{{
-				Scope:     scope{ScopeName, ScopeVersion},
-				SchemaURL: SchemaURL,
-				Metrics:   ms,
-			}},
-		})
+		out.ResourceMetrics = append(out.ResourceMetrics, rm)
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", " ")
