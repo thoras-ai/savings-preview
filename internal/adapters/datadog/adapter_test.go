@@ -347,3 +347,11 @@ func TestBadKeysStopBeforeQuerying(t *testing.T) {
 		t.Error("the error shows a key")
 	}
 }
+
+func TestDays(t *testing.T) {
+	for n, want := range map[int]string{1: "1 day", 7: "7 days", 14: "14 days"} {
+		if got := days(n); got != want {
+			t.Errorf("days(%d) = %q, want %q", n, got, want)
+		}
+	}
+}
