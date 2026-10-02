@@ -20,6 +20,8 @@ var (
 		"src/js/model.js",
 		"src/js/files.js",
 		"src/js/state.js",
+		"src/js/prices.js",
+		"src/js/levers.js",
 		"src/js/components.js",
 		"src/js/chart.js",
 		"src/js/sections.js",

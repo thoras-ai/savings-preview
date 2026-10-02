@@ -533,13 +533,14 @@
     };
   }
 
-  var DEFAULT_LEVERS = { rates: null, headroom: TARGET_HEADROOM, peakWindow: PEAK_WINDOW_SECONDS, namespaces: null, range: null };
+  var DEFAULT_LEVERS = { rates: null, discount: 0, headroom: TARGET_HEADROOM, peakWindow: PEAK_WINDOW_SECONDS, namespaces: null, range: null };
 
   function fmtRate(v) { return '$' + Number(v.toPrecision(4)); }
 
   // The one place totals are computed. With DEFAULT_LEVERS it matches
   // internal/savings, which the parity tests check.
   //   rates       {perCore, perGiB} in USD per hour, or null to price from the nodes
+  //   discount    fraction taken off the rates (0)
   //   headroom    target as a multiple of the peak (1.1)
   //   peakWindow  seconds the rolling peak looks back (900)
   //   namespaces  namespaces to count, or null for all
@@ -551,6 +552,12 @@
       rates = Object.assign({}, data.pricing, {
         perCore: lv.rates.perCore, perGiB: lv.rates.perGiB, custom: true,
         basis: fmtRate(lv.rates.perCore) + ' per core-hour and ' + fmtRate(lv.rates.perGiB) + ' per GiB-hour'
+      });
+    }
+    if (lv.discount > 0) {
+      rates = Object.assign({}, rates, {
+        perCore: rates.perCore * (1 - lv.discount), perGiB: rates.perGiB * (1 - lv.discount), discount: lv.discount,
+        basis: rates.basis + '; ' + Number((lv.discount * 100).toPrecision(4)) + '% discount applied'
       });
     }
     var scope = null;
