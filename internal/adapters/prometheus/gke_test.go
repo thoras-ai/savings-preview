@@ -416,3 +416,87 @@ func TestNewGoogleKeyFile(t *testing.T) {
 		t.Errorf("a key file must be a service account key: %v", err)
 	}
 }
+
+// On GKE, Managed Prometheus can keep the scrape target's namespace in the
+// namespace label of kube-state-metrics series and move the workload's to
+// exported_namespace. A namespace selector must match the workload's.
+func TestGKEReplicasNamespaceSelectorAfterRelabel(t *testing.T) {
+	h := gkeStore(gkeOpts{})
+	f := &fakeStore{handle: func(path string, q url.Values) (int, any) {
+		query := q.Get("query")
+		if !strings.Contains(query, "_replicas{") {
+			return h(path, q)
+		}
+		// The raw series carry namespace="gke-managed-cim", so a namespace
+		// matcher inside the selector matches nothing.
+		if strings.Contains(query, `namespace="shop"`) || strings.Contains(query, `namespace=~"shop"`) {
+			if path == "/api/v1/query" {
+				return 200, empty()
+			}
+			return 200, map[string]any{"status": "success", "data": map[string]any{"resultType": "matrix", "result": []any{}}}
+		}
+		if path == "/api/v1/query" {
+			return 200, vector(2)
+		}
+		wl := "web"
+		if strings.Contains(query, "kube_statefulset_replicas") {
+			wl = "db"
+		}
+		s, e, step := atoi(q.Get("start")), atoi(q.Get("end")), atoi(q.Get("step"))
+		if first := int64(t0) - 3*86400; s < first {
+			s = first
+		}
+		res := []any{}
+		for _, ns := range []string{"shop", "other"} {
+			var vals []any
+			for t := s; t <= e; t += step {
+				vals = append(vals, []any{float64(t), "3"})
+			}
+			res = append(res, map[string]any{"metric": map[string]string{"namespace": ns, "workload": wl}, "values": vals})
+		}
+		return 200, map[string]any{"status": "success", "data": map[string]any{"resultType": "matrix", "result": res}}
+	}}
+	for _, sel := range []string{`namespace="shop"`, `namespace_name=~"shop"`} {
+		f.requests = nil
+		file, rep, err := runGKEStore(t, f, GKESystem, mustSelector(t, sel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		validate(t, file)
+		for _, wl := range []struct{ kind, name, metric string }{{Deployment, "web", contract.DeploymentPods}, {StatefulSet, "db", contract.StatefulSetPods}} {
+			r := find(file, "shop", wl.kind, wl.name, "")
+			if r == nil || len(series(r, wl.metric)) == 0 {
+				t.Errorf("%s: %s/%s lost its replica count: %+v, warnings %v", sel, wl.kind, wl.name, r, rep.Warnings)
+			}
+		}
+		if r := find(file, "other", Deployment, "web", ""); r != nil {
+			t.Errorf("%s: a namespace outside the selector was kept", sel)
+		}
+		for _, q := range f.requests {
+			if query := q.Get("query"); strings.Contains(query, "kubernetes_io:") && !strings.Contains(query, `namespace_name`) {
+				t.Errorf("%s: system metrics query without the namespace matcher: %s", sel, query)
+			}
+		}
+	}
+}
+
+func mustSelector(t *testing.T, s string) string {
+	t.Helper()
+	m, err := ParseSelector(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+func TestTakeMatchers(t *testing.T) {
+	rest, ms := takeMatchers(mustSelector(t, `cluster="a",namespace=~"shop|data",namespace!="data",pod="p"`), "namespace")
+	if rest != `cluster="a",pod="p"` || len(ms) != 2 {
+		t.Fatalf("rest %s, matchers %+v", rest, ms)
+	}
+	for ns, want := range map[string]bool{"shop": true, "data": false, "other": false} {
+		if got := matchAll(ms, map[string]string{"namespace": ns}); got != want {
+			t.Errorf("%s: %v", ns, got)
+		}
+	}
+}

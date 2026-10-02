@@ -335,7 +335,7 @@ With `auto`, the default, the run reads Managed Prometheus series when the proje
 
 - Container queries select `monitored_resource="k8s_container"` and node queries `monitored_resource="k8s_node"`. A container belongs to the Deployment or StatefulSet named by its `metadata_system_top_level_controller_name` and `metadata_system_top_level_controller_type` labels; containers of other controllers are left out. Without these labels the run stops.
 - The kubelet's working set has no system metric of its own. The non-evictable part of used memory is the closest match.
-- Replica counts come from GKE's managed kube-state-metrics, on by default on Standard clusters from 1.29.2-gke.2000 and Autopilot clusters from 1.27.4-gke.900. Without it, the run warns and lists the replica counts as missing. When Managed Prometheus renamed the series' `namespace` label to `exported_namespace`, that label is used.
+- Replica counts come from GKE's managed kube-state-metrics, on by default on Standard clusters from 1.29.2-gke.2000 and Autopilot clusters from 1.27.4-gke.900. Without it, the run warns and lists the replica counts as missing. When Managed Prometheus renamed the series' `namespace` label to `exported_namespace`, that label is used, and a namespace in `--selector` is matched against it after the query.
 - Request metrics can take up to two minutes to become queryable, so the pull ends three minutes before now.
 - Node resources take `cloud.provider` `gcp` and `cloud.region` from the node's `location` label (a zone's region for a zonal cluster). The instance type and capacity type are not in the metrics and are `unknown`.
 - OOM kills are not read.

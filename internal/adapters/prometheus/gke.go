@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -224,10 +225,75 @@ func renameMatchers(sel string, names map[string]string) string {
 	return strings.Join(out, ",")
 }
 
+// labelMatcher is one parsed label matcher.
+type labelMatcher struct {
+	label, op, value string
+	re               *regexp.Regexp
+}
+
+func (m labelMatcher) matches(v string) bool {
+	switch m.op {
+	case "=":
+		return v == m.value
+	case "!=":
+		return v != m.value
+	case "=~":
+		return m.re.MatchString(v)
+	}
+	return !m.re.MatchString(v)
+}
+
+func matchAll(ms []labelMatcher, labels map[string]string) bool {
+	for _, m := range ms {
+		if !m.matches(labels[m.label]) {
+			return false
+		}
+	}
+	return true
+}
+
+// takeMatchers removes the matchers on label from canonical matchers, as
+// ParseSelector returns them, and returns the rest and the removed ones.
+func takeMatchers(sel, label string) (string, []labelMatcher) {
+	var rest []string
+	var taken []labelMatcher
+	for r := sel; r != ""; {
+		m, next, err := parseMatcher(r)
+		if err != nil {
+			return sel, nil
+		}
+		r = strings.TrimPrefix(strings.TrimSpace(next), ",")
+		i := strings.IndexAny(m, "=!")
+		name, op, quoted := m[:i], m[i:i+1], m[i+1:]
+		if strings.HasPrefix(quoted, "=") || strings.HasPrefix(quoted, "~") {
+			op, quoted = m[i:i+2], m[i+2:]
+		}
+		if name != label {
+			rest = append(rest, m)
+			continue
+		}
+		v, err := strconv.Unquote(quoted)
+		if err != nil {
+			return sel, nil
+		}
+		mt := labelMatcher{label: name, op: op, value: v}
+		if op == "=~" || op == "!~" {
+			mt.re = regexp.MustCompile("^(?:" + v + ")$") // ParseSelector compiled it
+		}
+		taken = append(taken, mt)
+	}
+	return strings.Join(rest, ","), taken
+}
+
 // runGKE pulls GKE system metrics from the Cloud Monitoring PromQL API.
 func runGKE(ctx context.Context, o Options, rep *Report) (*contract.File, *Report, error) {
 	sys := gkeClient(o.Client, "cluster_name")
+	// Namespace matchers on kube-state-metrics series are applied after the
+	// query, so that they see the namespace GKEReplicas takes from
+	// exported_namespace rather than the scrape target's.
 	ksm := gkeClient(o.Client, "cluster")
+	var nsMatchers []labelMatcher
+	ksm.Selector, nsMatchers = takeMatchers(ksm.Selector, "namespace")
 	o.Now = o.Now.Add(-GKERequestLag)
 	rep.End, rep.GKESystemMetrics = o.Now, true
 	maxBack := time.Duration(o.Days) * 24 * time.Hour
@@ -296,7 +362,9 @@ func runGKE(ctx context.Context, o Options, rep *Report) (*contract.File, *Repor
 		if hasReplicas {
 			add(ksm, kind+" replicas", GKEReplicas(kind), func(ss []Series) {
 				for _, s := range ss {
-					p.replicas[wKey{kind, s.Labels["namespace"], s.Labels["workload"]}] = toPoints(s.Points)
+					if matchAll(nsMatchers, s.Labels) {
+						p.replicas[wKey{kind, s.Labels["namespace"], s.Labels["workload"]}] = toPoints(s.Points)
+					}
 				}
 			})
 		}
