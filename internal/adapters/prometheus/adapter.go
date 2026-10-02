@@ -88,6 +88,32 @@ type pulled struct {
 
 // Run pulls the history from the store and assembles the contract file.
 func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
+	o.defaults()
+	pl, rep, err := prepare(ctx, o)
+	if err != nil {
+		return nil, rep, err
+	}
+	p, err := pull(ctx, o, rep.Start, pl.src, pl.kinds)
+	if err != nil {
+		return nil, rep, err
+	}
+	f, err := assemble(ctx, o, p, pl.src.requests, rep)
+	if err != nil {
+		return nil, rep, err
+	}
+	return f, rep, nil
+}
+
+// Probe makes the checks Run makes before it pulls the history: the store
+// answers, holds one cluster and the series the savings math needs, and how
+// far back its data goes. The report has no counts.
+func Probe(ctx context.Context, o Options) (*Report, error) {
+	o.defaults()
+	_, rep, err := prepare(ctx, o)
+	return rep, err
+}
+
+func (o *Options) defaults() {
 	if o.Log == nil {
 		o.Log = func(string, ...any) {}
 	}
@@ -97,6 +123,15 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 	if o.Now.IsZero() {
 		o.Now = time.Now()
 	}
+}
+
+// plan is what prepare found that the pull needs.
+type plan struct {
+	src   sources
+	kinds []string
+}
+
+func prepare(ctx context.Context, o Options) (*plan, *Report, error) {
 	c := o.Client
 	rep := &Report{Version: c.Build(ctx), End: o.Now}
 
@@ -180,15 +215,7 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 		rep.Warnings = append(rep.Warnings, fmt.Sprintf("the store holds about %s of history, less than the %d days asked for", spanText(o.Now.Sub(earliest)), o.Days))
 	}
 
-	p, err := pull(ctx, o, rep.Start, sources{requests: hasRequests, podUsage: rep.UsageFromPods, oom: hasRestarts}, kinds)
-	if err != nil {
-		return nil, rep, err
-	}
-	f, err := assemble(ctx, o, p, hasRequests, rep)
-	if err != nil {
-		return nil, rep, err
-	}
-	return f, rep, nil
+	return &plan{src: sources{requests: hasRequests, podUsage: rep.UsageFromPods, oom: hasRestarts}, kinds: kinds}, rep, nil
 }
 
 func spanText(d time.Duration) string {

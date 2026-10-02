@@ -13,6 +13,12 @@ The report page is also published at https://curly-dollop-gw8yzn1.pages.github.i
 
 Or build for this machine only with `go build -o bin/savings-preview ./cmd/savings-preview`. The binary carries the report page, so it needs nothing next to it.
 
+Before the first run, `savings-preview check` with the same flags answers in a few seconds whether the run can work and how well:
+
+    ./bin/savings-preview-darwin-arm64 check --context my-cluster
+
+It prints the identity the kubeconfig gives, the result of `kubectl auth can-i` for each request `prometheus` and `poll` make, whether metrics-server answers, each Prometheus-compatible store it finds with whether it answers and how far back its data goes, whether the Datadog keys are valid, and which source `run` would pick, why, and the fidelity tier to expect. The last line sums it up. `--json` prints the same as JSON, and `--color never` (or `NO_COLOR`) leaves out the colors. It exits with 0 when `run` would read a source at tier 1, 1 when it would read one at a lower tier or with gaps, such as a store with less history than `--days` or polling, and 2 when it has nothing it can read. It pulls no history and writes nothing.
+
 `savings-preview run` (also what runs with no command) uses the current kubeconfig context, or `--context`, and prints what it will read before reading anything. It never changes the cluster. It then:
 
 1. When Datadog keys are given (`DD_API_KEY` and `DD_APP_KEY`, or `--api-key-file` and `--app-key-file`), pulls 14 days of usage from Datadog, taking the `datadog` command's `--site` and `--selector`. If Datadog has no usable data, it says why and goes on to the next step. Several clusters in the organization stop the run until `--selector` picks one.

@@ -154,3 +154,31 @@ func TestEarliestDataNeverStartsAfterTheFirstSample(t *testing.T) {
 		}
 	}
 }
+
+func TestProbeStopsBeforeThePull(t *testing.T) {
+	f := &fakeStore{handle: clusterStore(true, true, true)}
+	rep, err := Probe(context.Background(), Options{Client: f.client(t), Days: 7, Step: 5 * time.Minute, Now: time.Unix(t0, 0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range f.paths {
+		if p == "/api/v1/query_range" {
+			t.Fatal("Probe pulled a range")
+		}
+	}
+	// The fake holds 3 days; the history search ends within an hour of it.
+	first := time.Unix(t0-3*86400, 0)
+	if rep.FullHistory || rep.Start.After(first) || first.Sub(rep.Start) > time.Hour {
+		t.Errorf("start %s, full %v; want within an hour before %s", rep.Start, rep.FullHistory, first)
+	}
+	if rep.Version != "3.0.0" || len(rep.Warnings) != 1 {
+		t.Errorf("report %+v", rep)
+	}
+}
+
+func TestProbeReportsWhatRunWouldFailOn(t *testing.T) {
+	f := &fakeStore{handle: clusterStore(false, false, false)}
+	if _, err := Probe(context.Background(), Options{Client: f.client(t), Days: 7, Step: time.Minute, Now: time.Unix(t0, 0)}); err == nil {
+		t.Fatal("want the kube-state-metrics error")
+	}
+}
