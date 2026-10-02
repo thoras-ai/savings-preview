@@ -1,0 +1,245 @@
+/*
+ * SEMANTIC TOKENS
+ * ===============
+ * Theme-aware tokens with semantic meaning.
+ * These change between light and dark themes.
+ *
+ * Naming: --{category}-{variant}
+ *
+ * Categories:
+ *   - surface: Background colors for containers
+ *   - text: Text colors (includes disabled variant)
+ *   - icon: Icon colors (includes disabled variant)
+ *   - border: Border colors
+ *   - hatch: Diagonal hatch-pattern line colors (Hatch component)
+ *
+ * NOTE: zinc scale references (e.g. var(--color-zinc-950)) are resolved at
+ * runtime via Tailwind v4's CSS variables. This file requires Tailwind to load.
+ */
+
+/* ============================================
+ * LIGHT THEME (Default)
+ * ============================================ */
+:root,
+[data-theme="light"] {
+  /* ----------------------------------------
+   * Surface
+   * Hierarchy: inset < base < default < elevated
+   * ---------------------------------------- */
+  --surface-inset: var(--color-zinc-50);
+  --surface-base: var(--primitive-gold-50);
+  --surface-default: var(--primitive-white);
+  --surface-elevated: var(
+    --primitive-white
+  ); /* Same as default in light; shadow provides elevation */
+  --surface-brand: var(--primitive-brand-50);
+  --surface-info: var(--primitive-azure-50);
+  --surface-danger: var(--primitive-ruby-50);
+  --surface-caution: var(--primitive-mango-50);
+  --surface-overlay: rgb(0 0 0 / 0.32);
+
+  /* ----------------------------------------
+   * Text
+   * ---------------------------------------- */
+  --text-default: var(--color-zinc-950);
+  --text-light: var(--color-zinc-600);
+  --text-lighter: var(--color-zinc-500);
+  --text-disabled: var(--color-zinc-400);
+  --text-inverse: var(--primitive-white);
+  --text-brand: var(--primitive-brand-700);
+  --text-on-brand: var(--primitive-brand-900);
+  --text-on-brand-light: var(--primitive-brand-600);
+  --text-info: var(--primitive-azure-700);
+  --text-on-info: var(--primitive-azure-900);
+  --text-on-info-light: var(--primitive-azure-600);
+  --text-danger: var(--primitive-ruby-700);
+  --text-on-danger: var(--primitive-ruby-900);
+  --text-on-danger-light: var(--primitive-ruby-600);
+  --text-caution: var(--primitive-mango-700);
+  --text-on-caution: var(--primitive-mango-900);
+  --text-on-caution-light: var(--primitive-mango-700);
+
+  /* ----------------------------------------
+   * Icon
+   * ---------------------------------------- */
+  --icon-emphasized: var(--color-zinc-950);
+  --icon-default: var(--color-zinc-700);
+  --icon-light: var(--color-zinc-500);
+  --icon-disabled: var(--color-zinc-400);
+  --icon-inverse: var(--primitive-white);
+  --icon-brand: var(--primitive-brand-700);
+  --icon-on-brand: var(--primitive-brand-900);
+  --icon-on-brand-light: var(--primitive-brand-600);
+  --icon-info: var(--primitive-azure-600);
+  --icon-on-info: var(--primitive-azure-900);
+  --icon-on-info-light: var(--primitive-azure-600);
+  --icon-danger: var(--primitive-ruby-700);
+  --icon-on-danger: var(--primitive-ruby-900);
+  --icon-on-danger-light: var(--primitive-ruby-600);
+  --icon-caution: var(--primitive-mango-700);
+  --icon-on-caution: var(--primitive-mango-800);
+  --icon-on-caution-light: var(--primitive-mango-500);
+
+  /* ----------------------------------------
+   * Border
+   * ---------------------------------------- */
+  --border-default: var(--color-zinc-400);
+  --border-light: var(--color-zinc-300);
+  --border-lighter: var(--color-zinc-200);
+  --border-emphasized: var(--color-zinc-600);
+  --border-brand: var(--primitive-brand-600);
+
+  /* ----------------------------------------
+   * Hatch
+   * Diagonal hatch-pattern line colors (Hatch component)
+   * ---------------------------------------- */
+  --hatch-brand: var(--primitive-brand-200);
+  --hatch-danger: var(--primitive-ruby-100);
+  --hatch-neutral: var(--color-zinc-300);
+
+  /* ----------------------------------------
+   * Focus Ring
+   * Product-wide, tone-agnostic. Paired with
+   * outline-offset to render correctly on any surface.
+   * ---------------------------------------- */
+  --focus-ring: var(--primitive-azure-400);
+
+  /* ----------------------------------------
+   * Chart Colors
+   * Categorical palette for data visualization.
+   * Four distinguishable colors plus muted "other" for remainder.
+   * ---------------------------------------- */
+  --chart-1: var(--primitive-brand-400);
+  --chart-2: var(--primitive-iris-400);
+  --chart-3: var(--primitive-azure-300);
+  --chart-4: var(--primitive-mango-300);
+  --chart-other: var(--color-zinc-300);
+}
+
+/* ============================================
+ * DARK THEME
+ * ============================================ */
+[data-theme="dark"] {
+  /* ----------------------------------------
+   * Surface
+   * In dark mode, elevated surfaces are lighter
+   * ---------------------------------------- */
+  --surface-inset: var(--color-zinc-950);
+  --surface-base: var(--color-zinc-950);
+  --surface-default: var(--color-zinc-900);
+  --surface-elevated: var(--color-zinc-800);
+  --surface-brand: var(--primitive-brand-50);
+  --surface-info: var(--primitive-azure-50);
+  --surface-danger: var(--primitive-ruby-50);
+  --surface-caution: var(--primitive-mango-50);
+  --surface-overlay: rgb(0 0 0 / 0.6);
+
+  /* ----------------------------------------
+   * Text
+   * ---------------------------------------- */
+  --text-default: var(--primitive-white);
+  --text-light: var(--color-zinc-300);
+  --text-lighter: var(--color-zinc-400);
+  --text-disabled: var(--color-zinc-500);
+  --text-inverse: var(--color-zinc-950);
+  --text-brand: var(--primitive-brand-300);
+  --text-on-brand: var(--primitive-brand-900);
+  --text-on-brand-light: var(--primitive-brand-600);
+  --text-info: var(--primitive-azure-300);
+  --text-on-info: var(--primitive-azure-900);
+  --text-on-info-light: var(--primitive-azure-600);
+  --text-danger: var(--primitive-ruby-300);
+  --text-on-danger: var(--primitive-ruby-900);
+  --text-on-danger-light: var(--primitive-ruby-600);
+  --text-caution: var(--primitive-mango-200);
+  --text-on-caution: var(--primitive-mango-900);
+  --text-on-caution-light: var(--primitive-mango-700);
+
+  /* ----------------------------------------
+   * Icon
+   * ---------------------------------------- */
+  --icon-emphasized: var(--primitive-white);
+  --icon-default: var(--color-zinc-300);
+  --icon-light: var(--color-zinc-400);
+  --icon-disabled: var(--color-zinc-500);
+  --icon-inverse: var(--color-zinc-950);
+  --icon-brand: var(--primitive-brand-300);
+  --icon-on-brand: var(--primitive-brand-900);
+  --icon-on-brand-light: var(--primitive-brand-600);
+  --icon-info: var(--primitive-azure-300);
+  --icon-on-info: var(--primitive-azure-900);
+  --icon-on-info-light: var(--primitive-azure-600);
+  --icon-danger: var(--primitive-ruby-300);
+  --icon-on-danger: var(--primitive-ruby-800);
+  --icon-on-danger-light: var(--primitive-ruby-600);
+  --icon-caution: var(--primitive-mango-300);
+  --icon-on-caution: var(--primitive-mango-700);
+  --icon-on-caution-light: var(--primitive-mango-500);
+
+  /* ----------------------------------------
+   * Border
+   * ---------------------------------------- */
+  --border-default: var(--color-zinc-500);
+  --border-light: var(--color-zinc-600);
+  --border-lighter: var(--color-zinc-700);
+  --border-emphasized: var(--color-zinc-300);
+  --border-brand: var(--primitive-brand-300);
+
+  /* ----------------------------------------
+   * Hatch
+   * ---------------------------------------- */
+  --hatch-brand: var(--primitive-brand-800);
+  --hatch-danger: var(--primitive-ruby-800); /* placeholder — tweak later */
+  --hatch-neutral: var(--color-zinc-700); /* placeholder — tweak later */
+
+  /* ----------------------------------------
+   * Focus Ring
+   * ---------------------------------------- */
+  --focus-ring: var(--primitive-azure-300);
+
+  /* ----------------------------------------
+   * Chart Colors
+   * Categorical palette for data visualization.
+   * Lighter shades than light mode for visibility on dark surfaces.
+   * ---------------------------------------- */
+  --chart-1: var(--primitive-brand-300);
+  --chart-2: var(--primitive-iris-300);
+  --chart-3: var(--primitive-azure-200);
+  --chart-4: var(--primitive-mango-200);
+  --chart-other: var(--color-zinc-600);
+}
+
+/* ============================================
+ * FIXED TOKENS (Theme-Invariant)
+ *
+ * For components that don't respond to theme.
+ * Example: Fixed-dark sidebar navigation.
+ * These are defined once in :root and never change.
+ * ============================================ */
+:root {
+  /* ----------------------------------------
+   * Fixed Surface (Dark appearance)
+   * ---------------------------------------- */
+  --fixed-surface-base: var(--color-zinc-950);
+  --fixed-surface-raised: var(--color-zinc-900);
+  --fixed-surface-overlay: var(--color-zinc-800);
+
+  /* ----------------------------------------
+   * Fixed Text
+   * ---------------------------------------- */
+  --fixed-text-default: var(--primitive-white);
+  --fixed-text-light: var(--color-zinc-300);
+
+  /* ----------------------------------------
+   * Fixed Icon
+   * ---------------------------------------- */
+  --fixed-icon-emphasized: var(--primitive-brand-300);
+  --fixed-icon-default: var(--color-zinc-300);
+  --fixed-icon-light: var(--color-zinc-400);
+
+  /* ----------------------------------------
+   * Fixed Border
+   * ---------------------------------------- */
+  --fixed-border-default: var(--color-zinc-800);
+  --fixed-border-hover: var(--color-zinc-700);
+}
