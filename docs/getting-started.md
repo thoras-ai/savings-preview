@@ -12,7 +12,37 @@ Savings Preview runs on your machine with your existing kubeconfig. It reads the
 
 ## Install
 
-Get the archive for your machine and `checksums.txt` from the release Thoras shares with you. Archives are `savings-preview_<version>_<os>_<arch>.tar.gz` for `darwin` and `linux`, `amd64` and `arm64`.
+The release is in a private GitHub repository, so the download needs a GitHub login or token with read access to it. With [gh](https://cli.github.com) logged in, install the latest release with:
+
+    gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh
+
+`install.sh` picks the archive for your machine (macOS or Linux, amd64 or arm64), checks it against the release's `checksums.txt`, and installs `savings-preview` into `~/.local/bin` when that is on your `PATH`, or `/usr/local/bin` otherwise. It asks before using sudo. When the archive has no checksum or its checksum does not match, it stops without installing anything.
+
+It reads these environment variables:
+
+| Variable | Use |
+| --- | --- |
+| `VERSION` | Release to install, such as `v0.2.0`. Default: the latest release. |
+| `INSTALL_DIR` | Directory to install into. |
+| `GITHUB_TOKEN` or `GH_TOKEN` | Token to download with when gh is not installed or not logged in. It needs read access to the repository's contents. |
+
+For example:
+
+    gh release download -R thoras-ai/savings-preview -p install.sh -O - | VERSION=v0.2.0 INSTALL_DIR=~/bin sh
+
+Without gh, download `install.sh` from the release page and run it with a token:
+
+    GITHUB_TOKEN=<token> sh install.sh
+
+Then check the install:
+
+    savings-preview --version
+
+A Homebrew release is coming.
+
+### Install from the archive
+
+To install by hand instead, get the archive for your machine and `checksums.txt` from the release. Archives are `savings-preview_<version>_<os>_<arch>.tar.gz` for `darwin` and `linux`, `amd64` and `arm64`.
 
 Check the download and unpack it:
 
