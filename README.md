@@ -44,22 +44,25 @@ Run every test with `make test`, or the Go tests with `go test ./...`, the contr
 
 `python3 scripts/build_report.py [OUTDIR]` writes `OUTDIR/index.html` (default `dist/`): one file with the scripts, styles and fonts inlined. It makes no network requests, so it works offline.
 
-The page is one report in six numbered sections, read top to bottom: summary, where the money is, workloads, cluster and nodes, assumptions, and data and method. A bar under the header lists them and underlines the one in view. Where the money is and cluster and nodes are placeholders for now; assumptions lists the settings in effect, and data and method lists the workloads the totals leave out. The page reads the file once and recomputes every section when a setting changes. The settings live in the URL hash, so a link opens the same view; each key is written only when it differs from its default:
+The page is one report in six numbered sections, read top to bottom: summary, where the money is, workloads, cluster and nodes, assumptions, and data and method. A bar under the header lists them and underlines the one in view. Where the money is and cluster and nodes are placeholders for now, and data and method lists the workloads the totals leave out. Assumptions holds every setting: headroom and peak window, pricing (an instance type from the built-in AWS, Google Cloud and Azure list prices, or typed rates, and a spot or committed-use discount), the annual cloud bill to show the savings as a share of, the engineer cost the summary uses, namespaces and time range. Each setting resets on its own or all at once. The page reads the file once and recomputes every section when a setting changes. The settings live in the URL hash, so a link opens the same view, and Copy link in the header copies it; each key is written only when it differs from its default:
 
 | Key | Meaning | Default |
 | --- | --- | --- |
 | `section` | Section to open: `summary`, `money`, `workloads`, `cluster`, `assumptions` or `method` | `summary` |
 | `cpu`, `gib` | Price in USD per core-hour and per GiB-hour, both or neither | From the nodes |
+| `node` | Instance type the rates came from, as `cloud/region/type`; read only with `cpu` and `gib` | None |
+| `discount` | Spot or committed-use discount on the rates, in percent | `0` |
 | `headroom` | Target headroom over the peak, in percent | `10` |
 | `peak` | Rolling peak window, in minutes | `15` |
 | `ns` | Namespaces to count, comma separated | All |
 | `from`, `to` | Time range, in Unix seconds | The whole file |
 | `cost` | Loaded cost of an engineer per year, in USD | `200000` |
+| `bill` | Annual cloud bill, in USD | None |
 | `workload` | Workload in focus, as `namespace/kind/name` | None |
 
 For example, `index.html#section=workloads&headroom=20&ns=shop,data`. A value that does not parse is ignored. With the defaults, the totals match the CLI's `summary.json`.
 
-Each section is a script in `src/js/section-*.js` that registers itself with `SP.sections` (`src/js/sections.js` describes the contract). Shared pieces are in `src/js/model.js` (`prepare` reads a file once, `compute` applies the settings), `src/js/state.js` (the settings and their hash form) and `src/js/components.js` (number formats, KPI tile, confidence pill, banner). A new script must be listed in both `scripts/build_report.py` and `page.go`.
+Each section is a script in `src/js/section-*.js` that registers itself with `SP.sections` (`src/js/sections.js` describes the contract). Shared pieces are in `src/js/model.js` (`prepare` reads a file once, `compute` applies the settings), `src/js/state.js` (the settings and their hash form), `src/js/levers.js` (the choices and resets the assumptions section offers), `src/js/prices.js` (the instance-type list prices) and `src/js/components.js` (number formats, KPI tile, confidence pill, banner). A new script must be listed in both `scripts/build_report.py` and `page.go`.
 
 The page fetches `savings-preview.otlp.json` from the same directory, or the file named in the `data` query parameter. A page that holds the file in a `<script type="application/json" id="report-data">` element, like the `report.html` in the zip, uses that instead of fetching. When the fetch fails, for example when the page is opened from disk, it asks for a file instead: a contract file, a `savings-preview.zip`, or a `report.html`, chosen or dropped on the page and read in the browser. The header switches between the light and dark themes or follows the system (Auto); the choice is kept in the browser's local storage.
 
