@@ -32,7 +32,7 @@
   };
   var REQUIRED = [M.cpuUse, M.memUse, M.cpuReq, M.memReq];
   var REPLICA_METRICS = { deployment: 'k8s.deployment.pod.desired', statefulset: 'k8s.statefulset.pod.desired' };
-  var FIELDS = ['reqCpu', 'reqMem', 'useCpu', 'useMem', 'tgtCpu', 'tgtMem', 'cur', 'opt'];
+  var FIELDS = ['reqCpu', 'reqMem', 'useCpu', 'useMem', 'peakCpu', 'peakMem', 'tgtCpu', 'tgtMem', 'cur', 'opt'];
 
   function attrMap(resource) {
     var out = {};
@@ -243,7 +243,7 @@
     var weight = new Float64Array(n);
     var s = {};
     FIELDS.forEach(function (f) { s[f] = new Float64Array(n); });
-    var pkCpu = new Float64Array(n), pkMem = new Float64Array(n);
+    var pkCpu = s.peakCpu, pkMem = s.peakMem;
     usable.forEach(function (c, ci) {
       var at = function (name) { return resample(c.series[name], grid, c.step, c.spans, !!c.held[name]); };
       var cu = at(M.cpuUse), mu = at(M.memUse), cr = at(M.cpuReq), mr = at(M.memReq);

@@ -10,15 +10,16 @@ import (
 	"strings"
 )
 
-//go:embed src/index.html src/js/*.js src/styles/*.css src/fonts/*.woff2
+//go:embed src/index.html src/js/*.js src/styles/*.css src/fonts/*.woff2 design/*.css design/assets/thoras-wordmark.svg
 var src embed.FS
 
 // The lists and markers below mirror scripts/build_report.py, so both produce
 // the same page.
 var (
-	scripts = []string{"model.js", "chart.js", "app.js"}
-	styles  = []string{"zinc.css", "primitives.css", "semantic.css", "report.css"}
-	fonts   = []struct {
+	scripts  = []string{"src/js/model.js", "src/js/files.js", "src/js/chart.js", "src/js/app.js"}
+	styles   = []string{"design/zinc.css", "design/primitives.css", "design/semantic.css", "design/elevation.css", "src/styles/report.css"}
+	wordmark = "design/assets/thoras-wordmark.svg"
+	fonts    = []struct {
 		family string
 		weight int
 		file   string
@@ -35,7 +36,7 @@ var (
 // styles and fonts inlined.
 func ReportPage() (string, error) {
 	read := func(name string) (string, error) {
-		b, err := src.ReadFile("src/" + name)
+		b, err := src.ReadFile(name)
 		return string(b), err
 	}
 	var faces []string
@@ -49,14 +50,14 @@ func ReportPage() (string, error) {
 	}
 	var css, js []string
 	for _, n := range styles {
-		s, err := read("styles/" + n)
+		s, err := read(n)
 		if err != nil {
 			return "", err
 		}
 		css = append(css, s)
 	}
 	for _, n := range scripts {
-		s, err := read("js/" + n)
+		s, err := read(n)
 		if err != nil {
 			return "", err
 		}
@@ -66,10 +67,15 @@ func ReportPage() (string, error) {
 	if strings.Contains(strings.ToLower(script), "</script") {
 		return "", errors.New("script text contains a closing script tag")
 	}
-	page, err := read("index.html")
+	page, err := read("src/index.html")
 	if err != nil {
 		return "", err
 	}
+	mark, err := read(wordmark)
+	if err != nil {
+		return "", err
+	}
+	page = strings.Replace(page, "<!--{{WORDMARK}}-->", strings.TrimSpace(mark), 1)
 	style := strings.Replace(strings.Join(css, "\n"), "/*{{FONTS}}*/", strings.Join(faces, "\n"), -1)
 	page = strings.Replace(page, "/*{{CSS}}*/", style, 1)
 	return strings.Replace(page, "/*{{JS}}*/", script, 1), nil

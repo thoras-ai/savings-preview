@@ -16,7 +16,7 @@ build:
 test:
 	go test ./...
 	python3 -m unittest discover -s tests
-	node --test tests/report_model.test.js
+	node --test tests/*.test.js
 
 clean:
 	rm -rf bin

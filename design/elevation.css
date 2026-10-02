@@ -1,0 +1,7 @@
+:root {
+  --elevation-1: 0 1px 2px 0 color-mix(in oklab, var(--primitive-iris-900) 20%, transparent);
+  --elevation-2: 0 1px 3px 0 color-mix(in oklab, var(--primitive-iris-900) 20%, transparent), 0 1px 2px -1px color-mix(in oklab, var(--primitive-iris-900) 20%, transparent);
+  --elevation-3: 0 4px 6px -1px color-mix(in oklab, var(--primitive-iris-900) 20%, transparent), 0 2px 4px -2px color-mix(in oklab, var(--primitive-iris-900) 20%, transparent);
+  --elevation-4: 0 10px 15px -3px color-mix(in oklab, var(--primitive-iris-900) 20%, transparent), 0 4px 6px -4px color-mix(in oklab, var(--primitive-iris-900) 20%, transparent);
+  --elevation-5: 0 20px 25px -5px color-mix(in oklab, var(--primitive-iris-900) 20%, transparent), 0 8px 10px -6px color-mix(in oklab, var(--primitive-iris-900) 20%, transparent);
+}

@@ -307,3 +307,18 @@ test('fidelity notes are explained per workload and summed up once', () => {
   assert.deepStrictEqual(plain.workloads[0].notes, []);
   assert.deepStrictEqual(plain.fidelity.notes, []);
 });
+
+test('the chart series carry per-step peak usage next to the mean', () => {
+  const cpu = Array.from({ length: 60 }, (_, i) => (i % 15 === 0 ? 1 : 0.2));
+  const r = model.analyze(doc({ cpu, mem: cpu.map(() => 1), step: 60, replicas: 2 }));
+  const s = r.workloads[0].series;
+  assert.strictEqual(s.peakCpu[0], 2);
+  assert.strictEqual(s.peakCpu[1], s.useCpu[1]);
+  assert.strictEqual(r.series.peakCpu.length, r.series.useCpu.length);
+  // Folding into chart buckets keeps the highest peak and averages the rest.
+  const chart = require('../src/js/chart.js');
+  const d = chart.downsample({ t: [0, 60], reqCpu: [4, 4], tgtCpu: [2.2, 2.2], useCpu: [2, 0.4], peakCpu: [2, 0.4] }, chart.modes.cpu);
+  assert.deepStrictEqual(d.p, [2, 0.4]);
+  assert.deepStrictEqual(chart.legend('cpu').map((l) => l.name), ['Requested', 'Usage + 10%', 'Peak usage', 'Mean usage', 'Gap']);
+  assert.deepStrictEqual(chart.legend('spend').map((l) => l.name), ['Current spend', 'Without waste', 'Waste']);
+});
