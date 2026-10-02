@@ -65,6 +65,16 @@ func TestRunFlagsSources(t *testing.T) {
 	if !strings.Contains(access.String(), "Azure Monitor workspace at https://ws-1.eastus.prometheus.monitor.azure.com") {
 		t.Errorf("access: %s", access.String())
 	}
+	// --backend cloudwatch with --aws-region reads the region's CloudWatch PromQL endpoint.
+	if o, err = runFlags([]string{"--backend", "cloudwatch", "--aws-region", "eu-west-1", "--selector", `@resource.k8s.cluster.name=prod`}); err != nil ||
+		o.direct.url != "https://monitoring.eu-west-1.amazonaws.com" || o.promSelector != `"@resource.k8s.cluster.name"="prod"` {
+		t.Fatalf("--backend cloudwatch: %+v, %v", o, err)
+	}
+	access.Reset()
+	printAccess(&access, o)
+	if !strings.Contains(access.String(), "query CloudWatch at https://monitoring.eu-west-1.amazonaws.com") {
+		t.Errorf("access: %s", access.String())
+	}
 	for _, bad := range [][]string{
 		{"--azure-client-id", "app-1"},
 		{"--project", "shop-prod", "--source", "poll"},

@@ -94,10 +94,10 @@ func (c Chain) Wrap(hc *http.Client) (*http.Client, error) {
 }
 
 // SigV4 signs requests with AWS Signature Version 4, as Amazon Managed
-// Service for Prometheus requires.
+// Service for Prometheus and CloudWatch require.
 type SigV4 struct {
 	Region      string
-	Service     string // "aps" when empty
+	Service     string // SigV4AMP when empty
 	Credentials aws.CredentialsProvider
 	Now         func() time.Time // for tests
 }
@@ -127,7 +127,7 @@ func (s *SigV4) Wrap(hc *http.Client) (*http.Client, error) {
 	}
 	service := s.Service
 	if service == "" {
-		service = "aps"
+		service = SigV4AMP
 	}
 	now := s.Now
 	if now == nil {

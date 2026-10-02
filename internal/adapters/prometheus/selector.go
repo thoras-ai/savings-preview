@@ -7,12 +7,28 @@ import (
 	"strings"
 )
 
-var labelName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+var (
+	labelName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	// otelLabelName matches the dotted names under which CloudWatch exposes
+	// OpenTelemetry attributes, such as @resource.k8s.cluster.name.
+	otelLabelName = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_./@-]*$`)
+)
+
+// QuoteLabel writes a label name as PromQL accepts it: as is when it is a
+// classic name, else quoted, as Prometheus 3 allows for UTF-8 names.
+func QuoteLabel(name string) string {
+	if labelName.MatchString(name) {
+		return name
+	}
+	return strconv.Quote(name)
+}
 
 // ParseSelector reads label matchers such as `cluster="prod-us"` or
 // `{cluster=~"prod-.*",region="us-east-1"}` and returns them in canonical
 // form, without braces. An unquoted value is quoted, so `cluster=prod-us`
-// works without shell quoting.
+// works without shell quoting. A label name that is not a classic one, such
+// as `"@resource.k8s.cluster.name"`, may be quoted or written bare; it is
+// quoted in the result.
 func ParseSelector(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}") {
@@ -41,12 +57,34 @@ func ParseSelector(s string) (string, error) {
 }
 
 func parseMatcher(s string) (matcher, rest string, err error) {
-	i := strings.IndexAny(s, "=!")
-	if i <= 0 {
-		return "", "", fmt.Errorf("%q is not a label matcher (want name=\"value\")", s)
+	var name string
+	i := 0
+	if strings.HasPrefix(s, `"`) {
+		end := closingQuote(s)
+		if end < 0 {
+			return "", "", fmt.Errorf("unterminated string in %q", s)
+		}
+		if name, err = strconv.Unquote(s[:end+1]); err != nil {
+			return "", "", fmt.Errorf("bad label name %s: %w", s[:end+1], err)
+		}
+		i = end + 1 + len(s[end+1:]) - len(strings.TrimLeft(s[end+1:], " \t"))
+		if i >= len(s) || (s[i] != '=' && s[i] != '!') {
+			return "", "", fmt.Errorf("%q is not a label matcher (want name=\"value\")", s)
+		}
+	} else {
+		i = strings.IndexAny(s, "=!")
+		if i <= 0 {
+			return "", "", fmt.Errorf("%q is not a label matcher (want name=\"value\")", s)
+		}
+		name = strings.TrimSpace(s[:i])
+		// A bare name that is not a classic one must look like an
+		// OpenTelemetry attribute, so that a typo such as k8s-cluster still
+		// fails here rather than at the store.
+		if !labelName.MatchString(name) && !strings.HasPrefix(name, "@") && !strings.Contains(name, ".") {
+			return "", "", fmt.Errorf("%q is not a label name", name)
+		}
 	}
-	name := strings.TrimSpace(s[:i])
-	if !labelName.MatchString(name) {
+	if !labelName.MatchString(name) && !otelLabelName.MatchString(name) {
 		return "", "", fmt.Errorf("%q is not a label name", name)
 	}
 	if name == "__name__" {
@@ -92,7 +130,7 @@ func parseMatcher(s string) (matcher, rest string, err error) {
 			return "", "", fmt.Errorf("bad regular expression %q: %w", val, err)
 		}
 	}
-	return name + op + strconv.Quote(val), s, nil
+	return QuoteLabel(name) + op + strconv.Quote(val), s, nil
 }
 
 // closingQuote returns the index of the quote that closes the string starting

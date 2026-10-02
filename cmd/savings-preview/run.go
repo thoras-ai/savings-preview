@@ -409,9 +409,10 @@ func pullDirect(ctx context.Context, o *runOptions, cluster string, w io.Writer)
 	}
 	name := storeName(store)
 	fmt.Fprintf(w, "pulling %s of history from the %s\n", days(o.days), name)
-	cl := &prometheus.Client{G: g, Selector: o.promSelector, MaxRange: store.MaxRange, OneMetricPerQuery: store.OneMetricPerQuery}
+	cl := store.NewClient(g, o.promSelector)
 	f, rep, err := prometheus.Run(ctx, prometheus.Options{Client: cl, Cluster: cluster, Days: o.days, Step: o.step, Concurrency: 2,
-		Log: func(string, ...any) {}, AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud, GKE: o.direct.gkeMode(store)})
+		Log: func(string, ...any) {}, AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud, GKE: o.direct.gkeMode(store),
+		CloudWatch: cloudWatchRegion(store)})
 	if err != nil {
 		return nil, directHint(err, store)
 	}
@@ -520,6 +521,8 @@ func printAccess(w io.Writer, o *runOptions) {
 			fmt.Fprintf(w, "  - query Google Cloud Monitoring in project %s with your Google credentials (read-only queries)\n", b.Project)
 		case err == nil && b.Name == prometheus.BackendAzure:
 			fmt.Fprintf(w, "  - query the Azure Monitor workspace at %s (read-only queries)\n", prometheus.RedactURL(b.Base))
+		case err == nil && b.Name == prometheus.BackendCloudWatch:
+			fmt.Fprintf(w, "  - query CloudWatch at %s with your AWS credentials (read-only PromQL queries)\n", prometheus.RedactURL(b.Base))
 		default:
 			fmt.Fprintf(w, "  - query the store at %s directly (read-only queries)\n", prometheus.RedactURL(o.direct.url))
 		}

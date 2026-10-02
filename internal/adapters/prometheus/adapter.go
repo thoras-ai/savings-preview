@@ -31,6 +31,8 @@ type Options struct {
 	// GKE is set for Google Managed Prometheus to one of GKEModes: which
 	// metrics to read from the project.
 	GKE string
+	// CloudWatch is set for the CloudWatch PromQL endpoint to its AWS region.
+	CloudWatch string
 }
 
 // Report describes what a pull found and what it could not get.
@@ -74,10 +76,10 @@ func (e *ClusterError) Error() string {
 	}
 	if e.Selected {
 		return fmt.Sprintf("the selector matches %d clusters (label %s: %s); narrow it to one, for example --selector '%s=%s'",
-			len(e.Values), e.Label, strings.Join(shown, ", "), e.Label, strconv.Quote(pick))
+			len(e.Values), e.Label, strings.Join(shown, ", "), QuoteLabel(e.Label), strconv.Quote(pick))
 	}
 	return fmt.Sprintf("the store holds %d clusters (label %s: %s); their workloads would be averaged together. Choose one with --selector '%s=%s'",
-		len(e.Values), e.Label, strings.Join(shown, ", "), e.Label, strconv.Quote(pick))
+		len(e.Values), e.Label, strings.Join(shown, ", "), QuoteLabel(e.Label), strconv.Quote(pick))
 }
 
 // UsageFromPodsNote is the fidelity note on containers whose usage was split
@@ -164,6 +166,11 @@ func prepare(ctx context.Context, o Options) (*plan, *Report, error) {
 
 	if err := c.Check(ctx); err != nil {
 		return nil, rep, err
+	}
+	if o.CloudWatch != "" {
+		if err := checkContainerInsights(ctx, c, o.CloudWatch, o.Now); err != nil {
+			return nil, rep, err
+		}
 	}
 	if o.GKE != "" {
 		mode, err := gkeMode(ctx, c, o.GKE, o.Now)
@@ -296,9 +303,27 @@ type sources struct {
 
 func pull(ctx context.Context, o Options, start time.Time, src sources, kinds []string) (*pulled, error) {
 	p := newPulled()
+	shards, warning, err := namespaceShards(ctx, o.Client, o.Now)
+	if err != nil {
+		return nil, err
+	}
+	if warning != "" {
+		p.warnings = append(p.warnings, warning)
+	}
 	var jobs []job
 	add := func(name, q string, into func([]Series)) {
 		jobs = append(jobs, job{name: name, query: q, into: into})
+	}
+	// Workload queries run once per group of namespaces on a store that
+	// truncates large results.
+	addNS := func(name, q string, into func([]Series)) {
+		if len(shards) == 1 {
+			add(name, q, into)
+			return
+		}
+		for i, c := range shards {
+			jobs = append(jobs, job{client: c, name: fmt.Sprintf("%s (namespaces %d of %d)", name, i+1, len(shards)), query: q, into: into})
+		}
 	}
 	cs := func(kind string, dst map[cKey][]contract.Point) func([]Series) {
 		return func(ss []Series) {
@@ -310,16 +335,16 @@ func pull(ctx context.Context, o Options, start time.Time, src sources, kinds []
 	for _, kind := range kinds {
 		kind := kind
 		if src.podUsage {
-			add(kind+" cpu usage from pods", PodCPUUsage(kind, o.Step), cs(kind, p.cpuUse))
-			add(kind+" memory usage from pods", PodMemoryUsage(kind), cs(kind, p.memUse))
+			addNS(kind+" cpu usage from pods", PodCPUUsage(kind, o.Step), cs(kind, p.cpuUse))
+			addNS(kind+" memory usage from pods", PodMemoryUsage(kind), cs(kind, p.memUse))
 		} else {
-			add(kind+" cpu usage", CPUUsage(kind, o.Step), cs(kind, p.cpuUse))
-			add(kind+" memory usage", MemoryUsage(kind), cs(kind, p.memUse))
+			addNS(kind+" cpu usage", CPUUsage(kind, o.Step), cs(kind, p.cpuUse))
+			addNS(kind+" memory usage", MemoryUsage(kind), cs(kind, p.memUse))
 		}
 		if src.oom {
-			add(kind+" oom kills", OOMKills(kind, o.Step), cs(kind, p.oom))
+			addNS(kind+" oom kills", OOMKills(kind, o.Step), cs(kind, p.oom))
 		}
-		add(kind+" replicas", Replicas(kind), func(ss []Series) {
+		addNS(kind+" replicas", Replicas(kind), func(ss []Series) {
 			for _, s := range ss {
 				p.replicas[wKey{kind, s.Labels["namespace"], s.Labels["workload"]}] = toPoints(s.Points)
 			}
@@ -327,10 +352,10 @@ func pull(ctx context.Context, o Options, start time.Time, src sources, kinds []
 		if !src.requests {
 			continue
 		}
-		add(kind+" cpu requests", Requests(kind, "cpu"), cs(kind, p.cpuReq))
-		add(kind+" memory requests", Requests(kind, "memory"), cs(kind, p.memReq))
-		add(kind+" cpu limits", Limits(kind, "cpu"), cs(kind, p.cpuLim))
-		add(kind+" memory limits", Limits(kind, "memory"), cs(kind, p.memLim))
+		addNS(kind+" cpu requests", Requests(kind, "cpu"), cs(kind, p.cpuReq))
+		addNS(kind+" memory requests", Requests(kind, "memory"), cs(kind, p.memReq))
+		addNS(kind+" cpu limits", Limits(kind, "cpu"), cs(kind, p.cpuLim))
+		addNS(kind+" memory limits", Limits(kind, "memory"), cs(kind, p.memLim))
 	}
 	nodes := func(dst map[string][]contract.Point) func([]Series) {
 		return func(ss []Series) {
@@ -680,19 +705,19 @@ func capacityType(l map[string]string) string {
 // oneCluster fails when a cluster label has more than one value in any of the
 // ClusterValues queries.
 func oneCluster(ctx context.Context, c *Client, now time.Time, window time.Duration) error {
-	for i, q := range ClusterValues(window) {
+	for i, q := range ClusterValues(window, c.ClusterLabels...) {
 		var ss []Series
 		var err error
 		if i == 0 {
 			// Only the node info query has a range selector.
-			ss, err = c.queryWindow(ctx, func(w time.Duration) string { return ClusterValues(w)[0] }, now, window)
+			ss, err = c.queryWindow(ctx, func(w time.Duration) string { return ClusterValues(w, c.ClusterLabels...)[0] }, now, window)
 		} else {
 			ss, err = c.Query(ctx, q, now)
 		}
 		if err != nil {
 			return fmt.Errorf("probe cluster labels: %w", err)
 		}
-		for _, l := range ClusterLabels {
+		for _, l := range append(append([]string(nil), ClusterLabels...), c.ClusterLabels...) {
 			seen := map[string]bool{}
 			for _, s := range ss {
 				seen[s.Labels[l]] = true

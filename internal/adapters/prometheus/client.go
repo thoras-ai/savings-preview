@@ -49,6 +49,13 @@ type Client struct {
 	// more than one metric, or none. Joins between metrics are then made on
 	// the client.
 	OneMetricPerQuery bool
+	// MaxSeries is the most series the store returns for one query. A
+	// result that reaches it is taken as truncated and fails with a
+	// TruncatedError. Zero means no limit.
+	MaxSeries int
+	// ClusterLabels are labels that tell clusters apart in this store, in
+	// addition to ClusterLabels.
+	ClusterLabels []string
 
 	// sleep waits out the backoff between attempts; tests replace it.
 	sleep func(context.Context, time.Duration) error
@@ -59,6 +66,31 @@ type APIError struct {
 	Status    int
 	ErrorType string
 	Message   string
+}
+
+// TruncatedError reports a query whose result the store cut short at its
+// series limit.
+type TruncatedError struct{ Limit int }
+
+func (e *TruncatedError) Error() string {
+	return fmt.Sprintf("the store returned at most %d series for one query and dropped the rest, so the run stopped rather than report incomplete figures; read part of the cluster at a time with --selector, for example a namespace=~ matcher", e.Limit)
+}
+
+// checkSeries fails a result that the store says it truncated, or that
+// reaches the series limit, in case the store stops saying so.
+func (c *Client) checkSeries(ss []Series, warnings []string) ([]Series, error) {
+	if c.MaxSeries <= 0 {
+		return ss, nil
+	}
+	for _, w := range warnings {
+		if strings.Contains(strings.ToLower(w), "truncat") {
+			return nil, &TruncatedError{Limit: c.MaxSeries}
+		}
+	}
+	if len(ss) >= c.MaxSeries {
+		return nil, &TruncatedError{Limit: c.MaxSeries}
+	}
+	return ss, nil
 }
 
 func (e *APIError) Error() string {
@@ -72,6 +104,7 @@ type apiResponse struct {
 	Status    string          `json:"status"`
 	Data      json.RawMessage `json:"data"`
 	ErrorType string          `json:"errorType"`
+	Warnings  []string        `json:"warnings"`
 	Error     string          `json:"error"`
 	// A response from the Kubernetes API server instead of the store.
 	Kind    string `json:"kind"`
@@ -102,6 +135,12 @@ func (c *Client) backoff(ctx context.Context, d time.Duration) error {
 }
 
 func (c *Client) get(ctx context.Context, path string, params url.Values) (json.RawMessage, error) {
+	data, _, err := c.getWarnings(ctx, path, params)
+	return data, err
+}
+
+// getWarnings is get that also returns the warnings of a successful response.
+func (c *Client) getWarnings(ctx context.Context, path string, params url.Values) (json.RawMessage, []string, error) {
 	retries := c.Retries
 	if retries == 0 {
 		retries = 3
@@ -110,21 +149,21 @@ func (c *Client) get(ctx context.Context, path string, params url.Values) (json.
 	for attempt := 0; attempt <= retries; attempt++ {
 		if attempt > 0 {
 			if err := c.backoff(ctx, time.Duration(attempt)*500*time.Millisecond); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		body, status, err := c.G.Get(ctx, path, params)
 		if err != nil {
 			lastErr = err
 			if ctx.Err() != nil {
-				return nil, ctx.Err()
+				return nil, nil, ctx.Err()
 			}
 			continue
 		}
 		var resp apiResponse
 		jerr := json.Unmarshal(body, &resp)
 		if status == http.StatusOK && jerr == nil && resp.Status == "success" {
-			return resp.Data, nil
+			return resp.Data, resp.Warnings, nil
 		}
 		ae := &APIError{Status: status, ErrorType: resp.ErrorType, Message: resp.Error}
 		if jerr == nil && resp.Kind == "Status" && resp.Message != "" {
@@ -135,10 +174,10 @@ func (c *Client) get(ctx context.Context, path string, params url.Values) (json.
 		}
 		lastErr = ae
 		if status != http.StatusTooManyRequests && status < 500 {
-			return nil, ae
+			return nil, nil, ae
 		}
 	}
-	return nil, lastErr
+	return nil, nil, lastErr
 }
 
 func truncate(s string, n int) string {
@@ -193,11 +232,15 @@ func (c *Client) Query(ctx context.Context, q string, at time.Time) ([]Series, e
 	if !at.IsZero() {
 		p.Set("time", strconv.FormatInt(at.Unix(), 10))
 	}
-	raw, err := c.get(ctx, "/api/v1/query", p)
+	raw, warnings, err := c.getWarnings(ctx, "/api/v1/query", p)
 	if err != nil {
 		return nil, err
 	}
-	return decode(raw)
+	ss, err := decode(raw)
+	if err != nil {
+		return nil, err
+	}
+	return c.checkSeries(ss, warnings)
 }
 
 // QueryRange runs one range query. The caller keeps (end-start)/step under the
@@ -209,11 +252,15 @@ func (c *Client) QueryRange(ctx context.Context, q string, start, end time.Time,
 		"end":   {strconv.FormatInt(end.Unix(), 10)},
 		"step":  {strconv.FormatInt(int64(step/time.Second), 10)},
 	}
-	raw, err := c.get(ctx, "/api/v1/query_range", p)
+	raw, warnings, err := c.getWarnings(ctx, "/api/v1/query_range", p)
 	if err != nil {
 		return nil, err
 	}
-	return decode(raw)
+	ss, err := decode(raw)
+	if err != nil {
+		return nil, err
+	}
+	return c.checkSeries(ss, warnings)
 }
 
 // MaxPointsPerSeries is the hard cap Prometheus applies to one range query.

@@ -20,6 +20,11 @@ func TestParseSelector(t *testing.T) {
 		{`cluster=""`, `cluster=""`},
 		{`name="a,b",x!~"c|d"`, `name="a,b",x!~"c|d"`},
 		{`name="say \"hi\""`, `name="say \"hi\""`},
+		{`"@resource.k8s.cluster.name"="prod"`, `"@resource.k8s.cluster.name"="prod"`},
+		{`@resource.k8s.cluster.name=prod`, `"@resource.k8s.cluster.name"="prod"`},
+		{`{"@aws.region" =~ "us-.*", cluster="a"}`, `"@aws.region"=~"us-.*",cluster="a"`},
+		{`"cluster"="a"`, `cluster="a"`},
+		{`"@resource.k8s.node.label.node.kubernetes.io/instance-type"!=""`, `"@resource.k8s.node.label.node.kubernetes.io/instance-type"!=""`},
 	}
 	for _, c := range cases {
 		got, err := ParseSelector(c.in)
@@ -27,7 +32,7 @@ func TestParseSelector(t *testing.T) {
 			t.Errorf("%q: got %q, %v; want %q", c.in, got, err, c.want)
 		}
 	}
-	for _, bad := range []string{`cluster`, `1x="a"`, `__name__="up"`, `cluster="a`, `cluster=~"("`, `a="b" c="d"`, `cluster<"a"`, `cluster=a"b`} {
+	for _, bad := range []string{`cluster`, `1x="a"`, `__name__="up"`, `cluster="a`, `cluster=~"("`, `a="b" c="d"`, `cluster<"a"`, `cluster=a"b`, `"@a.b`, `"a b"="c"`, `"@a.b"`, `"__name__"="up"`, `k8s-cluster=prod`, `a/b=c`} {
 		if got, err := ParseSelector(bad); err == nil {
 			t.Errorf("%q: want an error, got %q", bad, got)
 		}
@@ -47,6 +52,9 @@ func TestWithSelector(t *testing.T) {
 		if got := withSelector(c.in, m); got != c.want {
 			t.Errorf("%s:\n got %s\nwant %s", c.in, got, c.want)
 		}
+	}
+	if got := withSelector(`count by ("@a.b") (up{})`, `"@a.b"="c"`); got != `count by ("@a.b") (up{"@a.b"="c"})` {
+		t.Errorf("quoted label name: %s", got)
 	}
 	if got := withSelector(`up{}`, ""); got != `up{}` {
 		t.Errorf("empty selector changed the query: %s", got)

@@ -1,6 +1,6 @@
 # Prometheus adapter
 
-`savings-preview prometheus` reads a cluster's usage history from a Prometheus-compatible store and writes the OTel file described in [contract.md](contract.md). It reaches an in-cluster store through the Kubernetes API server, so nothing is installed in the cluster and no port-forward is needed. Stores outside the cluster, such as Mimir, Grafana Cloud, Amazon Managed Prometheus, Azure Monitor managed Prometheus and Google Managed Prometheus, are queried directly by URL; see [Stores outside the cluster](#stores-outside-the-cluster).
+`savings-preview prometheus` reads a cluster's usage history from a Prometheus-compatible store and writes the OTel file described in [contract.md](contract.md). It reaches an in-cluster store through the Kubernetes API server, so nothing is installed in the cluster and no port-forward is needed. Stores outside the cluster, such as Mimir, Grafana Cloud, Amazon Managed Prometheus, Amazon CloudWatch, Azure Monitor managed Prometheus and Google Managed Prometheus, are queried directly by URL; see [Stores outside the cluster](#stores-outside-the-cluster).
 
 ```
 savings-preview prometheus [--context NAME] [--days 14] [--step 1m] [--out savings-preview.otlp.json]
@@ -14,17 +14,17 @@ savings-preview prometheus [--context NAME] [--days 14] [--step 1m] [--out savin
 | `--step` | 1m | Resolution. Use `5m` for large clusters. |
 | `--target` | discovered | `[https:]namespace/service:port[/path-prefix]`, skips discovery. An `http://` or `https://` URL is the same as `--url`. |
 | `--url` | none | Query a store directly instead of through the API server. Requires `--cluster-name`. |
-| `--backend` | detected from the URL | `prometheus`, `mimir`, `grafana-cloud`, `amp`, `gmp` or `azure`, for `--url`. |
+| `--backend` | detected from the URL | `prometheus`, `mimir`, `grafana-cloud`, `amp`, `gmp`, `azure` or `cloudwatch`, for `--url`. `cloudwatch` with `--aws-region` needs no `--url`. |
 | `--tenant` | none | Mimir tenant, sent as `X-Scope-OrgID`. Implies `--backend mimir`. |
 | `--bearer-token-file`, `--basic-auth-file`, `--header-file` | none | Credentials for `--url`, read from a file so they stay out of shell history and process listings: a token, `user:password`, or `Name: value` lines. The environment variables `SAVINGS_PREVIEW_BEARER_TOKEN`, `SAVINGS_PREVIEW_BASIC_AUTH` and `SAVINGS_PREVIEW_HEADERS` hold the same values; a file takes precedence over its variable. |
-| `--aws-region` | from the URL | Region of an Amazon Managed Prometheus workspace whose URL does not name it. |
+| `--aws-region` | from the URL | Region of an Amazon Managed Prometheus workspace or of CloudWatch, when the URL does not name it. With `--backend cloudwatch` and no `--url`, it selects the region's CloudWatch endpoint. |
 | `--project` | none | Google Cloud project to read from Google Managed Prometheus, in place of `--url`. Implies `--backend gmp`. |
 | `--google-credentials-file` | Application Default Credentials | Service account key for Google Managed Prometheus. |
 | `--gke-metrics` | `auto` | What to read from Google Managed Prometheus: `prometheus` (cAdvisor and kube-state-metrics series), `system` (GKE system metrics), or `auto` (the first when the project has both cAdvisor and `kube_pod_owner` series, else the second). |
 | `--azure-tenant-id`, `--azure-client-id` | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` | Entra ID tenant and app registration for Azure Monitor managed Prometheus. Without a client secret, the Azure CLI login is used. |
 | `--azure-client-secret-file` | `AZURE_CLIENT_SECRET` | File holding the app registration's client secret. |
 | `--max-query-range` | the backend's limit | Longest time range the store accepts in one query, counting range selectors. |
-| `--selector` | none | Label matchers added to every query, such as `cluster="prod-us"`, to read one cluster from a store that holds several. Values may be left unquoted (`cluster=prod-us`). |
+| `--selector` | none | Label matchers added to every query, such as `cluster="prod-us"`, to read one cluster from a store that holds several. Values may be left unquoted (`cluster=prod-us`). A label name with dots, such as CloudWatch's `"@resource.k8s.cluster.name"`, is quoted, or left bare and quoted by the adapter when it starts with `@` or contains a dot. |
 | `--list` | off | Print what discovery finds and exit. |
 | `--concurrency` | 2 | Queries in flight at once. |
 
@@ -86,7 +86,7 @@ The choice is made for the whole store. When some nodes label container series a
 
 ## Stores with several clusters
 
-Thanos, Mimir, Amazon Managed Prometheus and Grafana Cloud often hold several clusters, told apart by a label. Before pulling, the adapter counts series by `cluster`, `cluster_name`, `cluster_id`, `k8s_cluster`, `k8s_cluster_name` and `kubernetes_cluster` in `kube_node_info` over the window, and in `kube_pod_owner` and `container_memory_working_set_bytes` now. When one of these metrics has more than one value of one label (series without the label count as a value of their own), the run stops, lists the values and suggests a `--selector`. It does the same when a selector still matches more than one value.
+Thanos, Mimir, Amazon Managed Prometheus and Grafana Cloud often hold several clusters, told apart by a label. Before pulling, the adapter counts series by `cluster`, `cluster_name`, `cluster_id`, `k8s_cluster`, `k8s_cluster_name` and `kubernetes_cluster` in `kube_node_info` over the window, and in `kube_pod_owner` and `container_memory_working_set_bytes` now. On CloudWatch it also counts by `@resource.k8s.cluster.name` and `@aws.account`. When one of these metrics has more than one value of one label (series without the label count as a value of their own), the run stops, lists the values and suggests a `--selector`. It does the same when a selector still matches more than one value.
 
 `--selector` is added to every series selector in every query, so the label must be on the cAdvisor and kube-state-metrics series alike. `--selector 'cluster=""'` selects the series that have no cluster label.
 
@@ -108,9 +108,9 @@ Instance type, region and capacity type come from node labels, so kube-state-met
 
 ## Stores outside the cluster
 
-`--url` (or a URL in `--target`) queries a store directly, without the API server. The kubeconfig is not used, so `--cluster-name` is required. `savings-preview run` takes the same flags; it names the cluster after the kubeconfig's when it can read one, and a failing `--url` stops it rather than falling back to polling. The backend is detected from the host: `aps-workspaces.REGION.amazonaws.com` is Amazon Managed Prometheus, `*.grafana.net` is Grafana Cloud, `monitoring.googleapis.com` is Google Managed Prometheus, `*.prometheus.monitor.azure.com` (and the `.us` and `.cn` domains of Azure Government and Azure China) is Azure Monitor managed Prometheus, a `--tenant` means Mimir, and anything else is a plain Prometheus-compatible store. `--backend` overrides the detection. The query or remote-write URL a console shows is accepted as well as the base URL.
+`--url` (or a URL in `--target`) queries a store directly, without the API server. The kubeconfig is not used, so `--cluster-name` is required. `savings-preview run` takes the same flags; it names the cluster after the kubeconfig's when it can read one, and a failing `--url` stops it rather than falling back to polling. The backend is detected from the host: `aps-workspaces.REGION.amazonaws.com` is Amazon Managed Prometheus, `monitoring.REGION.amazonaws.com` is CloudWatch, `*.grafana.net` is Grafana Cloud, `monitoring.googleapis.com` is Google Managed Prometheus, `*.prometheus.monitor.azure.com` (and the `.us` and `.cn` domains of Azure Government and Azure China) is Azure Monitor managed Prometheus, a `--tenant` means Mimir, and anything else is a plain Prometheus-compatible store. `--backend` overrides the detection. The query or remote-write URL a console shows is accepted as well as the base URL.
 
-Credentials never come from flags. Bearer tokens, basic auth and extra headers are read from files or environment variables, Amazon credentials from the standard AWS chain, Google credentials from Application Default Credentials or a key file, and Azure credentials from an app registration's secret or the Azure CLI. They are not printed or logged; the store URL is printed without user info or query string.
+Credentials never come from flags. Bearer tokens, basic auth and extra headers are read from files or environment variables, AWS credentials for Amazon Managed Prometheus and CloudWatch from the standard AWS chain, Google credentials from Application Default Credentials or a key file, and Azure credentials from an app registration's secret or the Azure CLI. They are not printed or logged; the store URL is printed without user info or query string.
 
 Credentials plug in through `prometheus.Auth`, which wraps the HTTP client: `Header`, `Basic`, `Bearer`, `SigV4`, `Google` and `Azure`, combined with `Chain`.
 
@@ -272,12 +272,12 @@ It holds one day at 1 minute, ending at the current minute. Cluster, namespace, 
 
 ```
 AWS_PROFILE=readonly savings-preview prometheus \
-  --url https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-0123abcd --cluster-name prod-us
+  --url https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-12345678-abcd-1234-abcd-123456789012 --cluster-name prod-us
 ```
 
-- **URL:** the workspace endpoint, `https://aps-workspaces.REGION.amazonaws.com/workspaces/WORKSPACE_ID`, or the query URL the console shows. The region comes from the host. VPC endpoint host names are recognized too. For any other host, pass `--backend amp --aws-region REGION`.
+- **URL:** the workspace endpoint, `https://aps-workspaces.REGION.amazonaws.com/workspaces/WORKSPACE_ID`. The workspace page in the console shows it as the query URL, which ends in `/api/v1/query`, and as the remote write URL, which ends in `/api/v1/remote_write`; both are accepted. The region comes from the host. VPC endpoint host names (`*.aps-workspaces.REGION.vpce.amazonaws.com`) are recognized too. For any other host, pass `--backend amp --aws-region REGION`.
 - **Credentials:** every request is signed with SigV4 for the `aps` service. Credentials come from the standard AWS chain: environment variables, `AWS_PROFILE` with the shared config and credentials files (including SSO and assumed roles), web identity, and the container or instance role. Bearer tokens and basic auth are refused for this backend.
-- **What the customer grants:** an IAM identity with this policy. The adapter calls only `/api/v1/query` and `/api/v1/query_range`, both covered by `aps:QueryMetrics`.
+- **What the customer grants:** an IAM identity with this policy. `aps:QueryMetrics` covers `/api/v1/query` and `/api/v1/query_range`, the only workspace APIs the queries use. The adapter also asks for `/api/v1/status/buildinfo` to print the store's version; a refusal there is ignored.
 
   ```json
   {
@@ -290,8 +290,38 @@ AWS_PROFILE=readonly savings-preview prometheus \
   }
   ```
 
+  The AWS managed policy `AmazonPrometheusQueryAccess` also works, but it grants query, series, label and metadata access to every workspace in the account.
 - **Limits:** a query may cover at most 95 days. Range queries are split by day, which also keeps each one within the per-24-hour sample and series budgets.
 - **Metrics:** the workspace holds whatever was remote-written. The AWS managed scraper's sample configuration has no kube-state-metrics job, and without kube-state-metrics the run stops (see [Missing data](#missing-data)).
+
+### Amazon CloudWatch PromQL (OTel Container Insights)
+
+```
+AWS_PROFILE=readonly savings-preview prometheus --backend cloudwatch --aws-region us-east-1 \
+  --cluster-name prod-us --selector '"@resource.k8s.cluster.name"="prod-us"'
+```
+
+- **What it reads:** CloudWatch answers PromQL for metrics sent to it over OTLP, which include OTel Container Insights on EKS: the `amazon-cloudwatch-observability` EKS add-on, version 6.2.0 or later, with `otelContainerInsights.enabled` set to `true`. That setting is off by default. The add-on sends cAdvisor and kube-state-metrics series under their Prometheus names and labels (`container_cpu_usage_seconds_total`, `kube_pod_owner` and so on), so the run uses the same queries as for any other store and maps them to the contract in the same way. Container Insights without the OTel setting (classic, or enhanced observability) writes to the `ContainerInsights` namespace, which PromQL does not read. When the account has no OTel Container Insights metrics in the region, the run stops and says how to turn them on.
+- **URL:** `https://monitoring.REGION.amazonaws.com`, with no path. `--backend cloudwatch --aws-region REGION` builds it, so `--url` can be left out. With `--url`, the region comes from the host, and VPC endpoint host names (`*.monitoring.REGION.vpce.amazonaws.com`) are recognized too; for any other host, pass `--backend cloudwatch --aws-region REGION`. PromQL is available only in the [regions the CloudWatch documentation lists](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-PromQL.html#CloudWatch-PromQL-Regions).
+- **Credentials:** every request is signed with SigV4 for the `monitoring` service, with credentials from the standard AWS chain, as for Amazon Managed Prometheus. Bearer tokens, basic auth and `--tenant` are refused for this backend.
+- **What the customer grants:** an IAM identity with this policy. The PromQL query APIs need both actions, which take no resource ARN.
+
+  ```json
+  {
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["cloudwatch:GetMetricData", "cloudwatch:ListMetrics"],
+      "Resource": "*"
+    }]
+  }
+  ```
+
+  The AWS managed policy `CloudWatchReadOnlyAccess` includes both. The metrics are in the account the add-on sends them to: the cluster's own, or a central monitoring account when the add-on is set up for cross-account collection. Use credentials for that account.
+- **Several clusters:** an account holds the metrics of every cluster in the region that has the add-on. The cluster's name is in the `@resource.k8s.cluster.name` label, and the account that sent the series in `@aws.account`; both are checked as described in [Stores with several clusters](#stores-with-several-clusters). Choose a cluster with `--selector '"@resource.k8s.cluster.name"="prod-us"'`. The quotes are how PromQL writes a label name with dots; `--selector @resource.k8s.cluster.name=prod-us` gives the same matcher. When the selector matches no cluster, the run lists the clusters that send metrics.
+- **Limits:** a query may cover at most 7 days, counting range selectors and the 5-minute lookback. Range queries are split by day, and instant queries over the history into pieces shorter than 7 days. A query returns at most 500 series, and CloudWatch drops the rest with a warning rather than an error. So before pulling, the adapter counts each namespace's containers in `kube_pod_container_info`; when the cluster has more than 250, each workload query runs once per group of namespaces with at most 250 containers between them, and once more for the namespaces outside every group, such as namespaces deleted during the window. A result that CloudWatch marks as truncated, or that has 500 series, stops the run instead of producing incomplete figures. That happens when the cluster has 500 or more namespaces (the count by namespace is itself one query), when one namespace holds 500 or more Deployment or StatefulSet containers, or when the cluster has 500 or more nodes; read part of the cluster at a time with a `namespace=~` matcher in `--selector`. When the namespace names are too long to list in one query (over 4,000 characters), the namespaces deleted during the window are left out and the run warns. CloudWatch also caps each query at 100,000 series and 300 million samples scanned per day of its range, and answers 422 above that; on a large cluster, pull at `--step 5m`.
+- **Resolution:** the add-on collects every 30 seconds, and CloudWatch keeps OTLP metrics for 15 months. The documentation does not say whether older data is kept at full resolution.
+- **Node details:** instance type, region and capacity type come from `kube_node_labels`, as on any store, so they are known only if the add-on's kube-state-metrics exports node labels. Otherwise they are `unknown`, and the cloud provider comes from the node's provider ID.
 
 ### Azure Monitor managed Prometheus
 

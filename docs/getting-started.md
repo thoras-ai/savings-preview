@@ -113,7 +113,7 @@ Prometheus, Thanos Query or VictoriaMetrics in the cluster is found automaticall
 
 If it finds the wrong store, list what it sees with `savings-preview prometheus --list` and name one with `--target namespace/service:port`. A store that holds several clusters stops the run with the list of cluster labels; pass one with `--selector`, for example `--selector 'cluster="prod-us"'`.
 
-### Grafana Cloud, Mimir, Amazon Managed Prometheus or Azure Monitor
+### Grafana Cloud, Mimir, Amazon Managed Prometheus, CloudWatch or Azure Monitor
 
 Pass the store's URL. Credentials are read from a file or the environment, never from a flag.
 
@@ -126,7 +126,11 @@ Pass the store's URL. Credentials are read from a file or the environment, never
 
     # Amazon Managed Prometheus: the AWS identity needs aps:QueryMetrics on the workspace
     AWS_PROFILE=readonly savings-preview run \
-      --url https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-0123abcd
+      --url https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-12345678-abcd-1234-abcd-123456789012
+
+    # CloudWatch with OTel Container Insights: the AWS identity needs cloudwatch:GetMetricData and cloudwatch:ListMetrics
+    AWS_PROFILE=readonly savings-preview run --backend cloudwatch --aws-region us-east-1 \
+      --selector '"@resource.k8s.cluster.name"="prod-us"'
 
     # Azure Monitor managed Prometheus: the az login identity needs Monitoring Data Reader on the workspace
     savings-preview run --url https://WORKSPACE.REGION.prometheus.monitor.azure.com --selector 'cluster="aks-prod"'

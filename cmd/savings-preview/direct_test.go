@@ -348,3 +348,97 @@ func TestDirectHintForAzure(t *testing.T) {
 		t.Errorf("403: %v", err)
 	}
 }
+
+func TestDirectAuthCloudWatch(t *testing.T) {
+	t.Setenv(envHeaders, "")
+	t.Setenv(envBasic, "")
+	t.Setenv(envBearer, "")
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIDEXAMPLE")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "secret")
+	t.Setenv("AWS_CONFIG_FILE", filepath.Join(t.TempDir(), "none"))
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(t.TempDir(), "none"))
+	b := backend(t, "https://monitoring.eu-west-1.amazonaws.com", "", false)
+	got, err := directAuth(context.Background(), b, credentialFiles{}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain, ok := got.(prometheus.Chain)
+	if !ok || len(chain) != 1 {
+		t.Fatalf("got %#v", got)
+	}
+	if s, ok := chain[0].(*prometheus.SigV4); !ok || s.Region != "eu-west-1" || s.Service != prometheus.SigV4CloudWatch {
+		t.Errorf("got %#v", chain[0])
+	}
+	t.Setenv(envBearer, "tok")
+	if _, err := directAuth(context.Background(), b, credentialFiles{}, ""); err == nil || !strings.Contains(err.Error(), "CloudWatch uses AWS credentials") {
+		t.Errorf("bearer with CloudWatch: %v", err)
+	}
+	t.Setenv(envBearer, "")
+	if _, err := directAuth(context.Background(), b, credentialFiles{}, "team-a"); err == nil || !strings.Contains(err.Error(), "--tenant applies to Mimir") {
+		t.Errorf("tenant with CloudWatch: %v", err)
+	}
+	nr := backend(t, "https://cw-proxy.internal", prometheus.BackendCloudWatch, false)
+	if _, err := directAuth(context.Background(), nr, credentialFiles{}, ""); err == nil || !strings.Contains(err.Error(), "--aws-region") {
+		t.Errorf("no region: %v", err)
+	}
+}
+
+func TestDirectFlagsCloudWatch(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIDEXAMPLE")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "secret")
+	t.Setenv("AWS_CONFIG_FILE", filepath.Join(t.TempDir(), "none"))
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(t.TempDir(), "none"))
+	target := ""
+	d := &directFlags{backend: prometheus.BackendCloudWatch, awsRegion: "us-west-2"}
+	if err := d.check(&target); err != nil || d.url != "https://monitoring.us-west-2.amazonaws.com" {
+		t.Errorf("--backend cloudwatch --aws-region: %+v, %v", d, err)
+	}
+	_, store, err := d.open(context.Background())
+	if err != nil || store.Name != prometheus.BackendCloudWatch || store.Region != "us-west-2" || store.MaxSeries != prometheus.CloudWatchMaxSeries {
+		t.Errorf("open: %+v, %v", store, err)
+	}
+	if got := cloudWatchRegion(store); got != "us-west-2" {
+		t.Errorf("region for the adapter %q", got)
+	}
+	if c := store.NewClient(nil, ""); !reflect.DeepEqual(c.ClusterLabels, prometheus.CloudWatchClusterLabels) || c.MaxRange != prometheus.CloudWatchMaxRange {
+		t.Errorf("client %+v", c)
+	}
+	d = &directFlags{url: "http://localhost:9090", backend: prometheus.BackendCloudWatch, awsRegion: "us-east-2"}
+	if err := d.check(&target); err != nil {
+		t.Fatal(err)
+	}
+	if _, store, err := d.open(context.Background()); err != nil || store.Region != "us-east-2" || store.Base != "http://localhost:9090" {
+		t.Errorf("--url with --aws-region: %+v, %v", store, err)
+	}
+	for _, c := range []struct {
+		d   directFlags
+		err string
+	}{
+		{directFlags{backend: prometheus.BackendCloudWatch}, "needs --aws-region or --url"},
+		{directFlags{backend: prometheus.BackendCloudWatch, awsRegion: "virginia"}, "not an AWS region"},
+		{directFlags{awsRegion: "us-east-1"}, "apply only with --url"},
+	} {
+		if err := c.d.check(&target); err == nil || !strings.Contains(err.Error(), c.err) {
+			t.Errorf("%+v: got %v, want %q", c.d, err, c.err)
+		}
+	}
+	if got := cloudWatchRegion(backend(t, "https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-1", "", false)); got != "" {
+		t.Errorf("region for AMP %q", got)
+	}
+}
+
+func TestDirectHintForCloudWatch(t *testing.T) {
+	store := backend(t, "https://monitoring.us-east-1.amazonaws.com", "", false)
+	err := directHint(&prometheus.APIError{Status: 403, Message: "AccessDeniedException"}, store)
+	if err == nil || !strings.Contains(err.Error(), "cloudwatch:GetMetricData and cloudwatch:ListMetrics") {
+		t.Errorf("403: %v", err)
+	}
+	err = directHint(&prometheus.APIError{Status: 422, Message: "too many samples"}, store)
+	if err == nil || !strings.Contains(err.Error(), "--step") {
+		t.Errorf("422: %v", err)
+	}
+	err = directHint(&prometheus.APIError{Status: 404, Message: "not found"}, store)
+	if err == nil || !strings.Contains(err.Error(), "monitoring.REGION.amazonaws.com") {
+		t.Errorf("404: %v", err)
+	}
+}

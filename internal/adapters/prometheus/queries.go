@@ -177,10 +177,15 @@ const UnlabeledPods = `count(
 // Managed Prometheus, Grafana Cloud) commonly use to tell clusters apart.
 var ClusterLabels = []string{"cluster", "cluster_name", "cluster_id", "k8s_cluster", "k8s_cluster_name", "kubernetes_cluster"}
 
-// ClusterValues returns queries that count series by the cluster labels: node
-// info over the window, and pod owners and container memory at the query time.
-func ClusterValues(window time.Duration) []string {
-	by := strings.Join(ClusterLabels, ", ")
+// ClusterValues returns queries that count series by the cluster labels and
+// any extra ones: node info over the window, and pod owners and container
+// memory at the query time.
+func ClusterValues(window time.Duration, extra ...string) []string {
+	labels := make([]string, 0, len(ClusterLabels)+len(extra))
+	for _, l := range append(append([]string(nil), ClusterLabels...), extra...) {
+		labels = append(labels, QuoteLabel(l))
+	}
+	by := strings.Join(labels, ", ")
 	return []string{
 		fmt.Sprintf(`count by (%s) (last_over_time(kube_node_info{}[%ds]))`, by, seconds(window)),
 		fmt.Sprintf(`count by (%s) (kube_pod_owner{})`, by),
