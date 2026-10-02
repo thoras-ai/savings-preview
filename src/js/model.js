@@ -85,7 +85,7 @@
       };
       if (a['k8s.node.name']) {
         nodes.push(Object.assign(base, {
-          name: a['k8s.node.name'], hostType: a['host.type'] || '', capacity: a['thoras.node.capacity_type'] || 'unknown',
+          name: a['k8s.node.name'], hostType: a['host.type'] || '', region: a['cloud.region'] || '', capacity: a['thoras.node.capacity_type'] || 'unknown',
           cores: mean(series[M.cpuAlloc] ? series[M.cpuAlloc].v : []),
           gib: mean(series[M.memAlloc] ? series[M.memAlloc].v : []) / GIB
         }));
@@ -114,10 +114,13 @@
       };
     }
     var cost = 0, cores = 0, gib = 0;
+    var spot = priced.some(function (n) { return n.capacity === 'spot'; });
+    var regions = priced.some(function (n) { return n.region && n.region !== 'us-east-1'; });
+    var caveat = (spot ? '; spot nodes are priced at on-demand' : '') + (regions ? '; nodes outside us-east-1 are priced as if in it' : '');
     priced.forEach(function (n) { cost += NODE_PRICES[n.hostType]; cores += n.cores; gib += n.gib; });
     return {
       perCore: cost / cores, perGiB: cost / gib,
-      basis: priced.length + ' of ' + nodes.length + ' nodes at AWS on-demand list prices',
+      basis: priced.length + ' of ' + nodes.length + ' nodes at AWS us-east-1 on-demand list prices' + caveat,
       priced: priced.length, nodes: nodes.length
     };
   }
@@ -267,7 +270,9 @@
         cnt[bi]++;
         FIELDS.forEach(function (f) { sum[f][bi] += s[f][i]; });
       }
+      var first = Math.floor((s.t[0] - t0) / step), last = Math.floor((s.t[s.t.length - 1] - t0) / step);
       for (var j = 0; j < nb; j++) {
+        if (j < first || j > last) { have[j]++; continue; }
         if (!cnt[j]) continue;
         have[j]++;
         FIELDS.forEach(function (f) { out[f][j] += sum[f][j] / cnt[j]; });

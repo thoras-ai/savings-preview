@@ -23,4 +23,6 @@ To try it with the fixture:
 
 The savings math is in `src/js/model.js`. The target is 1.1 times the trailing 15-minute maximum of usage, per workload. Waste is the request above the target. Cost is the larger of the CPU and memory cost, priced from the node resources when their instance types are in the built-in AWS price table, and from a 4-core, 16 GiB, $0.192 per hour node otherwise. A container missing a required series is listed but not counted.
 
+`src/styles/primitives.css` and `src/styles/semantic.css` are copies of the dashboard's design tokens (`dashboard/src/styles/tokens/`). Re-copy them to pick up token changes; `zinc.css` supplies the Tailwind zinc values they reference.
+
 Run the page tests with `node --test tests/report_model.test.js`.

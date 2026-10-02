@@ -52,7 +52,6 @@
   function downsample(series, mode) {
     var n = series.t.length;
     var size = Math.max(1, Math.ceil(n / MAX_POINTS));
-    var m = [];
     var out = { t: [], a: [], b: [], u: [], size: size };
     for (var i = 0; i < n; i += size) {
       var end = Math.min(n, i + size);
@@ -130,11 +129,13 @@
     }).join('');
 
     var xt = '';
-    var count = Math.max(2, Math.min(8, Math.floor(w / 90)));
-    for (var q = 0; q < count && n > 1; q++) {
-      var tt = t0 + span * q / (count - 1);
-      var anchor = q === 0 ? 'start' : q === count - 1 ? 'end' : 'middle';
-      xt += '<text class="axis" x="' + (m.left + w * q / (count - 1)).toFixed(1) + '" y="' + (height - 8) + '" text-anchor="' + anchor + '">' + esc(fmtTick(tt, span)) + '</text>';
+    var unit = span <= 2 * 86400 ? 3600 : 86400;
+    var maxLabels = Math.max(2, Math.floor(w / 90));
+    var every = Math.max(1, Math.ceil((span / unit) / maxLabels));
+    for (var tt = Math.ceil(t0 / unit) * unit, idx = 0; tt <= t1 && n > 1; tt += unit, idx++) {
+      if (idx % every) continue;
+      var px = m.left + (tt - t0) / span * w;
+      xt += '<text class="axis" x="' + px.toFixed(1) + '" y="' + (height - 8) + '" text-anchor="middle">' + esc(fmtTick(tt, span)) + '</text>';
     }
     if (n === 1) xt = '<text class="axis" x="' + (m.left + w / 2) + '" y="' + (height - 8) + '" text-anchor="middle">' + esc(fmtDate(t0, true)) + '</text>';
 

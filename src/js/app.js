@@ -104,7 +104,7 @@
       notes.push('<strong>' + left + ' of ' + t.workloads + ' workloads</strong> have too little data for a savings figure and are not in the totals.');
     }
     var partial = r.workloads.filter(function (w) { return w.status === 'partial'; }).length;
-    if (partial) notes.push('<strong>' + partial + '</strong> workloads have containers with missing data. Those containers are left out of the workload figures.');
+    if (partial) notes.push('<strong>' + partial + '</strong> ' + (partial === 1 ? 'workload has' : 'workloads have') + ' containers with missing data. Those containers are left out of the workload figures.');
     $('notes').innerHTML = notes.map(function (n) { return '<p>' + n + '</p>'; }).join('');
     $('notes').hidden = !notes.length;
     $('basis').textContent = 'Priced with ' + r.pricing.basis + '. Target is 1.1 times the highest usage in any 15-minute window. Waste is the amount requested above the target.';

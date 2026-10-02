@@ -111,3 +111,77 @@ test('the fixture produces the expected workload states', () => {
 test('files that are not reports are rejected with a clear message', () => {
   assert.throws(() => model.analyze({}), /not a Savings Preview file/);
 });
+
+function multi(workloads, nodes = []) {
+  const rms = [];
+  workloads.forEach(({ name, replicas, containers, cpu }) => {
+    const base = [S('k8s.cluster.name', 'c'), I('thoras.step_seconds', 300), I('thoras.fidelity_tier', 2), S('k8s.namespace.name', 'ns'), S('k8s.deployment.name', name)];
+    const n = cpu.length;
+    const first = containers[0].first || 0;
+    rms.push({ resource: { attributes: base }, scopeMetrics: [{ metrics: [series('k8s.deployment.pod.desired', '{pod}', Array(n).fill(replicas), 300, { int: true })] }] });
+    containers.forEach(c => {
+      const pad = Array(first).fill(null);
+      const v = (x) => pad.concat(Array(n - first).fill(x));
+      const metrics = [
+        series('container.cpu.usage', '{cpu}', v(c.use), 300, { gauge: true }),
+        series('container.memory.working_set', 'By', v(1 * GIB), 300, { int: true }),
+        series('k8s.container.cpu.request.desired', '{cpu}', v(c.req), 300),
+        series('k8s.container.memory.request.desired', 'By', v(GIB), 300, { int: true })
+      ].filter(m => !(c.drop || []).includes(m.name));
+      rms.push({ resource: { attributes: base.concat([S('k8s.container.name', c.name)]) }, scopeMetrics: [{ metrics }] });
+    });
+  });
+  return { resourceMetrics: rms.concat(nodes) };
+}
+
+test('a workload that starts late does not blank the cluster series', () => {
+  const cpu = Array(100).fill(0);
+  const r = model.analyze(multi([
+    { name: 'old', replicas: 1, cpu, containers: [{ name: 'a', use: 0.1, req: 1 }] },
+    { name: 'new', replicas: 1, cpu, containers: [{ name: 'a', use: 0.1, req: 1, first: 90 }] }
+  ]));
+  const valid = Array.from(r.series.cur).filter(Number.isFinite).length;
+  assert.strictEqual(valid, 100);
+  assert.ok(r.series.reqCpu[0] < r.series.reqCpu[99]);
+});
+
+test('a gap inside a workload range still drops the cluster bucket', () => {
+  const r = model.analyze(doc({ cpu: [1, 1, null, 1, 1], mem: [1, 1, 1, 1, 1] }));
+  assert.ok(Number.isNaN(r.series.cur[2]));
+});
+
+test('totals multiply per-pod values by replicas and sum containers', () => {
+  const cpu = Array(10).fill(0);
+  const r = model.analyze(multi([
+    { name: 'w', replicas: 3, cpu, containers: [{ name: 'a', use: 0.5, req: 2 }, { name: 'b', use: 0.25, req: 1 }] }
+  ]));
+  const w = r.workloads[0];
+  assert.ok(Math.abs(w.reqCores - 9) < 1e-9);
+  assert.ok(Math.abs(w.series.useCpu[5] - 2.25) < 1e-9);
+});
+
+test('a partial workload counts only its complete containers', () => {
+  const cpu = Array(10).fill(0);
+  const r = model.analyze(multi([
+    { name: 'w', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 2 }, { name: 'b', use: 0.5, req: 5, drop: ['container.memory.working_set'] }] }
+  ]));
+  const w = r.workloads[0];
+  assert.strictEqual(w.status, 'partial');
+  assert.ok(Math.abs(w.reqCores - 2) < 1e-9);
+  assert.deepStrictEqual(w.containers.map(c => c.excluded), [false, true]);
+});
+
+test('node prices set the rates and the basis names the caveats', () => {
+  const node = (type, cap, region) => ({
+    resource: { attributes: [S('k8s.node.name', type), S('host.type', type), S('thoras.node.capacity_type', cap), S('cloud.region', region), I('thoras.step_seconds', 300)] },
+    scopeMetrics: [{ metrics: [
+      series('k8s.node.cpu.allocatable', '{cpu}', [4, 4], 300),
+      series('k8s.node.memory.allocatable', 'By', [16 * GIB, 16 * GIB], 300, { int: true })
+    ] }]
+  });
+  const rates = model.pricing(model.parse(doc({ cpu: [1, 1], mem: [1, 1], nodes: [node('m5.xlarge', 'spot', 'eu-west-1')] })).nodes);
+  assert.ok(Math.abs(rates.perCore - 0.192 / 4) < 1e-9);
+  assert.match(rates.basis, /us-east-1/);
+  assert.match(rates.basis, /spot/);
+  assert.match(rates.basis, /outside us-east-1/);
+});
