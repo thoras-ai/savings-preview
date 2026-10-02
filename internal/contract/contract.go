@@ -14,7 +14,7 @@ import (
 const (
 	SchemaURL    = "https://opentelemetry.io/schemas/1.44.0"
 	ScopeName    = "thoras.savings_preview"
-	ScopeVersion = "1.0.0"
+	ScopeVersion = "1.1.0"
 	day          = 86400
 )
 
@@ -111,6 +111,7 @@ type Resource struct {
 	Container string
 	Node      *Node
 	Missing   []string
+	Notes     []string // thoras.fidelity_notes
 	Metrics   []Series
 }
 
@@ -158,6 +159,9 @@ func (r *Resource) attrs() []attr {
 		m := append([]string(nil), r.Missing...)
 		sort.Strings(m)
 		a = append(a, strs("thoras.missing_metrics", m))
+	}
+	if len(r.Notes) > 0 {
+		a = append(a, strs("thoras.fidelity_notes", r.Notes))
 	}
 	if r.Node != nil {
 		return append(a,

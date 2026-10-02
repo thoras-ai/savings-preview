@@ -216,6 +216,9 @@ def validate(doc):
         for m in missing:
             if m not in specs or not specs[m][3]:
                 errors.append("%s: thoras.missing_metrics lists %s, which is not a required metric here" % (where, m))
+        notes = attrs.get("thoras.fidelity_notes", [])
+        if not isinstance(notes, list) or not all(isinstance(n, str) and n for n in notes):
+            errors.append("%s: thoras.fidelity_notes must be an array of non-empty strings" % where)
 
         scopes = rm.get("scopeMetrics") or []
         if not scopes:

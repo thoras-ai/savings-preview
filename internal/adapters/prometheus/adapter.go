@@ -3,8 +3,10 @@ package prometheus
 import (
 	"context"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,17 +30,53 @@ type Report struct {
 	Version     string
 	Start, End  time.Time
 	FullHistory bool // the store holds at least Days of data
-	Containers  int
-	Workloads   int
-	Nodes       int
-	Warnings    []string
+	// UsageFromPods is set when the store has no per-container usage and
+	// container usage was split from the pod cgroup series by requests.
+	UsageFromPods bool
+	Containers    int
+	Workloads     int
+	Nodes         int
+	OOMKills      int
+	Warnings      []string
 }
+
+// ClusterError reports a store that holds more than one cluster.
+type ClusterError struct {
+	Label    string
+	Values   []string // "" is a series without the label
+	Selected bool     // a selector was given and still matches several clusters
+}
+
+func (e *ClusterError) Error() string {
+	shown := make([]string, len(e.Values))
+	for i, v := range e.Values {
+		shown[i] = strconv.Quote(v)
+	}
+	pick := e.Values[0]
+	for _, v := range e.Values {
+		if v != "" {
+			pick = v
+			break
+		}
+	}
+	if e.Selected {
+		return fmt.Sprintf("the selector matches %d clusters (label %s: %s); narrow it to one, for example --selector '%s=%s'",
+			len(e.Values), e.Label, strings.Join(shown, ", "), e.Label, strconv.Quote(pick))
+	}
+	return fmt.Sprintf("the store holds %d clusters (label %s: %s); their workloads would be averaged together. Choose one with --selector '%s=%s'",
+		len(e.Values), e.Label, strings.Join(shown, ", "), e.Label, strconv.Quote(pick))
+}
+
+// UsageFromPodsNote is the fidelity note on containers whose usage was split
+// from the pod cgroup series.
+const UsageFromPodsNote = "usage_split_from_pod_by_requests"
 
 type cKey struct{ kind, ns, workload, container string }
 type wKey struct{ kind, ns, workload string }
 
 type pulled struct {
 	cpuUse, memUse, cpuReq, memReq, cpuLim, memLim map[cKey][]contract.Point
+	oom                                            map[cKey][]contract.Point
 	replicas                                       map[wKey][]contract.Point
 	nodeCPU, nodeMem                               map[string][]contract.Point
 }
@@ -60,16 +98,37 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 	if err := c.Check(ctx); err != nil {
 		return nil, rep, err
 	}
+	maxBack := time.Duration(o.Days) * 24 * time.Hour
+	if err := oneCluster(ctx, c, o.Now, maxBack); err != nil {
+		return nil, rep, err
+	}
+	usageProbe := UsageProbe
 	if ok, err := c.present(ctx, UsageProbe, o.Now); err != nil {
 		return nil, rep, fmt.Errorf("probe container metrics: %w", err)
 	} else if !ok {
-		return nil, rep, fmt.Errorf("the store has no per-container usage metrics (container_memory_working_set_bytes with container and image labels); the kubelet cAdvisor job is probably not scraped, or the container runtime does not expose container labels")
+		if ok, err := c.present(ctx, PodUsageProbe, o.Now); err != nil {
+			return nil, rep, fmt.Errorf("probe pod metrics: %w", err)
+		} else if !ok {
+			if c.Selector != "" {
+				return nil, rep, fmt.Errorf("no container usage metrics (container_memory_working_set_bytes) match the selector; it must match the cAdvisor series as well as the kube-state-metrics series")
+			}
+			return nil, rep, fmt.Errorf("the store has no container usage metrics (container_memory_working_set_bytes with container and image labels, or with pod labels for the pod cgroup); the kubelet cAdvisor job is probably not scraped")
+		}
+		usageProbe, rep.UsageFromPods = PodUsageProbe, true
 	}
 	hasRequests, _ := c.present(ctx, RequestsProbe, o.Now)
 	hasOwners, _ := c.present(ctx, OwnerProbe, o.Now)
 	if !hasOwners {
 		return nil, rep, fmt.Errorf("kube-state-metrics is not in the store (no kube_pod_owner series): pods cannot be mapped to workloads, and requests and replica counts are unavailable, so no cost can be computed")
 	}
+	if rep.UsageFromPods {
+		if ok, _ := c.present(ctx, ContainerProbe, o.Now); !ok {
+			return nil, rep, fmt.Errorf("the store has no per-container usage metrics (container_memory_working_set_bytes with container and image labels), and kube_pod_container_info is not in the store to split the pod cgroup series between containers")
+		}
+	} else if s, err := c.Query(ctx, UnlabeledPods, o.Now); err == nil && len(s) > 0 && len(s[0].Points) > 0 && s[0].Points[0].V > 0 {
+		rep.Warnings = append(rep.Warnings, fmt.Sprintf("%.0f workload pods have pod-level usage but no per-container usage series (their nodes do not label cAdvisor series) and are left out of the usage averages", s[0].Points[0].V))
+	}
+	hasRestarts, _ := c.present(ctx, RestartsProbe, o.Now)
 	hasPhase, _ := c.present(ctx, PhaseProbe, o.Now)
 	hasReplicaSets, _ := c.present(ctx, ReplicaSetProbe, o.Now)
 	kinds := []string{StatefulSet}
@@ -84,12 +143,8 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 		hasRequests = false
 		rep.Warnings = append(rep.Warnings, "kube_pod_status_phase is not in the store, so requests cannot be limited to running pods: requests are unavailable and listed as missing")
 	}
-	if s, err := c.Query(ctx, ClusterCount, o.Now); err == nil && len(s) > 0 && len(s[0].Points) > 0 && s[0].Points[0].V > 1 {
-		rep.Warnings = append(rep.Warnings, fmt.Sprintf("the store holds %.0f clusters (label cluster): their workloads are averaged together; point the adapter at a store that holds one cluster", s[0].Points[0].V))
-	}
 
-	maxBack := time.Duration(o.Days) * 24 * time.Hour
-	earliest, full, err := c.EarliestData(ctx, UsageProbe, o.Now, maxBack)
+	earliest, full, err := c.EarliestData(ctx, usageProbe, o.Now, maxBack)
 	if err != nil {
 		return nil, rep, fmt.Errorf("probe history: %w", err)
 	}
@@ -99,7 +154,7 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 		rep.Warnings = append(rep.Warnings, fmt.Sprintf("the store holds about %s of history, less than the %d days asked for", spanText(o.Now.Sub(earliest)), o.Days))
 	}
 
-	p, err := pull(ctx, o, rep.Start, hasRequests, kinds)
+	p, err := pull(ctx, o, rep.Start, sources{requests: hasRequests, podUsage: rep.UsageFromPods, oom: hasRestarts}, kinds)
 	if err != nil {
 		return nil, rep, err
 	}
@@ -123,9 +178,16 @@ type job struct {
 	into  func([]Series)
 }
 
-func pull(ctx context.Context, o Options, start time.Time, requests bool, kinds []string) (*pulled, error) {
+// sources says which series the store can provide.
+type sources struct {
+	requests bool // requests and limits, limited to running pods
+	podUsage bool // usage only from the pod cgroup series
+	oom      bool // container restarts and termination reasons
+}
+
+func pull(ctx context.Context, o Options, start time.Time, src sources, kinds []string) (*pulled, error) {
 	p := &pulled{
-		cpuUse: map[cKey][]contract.Point{}, memUse: map[cKey][]contract.Point{},
+		cpuUse: map[cKey][]contract.Point{}, memUse: map[cKey][]contract.Point{}, oom: map[cKey][]contract.Point{},
 		cpuReq: map[cKey][]contract.Point{}, memReq: map[cKey][]contract.Point{},
 		cpuLim: map[cKey][]contract.Point{}, memLim: map[cKey][]contract.Point{},
 		replicas: map[wKey][]contract.Point{},
@@ -145,14 +207,22 @@ func pull(ctx context.Context, o Options, start time.Time, requests bool, kinds 
 	}
 	for _, kind := range kinds {
 		kind := kind
-		add(kind+" cpu usage", CPUUsage(kind, o.Step), cs(kind, p.cpuUse))
-		add(kind+" memory usage", MemoryUsage(kind), cs(kind, p.memUse))
+		if src.podUsage {
+			add(kind+" cpu usage from pods", PodCPUUsage(kind, o.Step), cs(kind, p.cpuUse))
+			add(kind+" memory usage from pods", PodMemoryUsage(kind), cs(kind, p.memUse))
+		} else {
+			add(kind+" cpu usage", CPUUsage(kind, o.Step), cs(kind, p.cpuUse))
+			add(kind+" memory usage", MemoryUsage(kind), cs(kind, p.memUse))
+		}
+		if src.oom {
+			add(kind+" oom kills", OOMKills(kind, o.Step), cs(kind, p.oom))
+		}
 		add(kind+" replicas", Replicas(kind), func(ss []Series) {
 			for _, s := range ss {
 				p.replicas[wKey{kind, s.Labels["namespace"], s.Labels["workload"]}] = toPoints(s.Points)
 			}
 		})
-		if !requests {
+		if !src.requests {
 			continue
 		}
 		add(kind+" cpu requests", Requests(kind, "cpu"), cs(kind, p.cpuReq))
@@ -240,6 +310,9 @@ func assemble(ctx context.Context, o Options, p *pulled, requests bool, rep *Rep
 	haveWorkload := map[wKey]bool{}
 	for _, k := range ordered {
 		r := contract.Resource{Common: base, Namespace: k.ns, Kind: k.kind, Workload: k.workload, Container: k.container}
+		if rep.UsageFromPods {
+			r.Notes = []string{UsageFromPodsNote}
+		}
 		wk := wKey{k.kind, k.ns, k.workload}
 		add := func(name string, pts []contract.Point, usage []contract.Point) {
 			if name == contract.CPURequest || name == contract.MemoryRequest {
@@ -267,6 +340,12 @@ func assemble(ctx context.Context, o Options, p *pulled, requests bool, rep *Rep
 			optional(contract.MemoryLimit, p.memLim[k])
 		} else {
 			r.Missing = append(r.Missing, contract.CPURequest, contract.MemoryRequest)
+		}
+		if pts := p.oom[k]; len(pts) > 0 {
+			r.Metrics = append(r.Metrics, contract.Series{Name: contract.OOMKills, Points: pts})
+			for _, pt := range pts {
+				rep.OOMKills += int(math.Round(pt.V))
+			}
 		}
 		r.Tier = tierOf(step, r.Metrics)
 		f.Resources = append(f.Resources, r)
@@ -451,4 +530,30 @@ func capacityType(l map[string]string) string {
 		return "spot"
 	}
 	return "unknown"
+}
+
+// oneCluster fails when a cluster label has more than one value in any of the
+// ClusterValues queries.
+func oneCluster(ctx context.Context, c *Client, now time.Time, window time.Duration) error {
+	for _, q := range ClusterValues(window) {
+		ss, err := c.Query(ctx, q, now)
+		if err != nil {
+			return fmt.Errorf("probe cluster labels: %w", err)
+		}
+		for _, l := range ClusterLabels {
+			seen := map[string]bool{}
+			for _, s := range ss {
+				seen[s.Labels[l]] = true
+			}
+			if len(seen) > 1 {
+				vals := make([]string, 0, len(seen))
+				for v := range seen {
+					vals = append(vals, v)
+				}
+				sort.Strings(vals)
+				return &ClusterError{Label: l, Values: vals, Selected: c.Selector != ""}
+			}
+		}
+	}
+	return nil
 }

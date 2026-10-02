@@ -39,6 +39,9 @@ type Series struct {
 type Client struct {
 	G       Getter
 	Retries int
+	// Selector holds label matchers, as returned by ParseSelector, that are
+	// added to every vector selector of every query.
+	Selector string
 }
 
 // APIError is an error reported by the store.
@@ -164,7 +167,7 @@ func decode(raw json.RawMessage) ([]Series, error) {
 
 // Query runs an instant query.
 func (c *Client) Query(ctx context.Context, q string, at time.Time) ([]Series, error) {
-	p := url.Values{"query": {q}}
+	p := url.Values{"query": {withSelector(q, c.Selector)}}
 	if !at.IsZero() {
 		p.Set("time", strconv.FormatInt(at.Unix(), 10))
 	}
@@ -179,7 +182,7 @@ func (c *Client) Query(ctx context.Context, q string, at time.Time) ([]Series, e
 // store's point limit; see QueryRangeChunked.
 func (c *Client) QueryRange(ctx context.Context, q string, start, end time.Time, step time.Duration) ([]Series, error) {
 	p := url.Values{
-		"query": {q},
+		"query": {withSelector(q, c.Selector)},
 		"start": {strconv.FormatInt(start.Unix(), 10)},
 		"end":   {strconv.FormatInt(end.Unix(), 10)},
 		"step":  {strconv.FormatInt(int64(step/time.Second), 10)},

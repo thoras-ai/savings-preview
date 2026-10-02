@@ -14,6 +14,7 @@ savings-preview prometheus [--context NAME] [--days 14] [--step 1m] [--out savin
 | `--step` | 1m | Resolution. Use `5m` for large clusters. |
 | `--target` | discovered | `[https:]namespace/service:port[/path-prefix]`, skips discovery. |
 | `--url`, `--bearer-token-file`, `--basic-auth-file` | none | Query a store directly instead of through the API server. Requires `--cluster-name`. Credentials are read from a file (`user:password` for basic auth) so they stay out of shell history. |
+| `--selector` | none | Label matchers added to every query, such as `cluster="prod-us"`, to read one cluster from a store that holds several. Values may be left unquoted (`cluster=prod-us`). |
 | `--list` | off | Print what discovery finds and exit. |
 | `--concurrency` | 2 | Queries in flight at once. |
 
@@ -58,20 +59,36 @@ Per-pod series are joined to the owning workload in PromQL. A pod belongs to a D
 | `k8s.node.cpu.allocatable`, `k8s.node.memory.allocatable` | `kube_node_status_allocatable` |
 | node attributes | `kube_node_info` and `kube_node_labels` |
 
+| `thoras.container.oom_kills` | increase of `kube_pod_container_status_restarts_total` over each step, for containers whose `kube_pod_container_status_last_terminated_reason` is `OOMKilled`, summed over pods |
+
 Usage queries keep only series with `container!=""`, `container!="POD"` and `image!=""`. The `container=""` series is the pod total, so keeping it would count every pod twice. kube-state-metrics keeps exporting the requests of finished pods, which is why requests are limited to running pods.
+
+An out-of-memory kill counts when the container restarts and its last termination reason is `OOMKilled`. A kill of a child process that does not restart the container is not counted. Without `kube_pod_container_status_restarts_total` no kills are reported.
+
+## Containers without usage labels
+
+Some container runtimes (older containerd setups, and minikube) give cAdvisor series no `container`, `pod` or `namespace` labels for containers; only the pod cgroup series (`container=""`) carries `namespace` and `pod`. When the store has no per-container usage, the adapter uses the pod cgroup series instead and splits it between the pod's containers in proportion to their requests, CPU by CPU request and memory by memory request. A container without a request gets none of the pod's usage, unless no container in the pod has one, in which case the pod is split evenly. A single-container pod gets all of it. The containers list comes from `kube_pod_container_info`, which the fallback needs.
+
+The pod cgroup includes the pause container and any sidecar started as an init container, so their use is attributed to the regular containers. Every container resource produced this way carries `thoras.fidelity_notes` = `usage_split_from_pod_by_requests`, and the CLI prints a note.
+
+The choice is made for the whole store. When some nodes label container series and others do not, the store has per-container usage and the pods on unlabeled nodes are left out of the usage averages; the run warns with their number.
+
+## Stores with several clusters
+
+Thanos, Mimir, Amazon Managed Prometheus and Grafana Cloud often hold several clusters, told apart by a label. Before pulling, the adapter counts series by `cluster`, `cluster_name`, `cluster_id`, `k8s_cluster`, `k8s_cluster_name` and `kubernetes_cluster` in `kube_node_info` over the window, and in `kube_pod_owner` and `container_memory_working_set_bytes` now. When one of these metrics has more than one value of one label (series without the label count as a value of their own), the run stops, lists the values and suggests a `--selector`. It does the same when a selector still matches more than one value.
+
+`--selector` is added to every series selector in every query, so the label must be on the cAdvisor and kube-state-metrics series alike. `--selector 'cluster=""'` selects the series that have no cluster label.
 
 Instance type, region and capacity type come from node labels, so kube-state-metrics needs `--metric-labels-allowlist=nodes=[*]` (or the specific labels). Without them the node attributes are `unknown` and the report prices the cluster with its default node.
 
 ## Missing data
 
-- One store must hold one cluster. When the series carry a `cluster` label with more than one value, the run warns that workloads are averaged together. There is no selector flag yet.
 - Without kube-state-metrics owner series (`kube_pod_owner`) pods cannot be mapped to workloads. The adapter stops and says so.
 - Without `kube_replicaset_owner`, Deployments cannot be mapped and are left out with a warning. StatefulSets are still reported.
 - When kube-state-metrics exports no requests, or no `kube_pod_status_phase` to limit them to running pods, both request metrics are listed in `thoras.missing_metrics` of every container and the run warns. Nothing is estimated.
 - When it exports requests, a container with usage but no request series has no request set, or had none yet. It gets zero requests at the times the workload had a replica count.
 - Gaps in a series stay gaps. Values are never filled or carried forward.
-- No container usage series (for example when the kubelet cannot label container metrics) stops the run with an explanation.
-- Out-of-memory kills are not pulled.
+- No container usage series at all, neither per container nor per pod, stops the run with an explanation. So does a store with only pod-level usage and no `kube_pod_container_info`.
 
 ## Managed backends
 

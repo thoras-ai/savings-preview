@@ -1,6 +1,6 @@
 # Savings Preview OTel contract
 
-Version 1.0.0. Every adapter writes one OTLP-JSON metrics file in this shape, and the report page reads only that file. `scripts/validate_contract.py` checks a file against this document. `fixtures/savings-preview.otlp.json` is a valid example.
+Version 1.1.0. Every adapter writes one OTLP-JSON metrics file in this shape, and the report page reads only that file. `scripts/validate_contract.py` checks a file against this document. `fixtures/savings-preview.otlp.json` is a valid example.
 
 ## Pinned conventions
 
@@ -32,6 +32,7 @@ All kinds:
 | `thoras.step_seconds` | int | Spacing of the data points, in seconds. |
 | `thoras.fidelity_tier` | int | 1, 2 or 3, see below. |
 | `thoras.missing_metrics` | string[] | Optional. Required metrics the adapter looked for and could not get. |
+| `thoras.fidelity_notes` | string[] | Optional. How the series were derived when it differs from the metric definitions, see below. |
 
 Container and workload resources also take `k8s.namespace.name` and exactly one of `k8s.deployment.name` or `k8s.statefulset.name`. Container resources add `k8s.container.name`.
 
@@ -95,12 +96,22 @@ The target is 14 days at 60 seconds, which is what the forecaster trains on. 300
 
 An adapter may claim a lower tier than its data supports but not a higher one. The validator rejects a claim the step and span cannot support.
 
+`thoras.fidelity_notes` lists derivations a reader should know about. Readers ignore values they do not recognize.
+
+| Note | Meaning |
+| --- | --- |
+| `usage_split_from_pod_by_requests` | The source had no per-container usage. Container usage is the pod's usage split between its containers in proportion to their requests (evenly when none has a request, so a single container gets all of it). |
+
 ## Missing data
 
 - A series that could not be retrieved is left out of the file, and its metric name is listed in the resource's `thoras.missing_metrics`. Every required metric must be either present or listed, never both and never neither. Only required metrics can be listed.
 - A gap inside a series is represented by omitting the points for those steps. Zero, `NaN` and carried-forward values are never used to fill a gap.
 - A container with a required series missing is shown in the report but excluded from savings, because cost is the larger of the CPU and memory cost and cannot be computed from one of them.
 - Optional metrics are simply absent when unavailable, with no declaration.
+
+## Versions
+
+- 1.1.0 adds the optional `thoras.fidelity_notes` attribute. 1.0.0 files are valid 1.1.0 files.
 
 ## Out of scope
 
