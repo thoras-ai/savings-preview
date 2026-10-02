@@ -7,10 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -242,6 +244,7 @@ func pollWithProgress(ctx context.Context, conn *kube.Conn, cluster string, o *r
 	}
 	fmt.Fprintln(os.Stderr, "Longer runs capture more peaks, so the target and the savings come out more reliable.")
 
+	before, statErr := os.Stat(o.out)
 	start := time.Now()
 	done := make(chan struct{})
 	defer close(done)
@@ -268,11 +271,13 @@ func pollWithProgress(ctx context.Context, conn *kube.Conn, cluster string, o *r
 	if err != nil && ctx.Err() == nil {
 		return err
 	}
-	if _, statErr := os.Stat(o.out); statErr != nil {
+	// A file left by an earlier run must not pass for this run's output.
+	after, afterErr := os.Stat(o.out)
+	if afterErr != nil || (statErr == nil && !after.ModTime().After(before.ModTime())) {
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("polling stopped before %s was written", o.out)
+		return fmt.Errorf("polling stopped before it wrote %s", o.out)
 	}
 	return nil
 }
@@ -316,11 +321,20 @@ func shortDur(d time.Duration) string {
 	return s
 }
 
+// money formats dollars the way the report page does.
 func money(v float64) string {
-	if v >= 1e6 || v <= -1e6 {
+	if math.Abs(v) >= 1e6 {
 		return fmt.Sprintf("$%.2fM", v/1e6)
 	}
-	return fmt.Sprintf("$%.0f", v)
+	sign, n := "", int64(math.Round(v))
+	if n < 0 {
+		sign, n = "-", -n
+	}
+	d := strconv.FormatInt(n, 10)
+	for i := len(d) - 3; i > 0; i -= 3 {
+		d = d[:i] + "," + d[i:]
+	}
+	return "$" + sign + d
 }
 
 // writeContract writes f to path, replacing it only once the write succeeded.
@@ -335,6 +349,9 @@ func writeContract(path string, f *contract.File) error {
 		return err
 	}
 	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)

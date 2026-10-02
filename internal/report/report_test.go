@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -42,6 +43,16 @@ func TestServe(t *testing.T) {
 	if code, _, _ := get(t, s.URL+"etc/passwd"); code != 404 {
 		t.Fatalf("other path: %d, want 404", code)
 	}
+	req, _ := http.NewRequest("GET", s.URL+DataName, nil)
+	req.Host = "attacker.example:" + strings.TrimSuffix(strings.SplitN(s.URL, ":", 3)[2], "/")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("foreign Host: %d, want 403", resp.StatusCode)
+	}
 }
 
 func TestInlineEscapesData(t *testing.T) {
@@ -75,6 +86,9 @@ func TestWriteZip(t *testing.T) {
 	want := map[string]string{"a.json": "{}", "report.html": "<html></html>"}
 	if err := WriteZip(path, []Entry{{"a.json", []byte("{}")}, {"report.html", []byte("<html></html>")}}); err != nil {
 		t.Fatal(err)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o644 {
+		t.Fatalf("zip mode: %v %v", fi.Mode(), err)
 	}
 	zr, err := zip.OpenReader(path)
 	if err != nil {

@@ -11,7 +11,6 @@ import (
 	"io"
 	"maps"
 	"math"
-	"os"
 	"slices"
 	"sort"
 	"strconv"
@@ -85,15 +84,6 @@ func Validate(doc []byte) []string {
 		return []string{"cannot read: " + err.Error()}
 	}
 	return validate(v)
-}
-
-// File reads and validates the document at path. The error is only for I/O.
-func File(path string) ([]string, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	return Validate(b), nil
 }
 
 func validate(doc any) []string {

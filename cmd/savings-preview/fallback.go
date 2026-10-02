@@ -31,23 +31,21 @@ type storeResult struct {
 	report *prometheus.Report
 }
 
-// tryStore finds a store and pulls the history from it. It returns a
-// *fallbackError when the run should poll instead, and the context's error
-// when the user stopped the run.
+// tryStore finds a store and pulls the history from it, trying each candidate
+// in turn. It returns a *fallbackError when the run should poll instead, and
+// the context's error when the user stopped the run. A store named with
+// target is never a fallback: its failure is an error.
 func tryStore(ctx context.Context, s storeSteps, target *prometheus.Candidate, warn func(string)) (*storeResult, error) {
-	stopped := func(err error) error {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		return err
-	}
-	var cands []prometheus.Candidate
+	cands := []prometheus.Candidate{}
 	if target != nil {
-		cands = []prometheus.Candidate{*target}
+		cands = append(cands, *target)
 	} else {
 		d, err := s.discover(ctx)
 		if err != nil {
-			return nil, stopped(fallback("could not look for a store: %v", err))
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, fallback("could not look for a store: %v", err)
 		}
 		if len(d.Candidates) == 0 {
 			if len(d.Agents) > 0 {
@@ -59,19 +57,39 @@ func tryStore(ctx context.Context, s storeSteps, target *prometheus.Candidate, w
 		}
 		cands = d.Candidates
 	}
-	c, err := pickStore(cands, func(c prometheus.Candidate) error { return s.check(ctx, c) }, warn)
-	if err != nil {
-		return nil, stopped(fallback("no store answered queries: %v", err))
+	var reasons []string
+	for _, c := range cands {
+		res, err := useStore(ctx, s, c)
+		if err == nil {
+			return res, nil
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if target != nil {
+			return nil, err
+		}
+		reasons = append(reasons, err.Error())
+		if len(cands) > 1 {
+			warn("skipping " + err.Error())
+		}
 	}
-	f, rep, err := s.pull(ctx, *c)
+	return nil, fallback("%s", strings.Join(reasons, "; "))
+}
+
+func useStore(ctx context.Context, s storeSteps, c prometheus.Candidate) (*storeResult, error) {
+	if err := s.check(ctx, c); err != nil {
+		return nil, fmt.Errorf("%s does not answer queries: %w", c, err)
+	}
+	f, rep, err := s.pull(ctx, c)
 	if err != nil {
-		return nil, stopped(fallback("%s cannot be used: %v", c, err))
+		return nil, fmt.Errorf("%s cannot be used: %w", c, err)
 	}
 	if !anyPriced(f) {
-		return nil, fallback("%s has no container with all of %s, so no savings can be computed from it",
+		return nil, fmt.Errorf("%s has no container with all of %s, so no savings can be computed from it",
 			c, strings.Join(contract.RequiredContainerMetrics, ", "))
 	}
-	return &storeResult{store: *c, file: f, report: rep}, nil
+	return &storeResult{store: c, file: f, report: rep}, nil
 }
 
 // anyPriced reports whether some container has every series the savings math

@@ -3,12 +3,16 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/thoras-ai/savings-preview/internal/adapters/prometheus"
 	"github.com/thoras-ai/savings-preview/internal/contract"
+	"github.com/thoras-ai/savings-preview/internal/kube"
 )
 
 var (
@@ -36,6 +40,7 @@ type fakeStore struct {
 	checkErr  map[string]error
 	file      *contract.File
 	pullErr   error
+	pullFails map[string]error
 	pulled    []string
 	discovers int
 }
@@ -46,6 +51,9 @@ func (f *fakeStore) steps() storeSteps {
 		check:    func(_ context.Context, c prometheus.Candidate) error { return f.checkErr[c.Service] },
 		pull: func(_ context.Context, c prometheus.Candidate) (*contract.File, *prometheus.Report, error) {
 			f.pulled = append(f.pulled, c.Service)
+			if err := f.pullFails[c.Service]; err != nil {
+				return nil, nil, err
+			}
 			return f.file, &prometheus.Report{}, f.pullErr
 		},
 	}
@@ -68,7 +76,7 @@ func TestTryStoreFallbacks(t *testing.T) {
 			want: "agent mode"},
 		{name: "no store answers", store: fakeStore{disc: &prometheus.Discovery{Candidates: []prometheus.Candidate{storeA}},
 			checkErr: map[string]error{"prometheus": errors.New("connection refused")}},
-			want: "no store answered queries"},
+			want: "does not answer queries: connection refused"},
 		{name: "required series missing", store: fakeStore{disc: &prometheus.Discovery{Candidates: []prometheus.Candidate{storeA}},
 			pullErr: errors.New("the store has no per-container usage metrics")},
 			want: "cannot be used: the store has no per-container usage metrics"},
@@ -79,8 +87,12 @@ func TestTryStoreFallbacks(t *testing.T) {
 			checkErr: map[string]error{"prometheus": errors.New("502")}, file: priced()},
 			used: "vm"},
 		{name: "target skips discovery", store: fakeStore{file: priced()}, target: &storeB, used: "vm"},
-		{name: "unreachable target falls back", store: fakeStore{checkErr: map[string]error{"vm": errors.New("404")}}, target: &storeB,
-			want: "no store answered queries"},
+		{name: "pull failure moves on to the next store", store: fakeStore{disc: &prometheus.Discovery{Candidates: []prometheus.Candidate{storeA, storeB}},
+			file: priced(), pullFails: map[string]error{"prometheus": errors.New("no kube_pod_owner series")}},
+			used: "vm"},
+		{name: "every store fails", store: fakeStore{disc: &prometheus.Discovery{Candidates: []prometheus.Candidate{storeA, storeB}},
+			checkErr: map[string]error{"prometheus": errors.New("502")}, pullErr: errors.New("no kube_pod_owner series")},
+			want: "prometheus monitoring/prometheus:9090"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -111,6 +123,17 @@ func TestTryStoreTargetDoesNotDiscover(t *testing.T) {
 	}
 	if f.discovers != 0 {
 		t.Fatalf("discovered %d times with a target", f.discovers)
+	}
+}
+
+func TestTryStoreFailingTargetIsAnError(t *testing.T) {
+	f := fakeStore{checkErr: map[string]error{"vm": errors.New("404")}}
+	_, err := tryStore(context.Background(), f.steps(), &storeB, func(string) {})
+	if err == nil || isFallback(err) {
+		t.Fatalf("want a plain error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "does not answer queries: 404") {
+		t.Fatalf("error %q", err)
 	}
 }
 
@@ -165,5 +188,36 @@ func TestShortDur(t *testing.T) {
 		if got := shortDur(d); got != want {
 			t.Errorf("shortDur(%s) = %q, want %q", d, got, want)
 		}
+	}
+}
+
+func TestMoney(t *testing.T) {
+	for v, want := range map[float64]string{0: "$0", 999.4: "$999", 2116.2: "$2,116", 123456: "$123,456", -4321: "$-4,321", 2.5e6: "$2.50M"} {
+		if got := money(v); got != want {
+			t.Errorf("money(%v) = %q, want %q", v, got, want)
+		}
+	}
+}
+
+func TestPollMustWriteAFreshFile(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "savings-preview.otlp.json")
+	if err := os.WriteFile(out, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	os.Chtimes(out, old, old)
+	saved := poll
+	defer func() { poll = saved }()
+	o := &runOptions{out: out, interval: time.Minute}
+
+	poll = func(context.Context, *kube.Conn, pollOptions, io.Writer) error { return nil }
+	if err := pollWithProgress(context.Background(), nil, "c", o); err == nil {
+		t.Fatal("an earlier run's file passed as this run's output")
+	}
+	poll = func(_ context.Context, _ *kube.Conn, p pollOptions, _ io.Writer) error {
+		return os.WriteFile(p.Out, []byte("{}"), 0o644)
+	}
+	if err := pollWithProgress(context.Background(), nil, "c", o); err != nil {
+		t.Fatal(err)
 	}
 }

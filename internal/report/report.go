@@ -48,8 +48,18 @@ func Serve(page string, data []byte) (*Server, error) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Write(data)
 	})
-	s := &Server{URL: "http://" + ln.Addr().String() + "/", ln: ln,
-		srv: &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}}
+	host := ln.Addr().String()
+	// Answering only to our own address keeps a page that rebinds its DNS
+	// name to 127.0.0.1 from reading the data.
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != host {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
+	s := &Server{URL: "http://" + host + "/", ln: ln,
+		srv: &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second}}
 	go s.srv.Serve(ln)
 	return s, nil
 }
@@ -108,6 +118,9 @@ func WriteZip(path string, entries []Entry) error {
 		return err
 	}
 	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)

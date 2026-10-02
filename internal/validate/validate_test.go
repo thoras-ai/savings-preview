@@ -142,17 +142,13 @@ func TestFixtureCoversTheCases(t *testing.T) {
 	}
 }
 
-func TestFile(t *testing.T) {
-	errs, err := File(fixture)
-	if err != nil || len(errs) != 0 {
-		t.Fatalf("File(fixture) = %v, %v", errs, err)
+func TestReadme(t *testing.T) {
+	b, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatal(err)
 	}
-	errs, err = File("../../README.md")
-	if err != nil || len(errs) != 1 || !strings.HasPrefix(errs[0], "cannot read: ") {
-		t.Fatalf("File(README.md) = %v, %v", errs, err)
-	}
-	if _, err := File(filepath.Join(t.TempDir(), "absent.json")); err == nil {
-		t.Fatal("File on a missing path returned no error")
+	if errs := Validate(b); len(errs) != 1 || !strings.HasPrefix(errs[0], "cannot read: ") {
+		t.Fatalf("Validate(README.md) = %v", errs)
 	}
 }
 
