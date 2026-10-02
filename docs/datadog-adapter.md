@@ -19,17 +19,121 @@ DD_API_KEY=... DD_APP_KEY=... savings-preview datadog --site us1 [--selector kub
 | `--concurrency` | 2 | Requests in flight at once. |
 | `-v` | off | Log the metric chosen for each input and each pull with its series count and duration. |
 
-## Keys
+## Setup for an organization that already uses Datadog
 
-The adapter needs an API key and an application key from the organization that holds the cluster's metrics.
+1. **Find the site.** It is the host in the browser's address bar when logged in to Datadog: `app.datadoghq.com` is `us1`, `us3.datadoghq.com` is `us3`, `us5.datadoghq.com` is `us5`, `app.datadoghq.eu` is `eu1`, `ap1.datadoghq.com` is `ap1`. `--site` takes the host as it appears there, so `--site us5.datadoghq.com` works as well as `--site us5`.
+2. **Copy the API key.** Organization Settings, API Keys. Open any key and copy it. API keys cannot be scoped.
+3. **Create an application key scoped to `timeseries_query`.** An unscoped application key acts with every permission of the user or service account that owns it. `timeseries_query` is the only permission the adapter's queries need.
+   1. Organization Settings, Application Keys (or Personal Settings, Application Keys), New Key. Name it `savings-preview`. To keep the key off a person's account, create a service account with the Datadog Read Only Role first (Organization Settings, Service Accounts) and create the key on it.
+   2. Copy the key when it is shown.
+   3. Open the key, edit its scopes, and select only `timeseries_query`.
 
-- **API key:** any key of the organization (Organization Settings, API Keys). API keys cannot be scoped.
-- **Application key:** an application key acts with the permissions of the user or service account that owns it, unless it is scoped. Scope it to `timeseries_query`, the only permission the adapter's queries need:
-  1. Create a service account with the Datadog Read Only Role (Organization Settings, Service Accounts), or use your own user.
-  2. Open the account, create an application key, and under Scopes select only `timeseries_query`.
-  3. Pass the key as `DD_APP_KEY` or with `--app-key-file`.
+   The scope can also be set through the API, with the key itself, while it is still unscoped. Save both keys to files (step 4), find the key's ID on its page in Datadog, then:
+
+   ```
+   K=~/.config/savings-preview
+   printf 'DD-API-KEY: %s\nDD-APPLICATION-KEY: %s\n' "$(cat $K/dd-api-key)" "$(cat $K/dd-app-key)" |
+     curl -sS -X PATCH -H @- -H 'Content-Type: application/json' \
+       https://api.datadoghq.com/api/v2/current_user/application_keys/KEY_ID \
+       -d '{"data":{"type":"application_keys","id":"KEY_ID","attributes":{"scopes":["timeseries_query"]}}}'
+   ```
+
+   Use the API host of your site (`api.datadoghq.eu`, `api.us5.datadoghq.com`). For a key on a service account, the path is `/api/v2/service_accounts/SERVICE_ACCOUNT_ID/application_keys/KEY_ID`. Headers read from standard input stay out of the process list. Once the key is scoped, other APIs answer it with 403 Forbidden, which is expected.
+4. **Save both keys to files.** Copy each key, then on macOS:
+
+   ```
+   mkdir -p -m 700 ~/.config/savings-preview
+   pbpaste > ~/.config/savings-preview/dd-api-key && chmod 600 ~/.config/savings-preview/dd-api-key
+   # copy the application key
+   pbpaste > ~/.config/savings-preview/dd-app-key && chmod 600 ~/.config/savings-preview/dd-app-key
+   ```
+
+5. **Run the adapter.** List what it finds first, then pull:
+
+   ```
+   K=~/.config/savings-preview
+   savings-preview datadog --site us1 --api-key-file $K/dd-api-key --app-key-file $K/dd-app-key --list
+   savings-preview datadog --site us1 --api-key-file $K/dd-api-key --app-key-file $K/dd-app-key \
+     --selector kube_cluster_name:CLUSTER
+   ```
+
+   `--list` prints the metric chosen for each input and one `cluster:` line per cluster. Pass the cluster to `--selector`. The pull writes `savings-preview.otlp.json`.
+6. **Open the report.** `savings-preview run` does not read Datadog yet, so build the page and serve it next to the file:
+
+   ```
+   python3 scripts/build_report.py dist
+   cp savings-preview.otlp.json dist/
+   python3 -m http.server -d dist
+   ```
 
 Before querying, the adapter checks both keys with `GET /api/v2/validate_keys`, which needs no scope. A 401 or 403 there means a key is wrong or belongs to an organization on another site. A 403 on a query means the application key lacks `timeseries_query`.
+
+## Setup for testing without a customer organization
+
+1. **Start a trial** at datadoghq.com and pick the US1 site. The trial lasts 14 days.
+2. **Create the keys and save them to files** as in steps 2 to 4 above. The trial creates an API key at sign-up.
+3. **Install the Agent on minikube.** Save these values as `datadog-minikube.yaml`:
+
+   ```yaml
+   datadog:
+     site: datadoghq.com
+     clusterName: minikube
+     apiKeyExistingSecret: datadog-secret
+     kubeStateMetricsCore:
+       enabled: true
+     kubelet:
+       tlsVerify: false
+     logs:
+       enabled: false
+     apm:
+       portEnabled: false
+     processAgent:
+       enabled: false
+     orchestratorExplorer:
+       enabled: false
+   clusterAgent:
+     enabled: true
+   ```
+
+   `clusterName` becomes the `kube_cluster_name` tag. minikube's kubelet serves a self-signed certificate, hence `tlsVerify: false`. The API key goes in a Secret created from its file, never in the values:
+
+   ```
+   helm repo add datadog https://helm.datadoghq.com && helm repo update
+   kubectl --context minikube create namespace datadog
+   kubectl --context minikube -n datadog create secret generic datadog-secret \
+     --from-file=api-key=$HOME/.config/savings-preview/dd-api-key
+   helm --kube-context minikube install datadog-agent datadog/datadog -n datadog -f datadog-minikube.yaml
+   kubectl --context minikube -n datadog get pods
+   ```
+4. **Wait for history.** Metrics show up in `--list` a few minutes after the Agent pods are ready. Give it at least 30 minutes before a pull, and expect a warning that Datadog holds less than the days asked for.
+5. **Run the adapter** with a one-day window:
+
+   ```
+   K=~/.config/savings-preview
+   savings-preview datadog --site us1 --api-key-file $K/dd-api-key --app-key-file $K/dd-app-key \
+     --selector kube_cluster_name:minikube --days 1
+   python3 scripts/validate_contract.py savings-preview.otlp.json
+   ```
+
+## Removing the test setup
+
+```
+helm --kube-context minikube uninstall datadog-agent -n datadog
+kubectl --context minikube delete namespace datadog
+kubectl --context minikube get crd -o name | grep datadoghq.com
+```
+
+The chart installs the Datadog Operator's CRDs as part of the release, so the uninstall removes them and the last command prints nothing. Delete the `savings-preview` application key in Datadog, and the key files, when the test is over.
+
+## Troubleshooting
+
+- **`CPU usage: container.cpu.usage` instead of `kubernetes.cpu.usage.total`.** The kubelet check reports per-container CPU only when the kubelet's cAdvisor metrics carry container labels, which minikube's do not. The Agent's container check sends `container.cpu.usage` in nanocores, and the adapter uses it.
+- **Memory lower than `kubectl top` for databases.** Datadog's working set is memory use minus inactive file cache, the kubelet's usual definition. Where metrics-server reports the container's whole memory use, as on minikube, `kubectl top` is higher for containers with a large page cache, such as PostgreSQL. CPU, requests and memory of other containers agree to within the rollup.
+- **DaemonSet pods, static pods (`etcd`, `kube-apiserver`) and bare pods are missing.** Only containers of Deployments and StatefulSets are reported.
+- **Containers with zero requests.** These containers set no request. The kubelet check reports no request series for them, and the adapter writes zero while the workload has replicas.
+- **`Forbidden` from other Datadog APIs** with the scoped application key is expected. The adapter needs `timeseries_query` only.
+- **`less than the 1 day asked for`.** The Agent has been running for less than `--days`. The file covers what Datadog holds.
+- **`the organization reports N clusters`.** Pass one of the listed clusters to `--selector`.
 
 ## What it reads
 
@@ -94,6 +198,14 @@ RECORD_DATADOG=1 DD_SITE=us1 DD_API_KEY=... DD_APP_KEY=... RECORD_DATADOG_SELECT
   go test -run TestRecordDatadog ./internal/adapters/datadog
 ```
 
-This writes `testdata/live-SITE.json` with one day at 1 minute, which the replay test then runs too. The recording holds the keys of no request, but it does hold the organization's cluster, namespace, workload, container and node names and their usage, so review it before committing it.
+This writes `testdata/live-SITE.json` with one day at 1 minute ending at the current minute, which the replay test then runs too. The recording holds the keys of no request. Cluster, namespace, workload, container, node and region names are replaced with numbered ones (`cluster-1`, `namespace-3`) in the queries, filters and responses alike, so the run replays unchanged. The usage values are kept. `live-api.datadoghq.com.json` is a recording of a one-node minikube cluster with the Agent installed as above.
 
-Not yet checked against a live organization: whether the 1,500-point cap applies to this endpoint as it does to graphs, whether `times` come back in milliseconds as the API's example shows (the adapter accepts seconds or milliseconds), how series without a grouping tag are labeled (the adapter treats `N/A` as no value), whether averaging across pods interpolates gaps, the endpoint's rate limit, and how it answers a large cluster: a usage request returns two values per container and step, about 5.8 million for 2,000 containers over a day at 1 minute, and the adapter reads at most 256 MiB of a response.
+Checked against a live organization:
+
+- `times` come back in milliseconds.
+- Series without a grouping tag are grouped under the value `N/A`. The container queries exclude them with a wildcard on each grouping tag. On minikube, nodes have no `kube_region`, which comes back as `N/A` and is read as no region.
+- The endpoint's rate limit is `query_timeseries_public`, 300 requests per 10 seconds, reported in the `X-RateLimit-*` headers.
+- The Agent reports every 15 seconds. `times` list only the steps where some series has a point, so a gap in every series is a gap in `times` too.
+- Usage, requests and memory agree with `kubectl top` and the pod specs, apart from the memory definition noted under Troubleshooting.
+
+Not yet checked: whether the 1,500-point cap applies to this endpoint as it does to graphs (a check needs more than a day of history at 1 minute), whether averaging across pods interpolates gaps, and how the endpoint answers a large cluster: a usage request returns two values per container and step, about 5.8 million for 2,000 containers over a day at 1 minute, and the adapter reads at most 256 MiB of a response.
