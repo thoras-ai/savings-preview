@@ -214,7 +214,7 @@ func (c *compactor) resource(rm *resourceIn) (contract.Resource, error) {
 	for _, sp := range spans {
 		coarse, fine = max(coarse, sp.Step), min(fine, sp.Step)
 	}
-	if int64(coarse) >= c.step {
+	if int64(fine) >= c.step || int64(coarse) >= c.step && !c.onGrid(spans) {
 		res.StepSpans = spans
 		for _, name := range names {
 			c.put(&res, name, in[name])
@@ -232,6 +232,7 @@ func (c *compactor) resource(rm *resourceIn) (contract.Resource, error) {
 		return float64(res.StepSeconds)
 	}
 	peakOf := map[string]string{contract.CPUUsage: contract.CPUUsageMax, contract.MemoryWorkingSet: contract.MemoryWorkingSetMax}
+	usageOf := map[string]string{contract.CPUUsageMax: contract.CPUUsage, contract.MemoryWorkingSetMax: contract.MemoryWorkingSet}
 	// Steps where a container has usage. Only those are priced, so a level
 	// may hold across a gap the usage shares.
 	var priced map[int64]bool
@@ -245,7 +246,10 @@ func (c *compactor) resource(rm *resourceIn) (contract.Resource, error) {
 		pts := in[name]
 		switch {
 		case name == contract.CPUUsageMax || name == contract.MemoryWorkingSetMax:
-			// Folded into the peak of their usage metric.
+			// Folded into the peak of their usage metric when there is one.
+			if usage := usageOf[name]; len(in[usage]) == 0 {
+				c.put(&res, name, c.reduce(pts, stepAt, peak))
+			}
 		case peakOf[name] != "":
 			c.put(&res, name, c.reduce(pts, stepAt, mean))
 			c.put(&res, peakOf[name], c.reduce(slices.Concat(pts, in[peakOf[name]]), stepAt, peak))
@@ -275,8 +279,38 @@ func (c *compactor) resource(rm *resourceIn) (contract.Resource, error) {
 		res.SourceStepSeconds = coarse
 	}
 	res.StepSeconds = int(c.step)
-	res.StepSpans = nil
+	res.StepSpans = c.spans(spans)
 	return res, nil
+}
+
+// onGrid reports whether every span starts and ends on a compact step and
+// every span coarser than the compact step is a whole number of them, so the
+// finer spans can be compacted and the coarser ones kept.
+func (c *compactor) onGrid(spans []contract.StepSpan) bool {
+	for _, sp := range spans {
+		if c.bucket(sp.Start) != sp.Start || c.bucket(sp.End) != sp.End || int64(sp.Step) > c.step && int64(sp.Step)%c.step != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// spans gives the step spans of a compacted resource: its finer spans become
+// compact steps, and it needs none when that leaves one step.
+func (c *compactor) spans(in []contract.StepSpan) []contract.StepSpan {
+	var out []contract.StepSpan
+	for _, sp := range in {
+		sp.Step = max(sp.Step, int(c.step))
+		if n := len(out); n > 0 && out[n-1].Step == sp.Step && out[n-1].End == sp.Start {
+			out[n-1].End = sp.End
+			continue
+		}
+		out = append(out, sp)
+	}
+	if len(out) == 1 {
+		return nil
+	}
+	return out
 }
 
 func (c *compactor) put(res *contract.Resource, name string, pts []contract.Point) {

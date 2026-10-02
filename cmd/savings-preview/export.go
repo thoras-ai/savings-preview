@@ -24,9 +24,9 @@ func runExport(args []string) error {
 Writes a contract file from INPUT, which is a contract file or the readings
 directory of a poll (FILE.readings). With --compact the file has one point per
 15 minutes holding the mean and the peak of usage, and requests, limits and
-replica counts only where they change. It prices the same as the full file,
-since the target is taken from 15-minute peaks, and is small enough for the
-report page and an email. INPUT is read as a stream, so its size does not
+replica counts only where they change. The target is taken from 15-minute
+peaks, so its totals come within about 1% of the full file's, and it is small
+enough for the report page. INPUT is read as a stream, so its size does not
 matter. Without --compact, a readings directory is written at full resolution.
 
 `)
@@ -145,12 +145,17 @@ func compactReadings(dir, out string) (compact.Stats, error) {
 		}()
 		var err error
 		st, err = compact.Compact(pr, w, compact.DefaultStep)
-		// Unblocks the export if compaction stopped early.
-		pr.CloseWithError(errors.New("compaction stopped"))
-		if exportErr := <-done; exportErr != nil {
-			return exportErr
+		if err != nil {
+			// Unblocks the export, whose own error is then only a consequence.
+			pr.CloseWithError(err)
+			<-done
+			return err
 		}
-		return err
+		// The export may still be writing the end of the file.
+		if _, err := io.Copy(io.Discard, pr); err != nil {
+			return err
+		}
+		return <-done
 	})
 	return st, err
 }

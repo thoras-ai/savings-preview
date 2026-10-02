@@ -197,7 +197,7 @@ func TestWriteBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	zipPath, err := writeBundle(out, filepath.Base(compactPath), data, "<html><script></script></html>",
+	zipPath, err := writeBundle(out, data, "<html><script></script></html>",
 		summaryFile{Summary: *sum, Version: "test", FullData: full})
 	if err != nil {
 		t.Fatal(err)
@@ -215,10 +215,10 @@ func TestWriteBundle(t *testing.T) {
 		files[f.Name], _ = io.ReadAll(rc)
 		rc.Close()
 	}
-	if strings.Join(names, " ") != "savings-preview.compact.otlp.json summary.json report.html" {
+	if strings.Join(names, " ") != "savings-preview.otlp.json summary.json report.html" {
 		t.Errorf("zip holds %v", names)
 	}
-	if !bytes.Equal(files["savings-preview.compact.otlp.json"], data) {
+	if !bytes.Equal(files["savings-preview.otlp.json"], data) {
 		t.Error("zip data differs from the compact file")
 	}
 	var s map[string]any
@@ -226,10 +226,10 @@ func TestWriteBundle(t *testing.T) {
 		t.Fatal(err)
 	}
 	fd, _ := s["full_data"].(map[string]any)
-	if fd["file"] != "savings-preview.otlp.json" || fd["bytes"] != float64(5689124) || s["step_seconds"] != float64(900) || s["source_step_seconds"] != float64(300) {
+	if fd["file"] != "savings-preview.otlp.json" || fd["bytes"] != float64(5689124) || s["step_seconds"] != float64(300) || s["compact_step_seconds"] != float64(900) {
 		t.Errorf("summary %s", files["summary.json"])
 	}
-	if !strings.Contains(zr.Comment, "savings-preview.otlp.json (5.7 MB), was written next to this zip") || strings.Contains(zr.Comment, dir) {
+	if !strings.Contains(zr.Comment, "The full-resolution file, savings-preview.otlp.json (5.7 MB), is not in the zip") || strings.Contains(zr.Comment, dir) {
 		t.Errorf("comment %q", zr.Comment)
 	}
 }

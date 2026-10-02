@@ -53,19 +53,20 @@ var required = []string{cpuUse, memUse, cpuReq, memReq}
 
 // Summary is the JSON written next to the report.
 type Summary struct {
-	Cluster     string `json:"cluster"`
-	Source      string `json:"source"`
-	Tier        int    `json:"tier"`
-	StepSeconds int    `json:"step_seconds"`
-	// SourceStepSeconds is the step of the data a compact file was built
-	// from, when that is finer than StepSeconds.
-	SourceStepSeconds int       `json:"source_step_seconds,omitempty"`
-	Start             time.Time `json:"start"`
-	End               time.Time `json:"end"`
-	SpanSeconds       int64     `json:"span_seconds"`
-	Snapshot          bool      `json:"snapshot"`
-	Pricing           string    `json:"pricing"`
-	Totals            Totals    `json:"totals"`
+	Cluster string `json:"cluster"`
+	Source  string `json:"source"`
+	Tier    int    `json:"tier"`
+	// StepSeconds is the coarsest step the data was collected at. For a
+	// compact file that is its source step, and CompactStepSeconds is the
+	// step of its points.
+	StepSeconds        int       `json:"step_seconds"`
+	CompactStepSeconds int       `json:"compact_step_seconds,omitempty"`
+	Start              time.Time `json:"start"`
+	End                time.Time `json:"end"`
+	SpanSeconds        int64     `json:"span_seconds"`
+	Snapshot           bool      `json:"snapshot"`
+	Pricing            string    `json:"pricing"`
+	Totals             Totals    `json:"totals"`
 	// FidelityNotes is every thoras.fidelity_notes value in the file, sorted.
 	FidelityNotes []string `json:"fidelity_notes,omitempty"`
 }
@@ -274,7 +275,7 @@ func Analyze(doc []byte) (*Summary, error) {
 	s.Source, s.Tier, s.StepSeconds, s.SpanSeconds = strings.Join(sources, ", "), int(tier), int(step), int64(span)
 	s.Snapshot = !(step > 0) || span/step <= 1
 	if sourceStep < step {
-		s.SourceStepSeconds = int(sourceStep)
+		s.StepSeconds, s.CompactStepSeconds = int(sourceStep), int(step)
 	}
 	return s, nil
 }

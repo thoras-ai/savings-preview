@@ -252,8 +252,8 @@ func checkTotals(t *testing.T, full, small []byte, reqTol, tol float64) {
 	t.Helper()
 	gf, sf := goTotals(t, full)
 	gc, sc := goTotals(t, small)
-	if sf.Tier != sc.Tier || sc.StepSeconds != DefaultStep || sc.SourceStepSeconds != sf.StepSeconds {
-		t.Errorf("fidelity: full tier %d step %d, compact tier %d step %d from %d", sf.Tier, sf.StepSeconds, sc.Tier, sc.StepSeconds, sc.SourceStepSeconds)
+	if sf.Tier != sc.Tier || sc.CompactStepSeconds != DefaultStep || sc.StepSeconds != sf.StepSeconds {
+		t.Errorf("fidelity: full tier %d step %d, compact tier %d step %d at %d", sf.Tier, sf.StepSeconds, sc.Tier, sc.StepSeconds, sc.CompactStepSeconds)
 	}
 	for k, f := range gf {
 		d := relDiff(f, gc[k])
@@ -528,5 +528,75 @@ func TestCompactLarge(t *testing.T) {
 	// The heap includes the generator, which runs in the same process.
 	if p := peak.Load(); p > 1<<30 {
 		t.Errorf("peak heap %d bytes", p)
+	}
+}
+
+func TestCompactKeepsCoarseSpans(t *testing.T) {
+	common := contract.Common{Cluster: "c", Source: "poll", StepSeconds: 60, Tier: 3}
+	// Two hours rolled up to 1 hour, then 30 minutes of 1-minute readings.
+	var times []int64
+	times = append(times, t0, t0+3600)
+	for x := int64(t0 + 7200); x < t0+9000; x += 60 {
+		times = append(times, x)
+	}
+	at := func(v float64) []contract.Point {
+		out := make([]contract.Point, len(times))
+		for i, x := range times {
+			out[i] = contract.Point{T: x, V: v + float64(i%3)}
+		}
+		return out
+	}
+	spans := []contract.StepSpan{{Start: t0, End: t0 + 7200, Step: 3600}, {Start: t0 + 7200, End: t0 + 9000, Step: 60}}
+	res := func(sp []contract.StepSpan) contract.Resource {
+		return contract.Resource{Common: common, Namespace: "a", Kind: "deployment", Workload: "w", Container: "c", StepSpans: sp,
+			Metrics: []contract.Series{{Name: contract.CPUUsage, Points: at(1)}, {Name: contract.MemoryWorkingSet, Points: at(100)},
+				{Name: contract.CPURequest, Points: at(5)}, {Name: contract.MemoryRequest, Points: at(500)}}}
+	}
+	wl := contract.Resource{Common: common, Namespace: "a", Kind: "deployment", Workload: "w", StepSpans: spans,
+		Metrics: []contract.Series{{Name: contract.DeploymentPods, Points: at(1)}}}
+	out, st := compactBytes(t, doc(wl, res(spans)))
+	if st.Compacted != 2 || st.Unchanged != 0 {
+		t.Errorf("stats %+v", st)
+	}
+	checkValid(t, out)
+	c := load(t, out)["a/w/c"]
+	if got := c.attrs["thoras.step_spans"]; !slices.Equal(got.([]string), []string{
+		fmt.Sprintf("%d/%d/3600", t0, t0+7200), fmt.Sprintf("%d/%d/900", t0+7200, t0+9000)}) {
+		t.Errorf("spans %v", got)
+	}
+	if got := c.metrics[contract.CPUUsageMax]; len(got) != 4 || got[0].t != t0 || got[1].t != t0+3600 || got[2].t != t0+7200 || got[3].t != t0+8100 {
+		t.Errorf("points %v", got)
+	}
+	if c.attrs["thoras.step_seconds"] != int64(900) || c.attrs["thoras.source_step_seconds"] != int64(3600) {
+		t.Errorf("attributes %v", c.attrs)
+	}
+
+	// Spans off the 15-minute grid are copied as they are.
+	off := []contract.StepSpan{{Start: t0, End: t0 + 7200, Step: 3600}, {Start: t0 + 7200, End: t0 + 9000, Step: 60}}
+	shifted := res(off)
+	for i := range shifted.Metrics {
+		for j := range shifted.Metrics[i].Points {
+			shifted.Metrics[i].Points[j].T += 300
+		}
+	}
+	for i := range shifted.StepSpans {
+		shifted.StepSpans[i].Start += 300
+		shifted.StepSpans[i].End += 300
+	}
+	if _, st := compactBytes(t, doc(wl, shifted)); st.Unchanged != 1 {
+		t.Errorf("off-grid spans: %+v", st)
+	}
+}
+
+func TestCompactKeepsPeaksWithoutUsage(t *testing.T) {
+	common := contract.Common{Cluster: "c", Source: "poll", StepSeconds: 300, Tier: 3}
+	in := doc(contract.Resource{Common: common, Namespace: "a", Kind: "deployment", Workload: "w"},
+		contract.Resource{Common: common, Namespace: "a", Kind: "deployment", Workload: "w", Container: "c",
+			Missing: []string{contract.CPUUsage},
+			Metrics: []contract.Series{series(contract.CPUUsageMax, t0, 300, 1, 3, 2, 5), series(contract.MemoryWorkingSet, t0, 300, 1, 1, 1, 1),
+				series(contract.CPURequest, t0, 300, 1, 1, 1, 1), series(contract.MemoryRequest, t0, 300, 1, 1, 1, 1)}})
+	out, _ := compactBytes(t, in)
+	if got := load(t, out)["a/w/c"].metrics[contract.CPUUsageMax]; !slices.Equal(got, []pt{{t0, 3}, {t0 + 900, 5}}) {
+		t.Errorf("cpu peaks %v", got)
 	}
 }

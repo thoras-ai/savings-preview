@@ -1,6 +1,7 @@
 package savings
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -529,8 +530,8 @@ func TestParityWithModelJS(t *testing.T) {
 				got, want float64
 			}{
 				{"tier", float64(got.Tier), w.Fidelity.Tier},
-				{"step", float64(got.StepSeconds), w.Fidelity.StepSeconds},
-				{"sourceStep", float64(got.SourceStepSeconds), w.Fidelity.SourceStep},
+				{"step", float64(cmp.Or(got.CompactStepSeconds, got.StepSeconds)), w.Fidelity.StepSeconds},
+				{"sourceStep", float64(got.StepSeconds), cmp.Or(w.Fidelity.SourceStep, w.Fidelity.StepSeconds)},
 				{"span", float64(got.SpanSeconds), w.Fidelity.SpanSeconds},
 				{"end-start", got.End.Sub(got.Start).Seconds(), w.Fidelity.SpanSeconds},
 				{"spend", got.Totals.AnnualSpend, w.Totals["spend"]},

@@ -126,9 +126,16 @@ A compact file holds the same resources as a full file at a 15-minute step (900 
 - Requests, limits, replica counts and node allocatable carry their weighted mean, rounded to a whole number for integer metrics, and are held (see below) when that gives the same value at every time a reader uses them.
 - `thoras.container.oom_kills` carries the sum of the kills in the step.
 
-Steps start at the first point of the file, so data on one grid stays on one grid. A compact resource sets `thoras.step_seconds` to 900, drops `thoras.step_spans`, keeps its `thoras.fidelity_tier`, and records the coarsest step of its source data in `thoras.source_step_seconds`. The tier follows the source step: the 15-minute peaks of 1-minute data are those of the 1-minute data. `thoras.source_step_seconds` is at most the coarsest step of the points. A resource whose data is already at 900 seconds or coarser is copied as it is, without the attribute.
+Steps start at the first point of the file, so data on one grid stays on one grid. A compact resource sets `thoras.step_seconds` to 900, keeps its `thoras.fidelity_tier`, and records the coarsest step of its source data in `thoras.source_step_seconds`. The tier follows the source step: the 15-minute peaks of 1-minute data are those of the 1-minute data. `thoras.source_step_seconds` is at most the coarsest step of the points. When the source has step spans coarser than 900 seconds that start and end on the 15-minute grid, as a poll rolled up to 15 minutes or an hour does, those spans are kept and only the finer ones are compacted; `thoras.step_spans` then lists both. A resource whose data is all at 900 seconds or coarser, or whose step spans are off the grid, is copied as it is, without the attribute.
 
-Totals from a compact file match the full file closely but not always exactly. The target follows the peak over the 15 minutes before each point, which in a compact file is the point's own step. A workload's peak is that of its containers' summed usage, and a compact file can only bound it by the sum of each container's peak, which lowers the savings slightly for workloads with several containers. A replica count that changes within a step is written as its mean rounded to a whole pod. Requests and spend match exactly when replica counts are steady within each step.
+Totals from a compact file come close to the full file's but are not always equal:
+
+- The target follows the peak over the 15 minutes before each point. In a full file that window straddles two compact steps; in a compact file it is the point's own step. This moves the savings in either direction: down when a step's peak comes early, up when the step before had a higher peak.
+- A workload's peak is that of its containers' summed usage. A compact file can only bound it by the sum of each container's peak, which lowers the savings for workloads with several containers.
+- A replica count that changes within a step is written as its mean rounded to a whole pod, which moves requests and spend in either direction.
+- The first and last steps count as whole steps even when the data covers part of them, which matters only for runs of a few hours or less.
+
+Requests and spend match exactly when replica counts are steady within each step. On the test data, savings from the compact file were 0.03% below the full file for single-container workloads with steady replicas, and 0.9% below for two-container workloads whose replica counts change every minute.
 
 ### Held metrics
 
@@ -138,7 +145,7 @@ A reader averaging a held series over time weights each point by the time until 
 
 ### Readers before 1.3.0
 
-A compact file is structurally valid for an earlier reader, to which only the new attributes are unknown. Such a reader sees held series as points far apart, treats the time between them as gaps, and prices only the steps where a level changes, so it misprices the file. The validator before 1.3.0 also rejects the fidelity tier of a compact resource built from data finer than 300 seconds, since it judges the tier on the 900-second points. Readers must handle `thoras.held_metrics` and `thoras.source_step_seconds` to read compact files. The report page handles both from 1.3.0. Full files written by 1.3.0 adapters use neither attribute and read as before.
+Release v0.1.0 of savings-preview, its report page, its `report.html` and its validator are such readers. A compact file is structurally valid for an earlier reader, to which only the new attributes are unknown. Such a reader sees held series as points far apart, treats the time between them as gaps, and prices only the steps where a level changes, so it misprices the file. The validator before 1.3.0 also rejects the fidelity tier of a compact resource built from data finer than 300 seconds, since it judges the tier on the 900-second points. Readers must handle `thoras.held_metrics` and `thoras.source_step_seconds` to read compact files. The report page handles both from 1.3.0. Full files written by 1.3.0 adapters use neither attribute and read as before.
 
 ## Missing data
 

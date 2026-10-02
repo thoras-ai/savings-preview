@@ -62,9 +62,11 @@ func runFlags(args []string) (*runOptions, error) {
 
 Reads usage history from a Prometheus-compatible store in the cluster, or polls
 metrics-server when there is none, writes the contract file, checks it, and
-opens the report on a local address. A zip with the file, a summary and a
-self-contained copy of the report is written next to the contract file.
-Everything is read-only; nothing is uploaded.
+opens the report on a local address. It also writes a compact copy of the
+file at 15-minute steps, which the report reads. A zip with the compact copy,
+a summary and a self-contained copy of the report is written next to the
+contract file; the full file stays on disk. Everything is read-only; nothing
+is uploaded.
 
 `)
 		fs.PrintDefaults()
@@ -129,8 +131,8 @@ func runRun(args []string) error {
 		return err
 	}
 
-	// The report and the zip use a 15-minute copy that prices the same; the
-	// full file can be too large for a browser or an email.
+	// The report and the zip use a 15-minute copy, since the full file can
+	// be too large for a browser or an email.
 	compactPath := compactName(o.out)
 	start := time.Now()
 	st, err := compactFile(o.out, compactPath)
@@ -162,7 +164,7 @@ func runRun(args []string) error {
 	if err != nil {
 		return err
 	}
-	zipPath, err := writeBundle(o.out, filepath.Base(compactPath), data, page, summaryFile{Summary: *sum, Version: versionString(),
+	zipPath, err := writeBundle(o.out, data, page, summaryFile{Summary: *sum, Version: versionString(),
 		Generated: time.Now().UTC().Truncate(time.Second), FullData: full})
 	if err != nil {
 		return fmt.Errorf("write zip: %w", err)
@@ -170,7 +172,7 @@ func runRun(args []string) error {
 	fmt.Fprintf(os.Stderr, "\n%s: %s a year in requests, %s a year in savings (%d of %d workloads counted, tier %d, %s)\n",
 		sum.Cluster, money(sum.Totals.AnnualSpend), money(sum.Totals.AnnualSavings), sum.Totals.Counted, sum.Totals.Workloads,
 		sum.Tier, spanText(time.Duration(sum.SpanSeconds)*time.Second))
-	fmt.Fprintf(os.Stderr, "wrote %s with %s, a summary and a copy of the report that opens without this tool\n", zipPath, filepath.Base(compactPath))
+	fmt.Fprintf(os.Stderr, "wrote %s with the compact file as %s, a summary and a copy of the report that opens without this tool\n", zipPath, report.DataName)
 	fmt.Fprintf(os.Stderr, "the full-resolution file stays at %s (%s); it is not in the zip\n", o.out, megabytes(full.Bytes))
 
 	// The first Ctrl-C may have ended polling; a fresh one stops the server.
@@ -423,9 +425,10 @@ func fullDataOf(path string) (*fullData, error) {
 	return &fullData{File: filepath.Base(path), Bytes: fi.Size()}, nil
 }
 
-// writeBundle writes the zip next to out with the compact contract file as
-// name, the summary and a copy of the report that carries the data.
-func writeBundle(out, name string, data []byte, page string, sum summaryFile) (string, error) {
+// writeBundle writes the zip next to out with the compact contract file, the
+// summary and a copy of the report that carries the data. The contract file
+// keeps the name it had when the zip held the full file.
+func writeBundle(out string, data []byte, page string, sum summaryFile) (string, error) {
 	inline, err := report.Inline(page, data)
 	if err != nil {
 		return "", err
@@ -437,11 +440,12 @@ func writeBundle(out, name string, data []byte, page string, sum summaryFile) (s
 	path := zipName(out)
 	comment := ""
 	if sum.FullData != nil {
-		comment = fmt.Sprintf("%s holds 15-minute peaks and means. The full-resolution file, %s (%s), was written next to this zip and is not in it.",
-			name, sum.FullData.File, megabytes(sum.FullData.Bytes))
+		comment = fmt.Sprintf("%s in this zip is a compact copy at 15-minute steps that keeps the peaks and means of usage. "+
+			"The full-resolution file, %s (%s), is not in the zip; it stays next to the zip on the machine that wrote it.",
+			report.DataName, sum.FullData.File, megabytes(sum.FullData.Bytes))
 	}
 	return path, report.WriteZip(path, comment, []report.Entry{
-		{Name: name, Data: data},
+		{Name: report.DataName, Data: data},
 		{Name: "summary.json", Data: append(js, '\n')},
 		{Name: "report.html", Data: []byte(inline)},
 	})
