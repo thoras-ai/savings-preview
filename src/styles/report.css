@@ -344,6 +344,11 @@ tr.excluded .wl-link { color: var(--text-light); }
 [data-theme="dark"] .chart-detail .line-a, [data-theme="dark"] .wl-detail .swatch-a { stroke: var(--primitive-azure-400); border-color: var(--primitive-azure-400); }
 [data-theme="dark"] .chart-detail .line-b, [data-theme="dark"] .wl-detail .swatch-b { stroke: var(--primitive-iris-400); border-color: var(--primitive-iris-400); }
 [data-theme="dark"] .chart-detail .line-u, [data-theme="dark"] .chart-detail .line-p, [data-theme="dark"] .wl-detail .swatch-u, [data-theme="dark"] .wl-detail .swatch-p { stroke: var(--primitive-brand-400); border-color: var(--primitive-brand-400); }
+[data-theme="dark"] .chart-detail .marker line, [data-theme="dark"] .swatch-oom { stroke: var(--primitive-ruby-400); border-color: var(--primitive-ruby-400); }
+[data-theme="dark"] .chart-detail .marker circle { fill: var(--primitive-ruby-400); }
+[data-theme="dark"] .chart-detail .dot-a { fill: var(--primitive-azure-400); }
+[data-theme="dark"] .chart-detail .dot-b { fill: var(--primitive-iris-400); }
+[data-theme="dark"] .chart-detail .dot-u, [data-theme="dark"] .chart-detail .dot-p { fill: var(--primitive-brand-400); }
 .tip-marker { color: var(--text-danger); }
 
 /* Placeholders for sections 5 and 6. */

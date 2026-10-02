@@ -43,12 +43,13 @@
     return range ? [model.lowerBound(t, range[0]), model.upperBound(t, range[1])] : [0, t.length];
   }
 
-  // OOM kills inside the time range. A kill is counted at the end of its step,
-  // so the step that ends just after the range still belongs to it.
+  // OOM kills inside the time range. A kill is stamped at the end of its step,
+  // so one stamped at the range start belongs to the step before it, and the
+  // step that ends just after the range still belongs to it.
   function oomIn(p, range, step) {
     var out = { count: 0, marks: [] }, o = p.oom;
     for (var i = 0; i < o.t.length; i++) {
-      if (range && (o.t[i] < range[0] || o.t[i] > range[1] + (step || 0))) continue;
+      if (range && (o.t[i] <= range[0] || o.t[i] > range[1] + (step || 0))) continue;
       out.count += o.n[i];
       out.marks.push({ t: o.t[i], label: (o.n[i] === 1 ? 'OOM kill' : o.n[i] + ' OOM kills') + ', ' + when(o.t[i]) });
     }
@@ -120,7 +121,7 @@
     var d = { w: w, p: p, containers: p.containers, oom: oomIn(p, lv.range, p.s ? p.s.step : 0), counted: !!w.series };
     if (!d.counted) return d;
     var s = p.s, lohi = bounds(p, lv.range), lo = lohi[0], hi = lohi[1];
-    var sw = 0, use = [0, 0], now = [0, 0], tgt = [0, 0], lim = [0, 0], peak = [0, 0], safe = [0, 0], limW = [0, 0];
+    var sw = 0, swPod = 0, use = [0, 0], now = [0, 0], tgt = [0, 0], lim = [0, 0], peak = [0, 0], safe = [0, 0], limW = [0, 0];
     for (var k = lo; k < hi; k++) {
       if (!isFinite(s.reqCpu[k])) continue;
       var wt = p.weight[k], rep = p.replicas[k];
@@ -128,6 +129,7 @@
       use[0] += s.useCpu[k] * wt; use[1] += s.useMem[k] * wt;
       peak[0] = Math.max(peak[0], s.peakCpu[k]); peak[1] = Math.max(peak[1], s.peakMem[k]);
       if (rep > 0) {
+        swPod += wt;
         now[0] += s.reqCpu[k] / rep * wt; now[1] += s.reqMem[k] / rep * wt;
         tgt[0] += s.tgtCpu[k] / rep * wt; tgt[1] += s.tgtMem[k] / rep * wt;
         safe[0] = Math.max(safe[0], s.peakCpu[k] / rep); safe[1] = Math.max(safe[1], s.peakMem[k] / rep);
@@ -136,14 +138,16 @@
       if (p.limMem && isFinite(p.limMem[k])) { lim[1] += p.limMem[k] * wt; limW[1] += wt; }
     }
     var per = function (v) { return sw ? v / sw : NaN; };
+    // Time scaled to zero has no pods, so it does not count toward per-pod values.
+    var perPod = function (v) { return swPod ? v / swPod : NaN; };
     d.replicas = meanReplicas(p, lo, hi);
     d.cpu = {
       requested: w.reqCores, mean: per(use[0]), peak: peak[0],
-      now: per(now[0]), target: per(tgt[0]), peakSafe: safe[0] * lv.headroom, limit: limW[0] ? lim[0] / limW[0] : null
+      now: perPod(now[0]), target: perPod(tgt[0]), peakSafe: safe[0] * lv.headroom, limit: limW[0] ? lim[0] / limW[0] : null
     };
     d.mem = {
       requested: w.reqGiB, mean: per(use[1]), peak: peak[1],
-      now: per(now[1]), target: per(tgt[1]), peakSafe: safe[1] * lv.headroom, limit: limW[1] ? lim[1] / limW[1] : null
+      now: perPod(now[1]), target: perPod(tgt[1]), peakSafe: safe[1] * lv.headroom, limit: limW[1] ? lim[1] / limW[1] : null
     };
     return d;
   }
@@ -202,9 +206,9 @@
     return 'Sorted by ' + col.label.toLowerCase() + '. Select a workload to see its history.';
   }
 
-  function tableHtml(page, view, ctx) {
+  // maxPct scales the waste bars, so a share draws the same length on every page.
+  function tableHtml(page, view, ctx, maxPct) {
     var s = view.sort, approx = ctx.approx, st = ctx.state, last = view.last;
-    var maxPct = Math.max.apply(null, [0.0001].concat(page.map(function (r) { return r.status !== 'excluded' ? r.savingsPct : 0; })));
     var head = COLUMNS.map(function (c) {
       var active = s.key === c.key;
       return '<th scope="col"' + (c.num ? ' class="num"' : '') + ' aria-sort="' + (active ? (s.dir < 0 ? 'descending' : 'ascending') : 'none') + '">' +
@@ -242,7 +246,7 @@
     return {
       title: listHead(all, all.length),
       sub: sortNote(view),
-      table: tableHtml(page, view, ctx),
+      table: tableHtml(page, view, ctx, list.reduce(function (m, r) { return r.status !== 'excluded' ? Math.max(m, r.savingsPct) : m; }, 0.0001)),
       range: range,
       prev: view.page > 0,
       next: view.page < pages - 1

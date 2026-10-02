@@ -24,7 +24,8 @@ function series(name, values, step, opts = {}) {
 }
 
 // One deployment with one container. cpu and mem are per-pod usage in cores
-// and GiB; limits are per pod; oom maps a step index to kills in that step.
+// and GiB; limits are per pod; replicas is a count or one per step; oom maps a
+// step index to kills in that step.
 function doc({ cpu, mem, cpuReq = 1, memReq = 4, replicas = 2, step = 300, tier = 1, cpuLim, memLim, oom = {}, name = 'api', ns = 'ns' }) {
   const base = [S('k8s.cluster.name', 'c'), S('thoras.source', 'test'), I('thoras.step_seconds', step), I('thoras.fidelity_tier', tier)];
   const id = [S('k8s.namespace.name', ns), S('k8s.deployment.name', name)];
@@ -39,7 +40,7 @@ function doc({ cpu, mem, cpuReq = 1, memReq = 4, replicas = 2, step = 300, tier 
   if (Object.keys(oom).length) metrics.push(series('thoras.container.oom_kills', cpu.map((_, i) => oom[i] || null), step, { int: true }));
   return {
     resourceMetrics: [
-      { resource: { attributes: base.concat(id) }, scopeMetrics: [{ metrics: [series('k8s.deployment.pod.desired', cpu.map(() => replicas), step, { int: true })] }] },
+      { resource: { attributes: base.concat(id) }, scopeMetrics: [{ metrics: [series('k8s.deployment.pod.desired', cpu.map((_, i) => (Array.isArray(replicas) ? replicas[i] : replicas)), step, { int: true })] }] },
       { resource: { attributes: base.concat(id, [S('k8s.container.name', 'app')]) }, scopeMetrics: [{ metrics }] }
     ]
   };
@@ -251,4 +252,33 @@ test('the spend view leaves OOM kills out of its legend, and tiny usage is not s
   assert.match(wl.detailHtml(d, { mode: 'cpu' }, ctxFor(r)), /OOM kill<\/span>/);
   assert.doesNotMatch(wl.detailHtml(d, { mode: 'spend' }, ctxFor(r)), /OOM kill<\/span>/);
   assert.match(wl.detailHtml(d, { mode: 'cpu' }, ctxFor(r)), /0\.0042 \/ 0\.0042 cores/);
+});
+
+test('time scaled to zero does not lower the per-pod request or target', () => {
+  const cpu = Array.from({ length: 48 }, () => 0.5);
+  const replicas = cpu.map((_, i) => (i < 24 ? 2 : 0));
+  const data = model.prepare(doc({ cpu, mem: cpu.map(() => 1), step: 60, replicas }));
+  const d = wl.detail(data, model.compute(data), 'ns/deployment/api');
+  close(d.cpu.now, 1, 'cpu now');
+  close(d.mem.now, 4, 'mem now');
+  close(d.cpu.target, 0.55, 'cpu target');
+  close(d.cpu.peakSafe, 0.55, 'cpu peak-safe');
+});
+
+test('a kill stamped at the start of a range belongs to the range before it', () => {
+  const cpu = Array.from({ length: 30 }, () => 0.5);
+  const data = model.prepare(doc({ cpu, mem: cpu.map(() => 1), step: 60, oom: { 10: 1 } }));
+  const id = 'ns/deployment/api', at = T0 + 600;
+  assert.strictEqual(wl.detail(data, model.compute(data, { range: [T0, at - 60] }), id).oom.count, 1);
+  assert.strictEqual(wl.detail(data, model.compute(data, { range: [at, T0 + 1200] }), id).oom.count, 0);
+});
+
+test('waste bars are scaled to the whole list, not the page', () => {
+  const rows = Array.from({ length: 60 }, (_, i) => ({
+    id: 'ns/deployment/w' + i, name: 'w' + String(i).padStart(2, '0'), ns: 'ns', kind: 'deployment', status: 'ok', reason: '', notes: [],
+    annualSpend: 100, annualSavings: 100 - i, savingsPct: (100 - i) / 100, wasteCores: 0, wasteGiB: 0, replicas: 1, oomKills: 0
+  }));
+  const ctx = ctxFor({ levers: model.defaultLevers });
+  const second = wl.listParts(rows, { sort: { key: 'annualSavings', dir: -1 }, filter: '', page: 1 }, ctx);
+  assert.match(second.table, /width:50%"><\/i><\/span>50%/);
 });
