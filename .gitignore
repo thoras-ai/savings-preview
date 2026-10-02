@@ -3,3 +3,4 @@ __pycache__/
 /bin/
 dist/
 _site/
+/fixtures/demo-cluster.compact.otlp.json
