@@ -22,6 +22,7 @@
   var SECTIONS = ['summary', 'money', 'workloads', 'cluster', 'assumptions', 'method'];
 
   var DEFAULTS = {
+    sample: null,
     section: 'summary',
     rates: null,
     node: null,
@@ -46,6 +47,7 @@
   function parse(hash) {
     var q = new URLSearchParams(String(hash || '').replace(/^#/, ''));
     var st = Object.assign({}, DEFAULTS);
+    if (/^[a-z0-9-]{1,40}$/.test(q.get('sample') || '')) st.sample = q.get('sample');
     if (SECTIONS.indexOf(q.get('section')) >= 0) st.section = q.get('section');
     var cpu = positive(q.get('cpu')), gib = positive(q.get('gib'));
     if (cpu && gib) st.rates = { perCore: cpu, perGiB: gib };
@@ -73,6 +75,7 @@
 
   function serialize(st) {
     var q = new URLSearchParams();
+    if (st.sample) q.set('sample', st.sample);
     if (st.section && st.section !== DEFAULTS.section) q.set('section', st.section);
     if (st.rates) { q.set('cpu', round(st.rates.perCore)); q.set('gib', round(st.rates.perGiB)); }
     if (st.rates && st.node) q.set('node', st.node);
@@ -113,7 +116,7 @@
   }
 
   // Keys that change the figures, as opposed to what the page shows.
-  var VIEW_KEYS = ['section', 'engineerCost', 'bill', 'clusters', 'node', 'workload'];
+  var VIEW_KEYS = ['sample', 'section', 'engineerCost', 'bill', 'clusters', 'node', 'workload'];
   function affectsFigures(changed) {
     return changed.some(function (k) { return VIEW_KEYS.indexOf(k) < 0; });
   }

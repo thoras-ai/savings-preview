@@ -77,3 +77,11 @@ test('components escape their text and carry their variant', () => {
   assert.match(b, /<em>x<\/em>/);
   assert.match(ui.banner({ tone: 'info', body: '' }), /role="status"/);
 });
+
+test('a sample id round-trips and leads the link', () => {
+  const st = Object.assign({}, state.DEFAULTS, { sample: 'demo', section: 'workloads' });
+  assert.strictEqual(state.serialize(st), 'sample=demo&section=workloads');
+  assert.deepStrictEqual(state.parse('#sample=demo&section=workloads'), st);
+  assert.strictEqual(state.parse('#sample=../x').sample, null);
+  assert.strictEqual(state.affectsFigures(['sample']), false);
+});
