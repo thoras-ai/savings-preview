@@ -2,11 +2,11 @@
 
 Estimates for building one adapter per data source, each emitting the file described in `contract.md`. Every estimate assumes the Prometheus core and the kubectl snapshot already exist, so a PromQL-compatible source costs only its auth, chunking and name handling.
 
-Facts were checked against vendor documentation in October 2026. Where a figure comes from a search snippet or a secondary source rather than a page that was read, the table says so. Section "Not verified" lists what could not be confirmed. Vendor docs for these products change often, so re-check any limit before relying on it in code.
+Facts were checked against vendor documentation in October 2026. Where a figure rests on a secondary source and is not confirmed in the official documentation, the text says so. Section "Not verified" lists what could not be confirmed. Vendor docs for these products change often, so re-check any limit before relying on it in code.
 
 ## Reading the table
 
-- **Size:** S is up to 4 engineer-days, M is 5 to 9, L is 10 or more.
+- **Size:** S is up to 5 engineer-days, M is 6 to 10, L is more than 10. A range that straddles a band is labeled with both, for example S to M.
 - **Days:** one engineer, including tests against recorded responses and a live smoke test, excluding a design review and the shared report work.
 - **Inputs:** U is CPU and memory usage, R is CPU and memory requests, N is replica count, I is node inventory (instance type, region, spot, allocatable). A letter in parentheses means the source has it only under conditions given in the notes.
 - **Confidence** is about the estimate, not the product: high means the API and metric names were read in docs and match a client we already have; low means a key limit or field is undocumented.
@@ -20,16 +20,16 @@ Ranked by value for the effort: how likely a prospect uses the source, how few d
 | 1 | Self-hosted Mimir | U R N I as shipped | Customer's retention | Tenant header, plus whatever gateway auth the operator uses | S | 1 | High |
 | 2 | Grafana Cloud | U R N I as shipped | 13 months on paid plans | Instance ID and a `metrics:read` token | S | 1.5 to 2 | High |
 | 3 | Amazon Managed Prometheus | U R N I as shipped (N and R need kube-state-metrics) | As ingested, up to 1095 days retention | IAM role with query access, SigV4 | S | 2 to 3 | High |
-| 4 | Azure Monitor managed Prometheus | U R N I, all on by default | 18 months, raw | Entra app registration, Monitoring Data Reader | S | 3 to 4 | Medium to high |
-| 5 | Google Managed Prometheus | U N (R missing from the default package) | 1-minute for about 6 weeks, then 10-minute | Service account with `roles/monitoring.viewer` | M | 4 to 6 | Medium |
+| 4 | Azure Monitor managed Prometheus | U R N (I), usage, requests, replicas and allocatable on by default | 18 months, raw | Entra app registration, Monitoring Data Reader | S | 3 to 4 | Medium to high |
+| 5 | Google Managed Prometheus | U N (R missing from the default package) | 1-minute for about 6 weeks, then 10-minute | Service account with `roles/monitoring.viewer` | S to M | 4 to 6 | Medium |
 | 6 | GKE system metrics through the PromQL endpoint | U R (N, I partial) | 60-second samples for 6 weeks, then 10-minute | Same as row 5 | M | 4 to 6, plus 2 for node inventory | Medium |
 | 7 | Chronosphere | As shipped | Often 5-minute after the first period | Long-lived read-only service account token | S | 2 to 3 | Low |
 | 8 | AWS CloudWatch PromQL (OTel Container Insights) | U R N I | 15 months stored | IAM read, SigV4 | S | 3 to 5 | Medium |
 | 9 | Datadog | U R N I | 15 months, rollup by range | API key and application key | M to L | 8 to 12 | Medium to low |
-| 10 | EC2 CPU, AKS platform metrics (node fallbacks) | I and node-level U only | 15 days at 1-minute (EC2), 93 days (AKS) | IAM read, Azure Reader | S | 1 to 2 each | Medium |
+| 10 | EC2 CPU, AKS platform metrics (node fallbacks) | I and node-level U only | 5-minute, or 1-minute with detailed monitoring (EC2); 93 days at 1-minute (AKS) | IAM read, Azure Reader | S | 1 to 2 each | Medium |
 | 11 | Azure Container Insights (Log Analytics) | U, I, observed replicas, no requests found | 30 days default | Log Analytics Reader | M to L | 8 to 12 | Low |
-| 12 | AWS Container Insights, classic and enhanced (GetMetricData) | U R N I, per pod | 15 days at 1-minute, then 5-minute | IAM read | L | 10 to 15, plus 3 to 5 for per-container requests | Medium |
-| 13 | CloudTrail node reconstruction | Node churn only | 90 days | IAM read | M | 4 to 6 | Medium |
+| 12 | AWS Container Insights, enhanced observability (GetMetricData) | U R N I, per pod | 15 days at 1-minute, then 5-minute | IAM read | L | 10 to 15, plus 3 to 5 for per-container requests | Medium |
+| 13 | CloudTrail node reconstruction | Node churn only | 90 days | IAM read | S to M | 4 to 6 | Medium |
 | 14 | Elastic | U R N I | Customer's lifecycle policy | API key with index read | S (PromQL) or M (ES\|QL) | 3 to 4, or 8 to 10 | Medium |
 | 15 | New Relic | U R N (I unclear) | Not documented for the Kubernetes events | User API key | M | 7 to 10 | Medium |
 | 16 | Dynatrace | U R N I | 15 months at 1-minute on the current store | API or platform token | M to L | 8 to 12 | Low to medium |
@@ -41,11 +41,11 @@ Rows 1 to 7 are one family: the PromQL client with a different auth step. Rows 1
 
 1. **Auth abstraction on the PromQL client, then Mimir and Grafana Cloud.** Header, basic and bearer auth are about a day of shared work and cover rows 1, 2 and 7 with almost nothing extra. Any Prometheus-compatible store behind a plain endpoint comes free.
 2. **Amazon Managed Prometheus.** SigV4 signing around the same client. Most AWS shops that run Prometheus use it.
-3. **Azure managed Prometheus.** The only managed service where all four metric families are collected by default, so it is the cheapest to get a complete file from.
+3. **Azure managed Prometheus.** The only managed service where usage, requests, replicas and allocatable are all collected by default, so it is the cheapest to get a complete file from. Instance type, region and spot still need node labels or the compute API.
 4. **Google Managed Prometheus together with GKE system metrics.** Build them as one piece of work. The managed kube-state-metrics package on GKE does not include requests, so a GKE customer's requests usually have to come from the system metrics. The two share auth and name mapping.
 5. **AWS CloudWatch PromQL.** Cheap once SigV4 exists, but it covers only customers that enabled the newer OTel Container Insights add-on. Ask the first prospects which Container Insights they run before building the classic path.
 6. **Datadog.** A new client with its own chunking and rate limiting, so it is the first adapter that needs its own design.
-7. **Node fallbacks (EC2, AKS platform metrics)** can be built in an afternoon each when a deal has only node metrics and the report is better with some data than none.
+7. **Node fallbacks (EC2, AKS platform metrics)** take 1 to 2 days each when a deal has only node metrics and the report is better with some data than none.
 8. **Everything else, on demand:** Azure Log Analytics, classic Container Insights, New Relic, Dynatrace, Elastic, Splunk, CloudTrail reconstruction. Build one only for a deal that needs it. Elastic is the exception: if the prospect is on a version with the PromQL endpoint, it is a few days.
 
 ## Cross-cutting findings
@@ -72,15 +72,15 @@ All of these use the standard `/api/v1/query_range` and differ in auth, limits a
 | [Google Managed Prometheus](https://docs.cloud.google.com/stackdriver/docs/managed-prometheus/query) | OAuth2 access token, `roles/monitoring.viewer` | 24 months; 1-minute then 10-minute after about 6 weeks ([quotas](https://docs.cloud.google.com/monitoring/quotas)) | 200 MB per response; range and point caps not documented | cAdvisor/kubelet and kube-state-metrics packages are on by default on current GKE ([cAdvisor](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/cadvisor-kubelet-metrics), [kube-state-metrics](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/kube-state-metrics)) |
 | [Grafana Cloud](https://grafana.com/docs/grafana-cloud/send-data/metrics/metrics-prometheus/query-http-api/) | Basic auth, instance ID and a token with `metrics:read` | 13 months on paid plans, 14 days on free (pricing pages, not read in full) | 32 days per query ([usage limits](https://grafana.com/docs/grafana-cloud/cost-management-and-billing/manage-invoices/understand-your-invoice/usage-limits/)) | Depends on the Kubernetes monitoring allow-list. Adaptive Metrics can drop pod and container labels, so check that the labels exist |
 | [Mimir](https://grafana.com/docs/mimir/latest/references/http-api/) | `X-Scope-OrgID` header, not needed with a single tenant | Operator's choice | No default range cap; operators often set one | Whatever was shipped |
-| [Chronosphere](https://docs-xcor.paloaltonetworks.com/tooling/prometheus-api) | Bearer token from a read-only service account | Set per customer; long-term data is downsampled to 5-minute by default (snippet) | Not found | Depends on collector settings; cAdvisor and kubelet scraping are off unless enabled |
+| [Chronosphere](https://docs-xcor.paloaltonetworks.com/tooling/prometheus-api) | Bearer token from a read-only service account | Set per customer; long-term data is downsampled to 5-minute by default (secondary source, unconfirmed) | Not found | Depends on collector settings; cAdvisor and kubelet scraping are off unless enabled |
 
 Notes that drive the estimates:
 
-- **AMP:** the signer from the AWS SDK does most of the work. The credential chain (SSO, assumed roles) is the unglamorous part. The 95-day range cap is not a problem for 14 days; chunk by day for the per-slice budgets.
+- **AMP:** the signer from the AWS SDK does most of the work. The credential chain (SSO, assumed roles) takes most of the time. The 95-day range cap is not a problem for 14 days; chunk by day for the per-slice budgets.
 - **Azure:** every fetching query must carry a `__name__` matcher, and names and labels are case-insensitive, so two series that differ only by case can collapse. The docs' own join example uses two metric names, so test what "one `__name__` matcher" allows before writing joins in PromQL. If joins are rejected, do the joins client-side.
 - **Google:** the 24-month retention applies to Prometheus data as well as system metrics, but resolution degrades earlier than for Azure. The docs do not state a points or range cap for the PromQL endpoint, so find it by testing and chunk by day to stay far from it.
 - **Grafana Cloud:** cheapest of the group. The label-presence check for Adaptive Metrics belongs in the shared probe, not here.
-- **Chronosphere:** the product is documented under Palo Alto Networks as Cortex XCOR. Limits could not be read, and there is no free tier, so the estimate has the lowest confidence in the group. The token is long-lived and shown once, which some security teams will resist.
+- **Chronosphere:** the product is documented under Palo Alto Networks as Cortex XCOR. Limits are not documented on a page available in October 2026, and no free tier was found, so the estimate has the lowest confidence in the group. The token is long-lived and shown once, which some security teams will resist.
 
 ## GKE system metrics through the PromQL endpoint
 
@@ -133,7 +133,7 @@ There are three surfaces, and a customer may have any of them or none. All are o
 - **Workload mapping:** the metrics carry pod and `Service` dimensions but no deployment or owner dimension. The adapter has to map pods to workloads, for example by stripping the ReplicaSet hash. The OTel route avoids this because kube-state-metrics labels are present.
 - **Replicas:** `replicas_desired` is documented as a workload-level count, but what its `PodName` dimension holds is not documented. Check on a live cluster.
 - **Resolution:** classic CloudWatch metrics keep 1-minute data for 15 days, 5-minute data until day 63, then 1-hour until 455 days. A 14-day pull is inside the 1-minute window with little margin. For the OTel metrics the documentation states 15 months of storage and says nothing about rollups.
-- **`GetMetricData` limits:** 500 queries and 100,800 data points per call, so at most 5 series at 20,160 points per page, and a large cluster needs many paginated calls. The documented default service quota is 500 requests per second. The cost is $0.01 per 1,000 metrics requested ([pricing](https://aws.amazon.com/cloudwatch/pricing/), read through a summarizer, so confirm the figure before quoting it).
+- **`GetMetricData` limits:** 500 queries and 100,800 data points per call, so at most 5 series at 20,160 points per page, and a large cluster needs many paginated calls. The documented default service quota is 500 requests per second. The cost is $0.01 per 1,000 metrics requested ([pricing](https://aws.amazon.com/cloudwatch/pricing/), not confirmed against the official price list, so confirm the figure before quoting it).
 - **CloudWatch PromQL limits:** 7 days per request, so 14 days is at least 2 requests; 500 series per query with a `warnings` field and no error when truncated; 20 second timeout; 300 queries per second and 30 concurrent. Metric and label names use a `@resource.` and `@datapoint.` scheme, so it is not plain PromQL. The product was announced as generally available in June 2026, and it was not verified that the add-on exports the kube-state-metrics deployment and statefulset metrics, so test it before committing to the estimate.
 - **Units:** `pod_cpu_usage_total` is in millicores according to the performance log reference, but the metrics page says only "CPU units". Check the unit on a live cluster.
 - **Customer access:** `cloudwatch:GetMetricData` and `cloudwatch:ListMetrics`, plus `logs:StartQuery`, `logs:GetQueryResults` and `logs:DescribeLogGroups` for container requests. Low approval difficulty. The metrics may live in a different account from the cluster.
@@ -166,7 +166,7 @@ None of these provides requests or per-workload data, so a file built only from 
 
 | Source | How to query | Inputs and names | Limits that force chunking | Customer must provide |
 | --- | --- | --- | --- | --- |
-| [New Relic](https://docs.newrelic.com/docs/kubernetes-pixie/kubernetes-integration/installation/k8s-otel-metrics/) | NRQL through NerdGraph | `K8sContainerSample`: `cpuUsedCores`, `memoryWorkingSetBytes`, `cpuRequestedCores`, `memoryRequestedBytes`. `K8sDeploymentSample`: `podsDesired` | `TIMESERIES` is capped at 366 buckets ([syntax](https://docs.newrelic.com/docs/query-your-data/nrql-new-relic-query-language/get-started/nrql-syntax-clauses-functions/)), so 1-minute needs about 55 six-hour requests per series. `LIMIT` is capped at 5,000. 3,000 queries per account per minute ([NRQL limits](https://docs.newrelic.com/docs/nrql/using-nrql/rate-limits-nrql-queries/)). 25 concurrent NerdGraph requests per user | A user API key, which inherits the user's access. No read-only key type, so ask for a dedicated service user |
+| [New Relic](https://docs.newrelic.com/docs/kubernetes-pixie/kubernetes-integration/installation/k8s-otel-metrics/) | NRQL through NerdGraph | `K8sContainerSample`: `cpuUsedCores`, `memoryWorkingSetBytes`, `cpuRequestedCores`, `memoryRequestedBytes`. `K8sDeploymentSample`: `podsDesired` | `TIMESERIES` is capped at 366 buckets ([syntax](https://docs.newrelic.com/docs/query-your-data/nrql-new-relic-query-language/get-started/nrql-syntax-clauses-functions/)), so 1-minute needs about 56 six-hour requests per series. `LIMIT` is capped at 5,000. 3,000 queries per account per minute ([NRQL limits](https://docs.newrelic.com/docs/nrql/using-nrql/rate-limits-nrql-queries/)). 25 concurrent NerdGraph requests per user | A user API key, which inherits the user's access. No read-only key type, so ask for a dedicated service user |
 | [Dynatrace](https://docs.dynatrace.com/docs/analyze-explore-automate/metrics/built-in-metrics-on-grail) | Metrics API v2 or Grail DQL | `dt.kubernetes.container.cpu_usage`, `memory_working_set`, `requests_cpu`, `requests_memory`, `dt.kubernetes.workload.pods_desired`, node allocatable. The classic `builtin:kubernetes.workload.*` keys are a second set | Metrics API v2: 10,080 points per tuple, so 14 days at 1 minute needs two or more windows ([API](https://docs.dynatrace.com/docs/discover-dynatrace/references/dynatrace-api/environment-api/metric-v2/get-data-points)). DQL limits not verified | `metrics.read` for v2. Grail scope names not verified |
 | [Elastic](https://www.elastic.co/docs/reference/query-languages/promql/promql-http-api) | PromQL endpoint on Serverless and GA in stack 9.5 (preview in 9.4); otherwise ES\|QL `TS` (GA in 9.4) | Kubernetes integration fields such as `kubernetes.container.cpu.usage.nanocores`, `kubernetes.container.memory.workingset.bytes`; kube-state-metrics fields for requests and replicas | PromQL: time series data streams only, no numeric point cap documented, some join operators unsupported ([limitations](https://www.elastic.co/docs/reference/query-languages/promql/promql-limitations)). ES\|QL `TS`: 10,000 rows by default ([limitations](https://www.elastic.co/docs/reference/query-languages/esql/limitations)) | URL and an API key with index read on `metrics-*` |
 | [Splunk Observability Cloud](https://help.splunk.com/en/splunk-observability-cloud/monitor-infrastructure/resolution-and-data-retention) | SignalFlow over REST or websocket | `container.cpu.time` (cumulative, so derive cores), `container.memory.working_set`, `k8s.container.cpu_request`, `k8s.container.memory_request`, `k8s.deployment.desired` | 250,000 input series per job, 5,000 jobs per minute per org ([limits](https://help.splunk.com/en/splunk-observability-cloud/administer/org-reference-info/per-product-system-limits-in-splunk-observability-cloud/infrastructure-system-limits-details)). Whether 1-minute resolution is honored over 14 days was not verified | An org access token with API scope and a read-only role. Default expiry is 30 days |
@@ -176,16 +176,34 @@ None of these provides requests or per-workload data, so a file built only from 
 - **Elastic:** three routes (PromQL, ES|QL, and plain aggregations on older stacks) mean the adapter has to detect the version and the data stream type first. The 3 to 4 day estimate holds only when the PromQL endpoint is available.
 - **Splunk:** SignalFlow is a streaming protocol with its own message framing, so the PromQL client does not carry over. Utilization metrics are relative, so derive cores from the cumulative CPU time.
 
+## Testing without a customer
+
+| Source | Test setup |
+| --- | --- |
+| Mimir | Single-binary Mimir in Docker, with Prometheus or Grafana Alloy writing to it from minikube |
+| Grafana Cloud | Free-tier stack; retention is short but enough for a 14-day pull |
+| Amazon Managed Prometheus | A workspace on a pay-per-use account, with a local Prometheus remote-writing using SigV4 |
+| Azure managed Prometheus | A small AKS cluster with the metrics add-on enabled. Only the auth step is Azure-specific; test the rest against any Prometheus |
+| Google Managed Prometheus and GKE system metrics | A small GKE cluster, Autopilot being cheapest. No local equivalent |
+| Chronosphere | No free tier found. Mock the standard Prometheus API |
+| AWS Container Insights | A small EKS cluster with the add-on; mock `GetMetricData` with recorded JSON |
+| Azure Log Analytics | A small AKS cluster and a workspace on pay-as-you-go |
+| Node fallbacks | A small EKS or AKS cluster; both sources are on by default except EC2 detailed monitoring |
+| Datadog, New Relic, Dynatrace, Splunk | Free or trial account with the vendor's agent chart on minikube. Trial terms were not checked, except Dynatrace's 15-day trial |
+| Elastic | Local Elasticsearch in Docker with the Elastic Agent or OpenTelemetry collector on minikube, or a cloud trial |
+
+Replaying recorded responses is enough for unit tests on every source. A live smoke test is needed for the items listed under "Not verified".
+
 ## Not verified
 
 - **Google Managed Prometheus and GKE:** the maximum range and point count of the PromQL endpoint, and the query rate quota beyond the documented 100 requests per second default for the metrics scope. That the non-evictable memory series equals the kubelet working set. Whether the system request metrics are queryable under usable PromQL names (the metric list says so, but a live query was not run). The documentation describes resolution for Google Managed Prometheus (full resolution for a week, 1-minute for five weeks, then 10-minute) differently from system metrics (full resolution for six weeks, then 10-minute), both on the same quotas page. Treat 14 days at 1 minute as available for both and confirm on a real project.
 - **Datadog:** the query API rate limit, the retention of 1-minute points for old ranges, whether the kube-state-metrics core check is on by default in current Helm charts, the OpenTelemetry-shipped metric names and units, the need for `metrics_read`, and free trial terms.
-- **AWS:** whether `PodName` on `replicas_desired` is the workload or the pod, whether OTel Container Insights metrics roll up in resolution with age, whether the add-on exports the deployment and statefulset metrics, the default retention of the performance log group, the unit string on `pod_cpu_usage_total`, the 60-second default collection interval for classic Container Insights (from a search snippet), and the pricing figures (read through a summarizer). The exact list of actions in the AMP query access policy.
+- **AWS:** whether `PodName` on `replicas_desired` is the workload or the pod, whether OTel Container Insights metrics roll up in resolution with age, whether the add-on exports the deployment and statefulset metrics, the default retention of the performance log group, the unit string on `pod_cpu_usage_total`, the 60-second default collection interval for classic Container Insights (secondary source, unconfirmed), and the pricing figures (not confirmed against the official price list). The exact list of actions in the AMP query access policy.
 - **Azure:** whether any request counters exist in the `Perf` table, and what exactly the single `__name__` matcher rule allows. Whether `kube_node_info` carries the instance type. Whether resolution degrades with age on managed Prometheus (not documented).
-- **Grafana Cloud:** the default Kubernetes metrics allow-list (the page returned an error), and the paid and free retention figures (pricing pages, from a search snippet).
-- **Chronosphere:** query limits, retention and the series and label endpoint paths. The limits page could not be read.
+- **Grafana Cloud:** the default Kubernetes metrics allow-list (the default-metrics page was not available in October 2026), and the paid and free retention figures (pricing pages, secondary source, unconfirmed).
+- **Chronosphere:** query limits, retention and the series and label endpoint paths. The query limits page was not available in October 2026.
 - **New Relic:** node instance type, region and spot attributes, retention of the Kubernetes events, the maximum `SINCE` range, whether `cpuUsedCores` is already in cores, free tier limits.
-- **Dynatrace:** Grail scope names, DQL limits and rate limits, which replica key is correct, node properties, and the classic resolution ladder (1 minute for 14 days, 5 minutes to day 28, 1 hour to day 400, from a search snippet).
-- **Splunk:** the default Kubernetes metrics page returned an error, so usage metric names rest on search snippets. Exact node allocatable names, the maximum time range per job, and trial length.
+- **Dynatrace:** Grail scope names, DQL limits and rate limits, which replica key is correct, node properties, and the classic resolution ladder (1 minute for 14 days, 5 minutes to day 28, 1 hour to day 400, secondary source, unconfirmed).
+- **Splunk:** the default Kubernetes metrics page was not available in October 2026, so usage metric names are from secondary sources and unconfirmed. Exact node allocatable names, the maximum time range per job, and trial length.
 - **Elastic:** PromQL behavior before 9.4, which Kubernetes integration data streams are time series data streams, privileges beyond index read, and the field names of the OpenTelemetry route.
 - **Free trials and sandboxes:** apart from Dynatrace's 15-day trial, trial terms were not checked for any vendor.
