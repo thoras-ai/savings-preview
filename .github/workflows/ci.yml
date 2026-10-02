@@ -16,6 +16,12 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  # On the runner's disk, the first go command after a restore spends seconds
+  # reading the cache; in memory it does not.
+  GOCACHE: /dev/shm/go-build
+  GOMODCACHE: /dev/shm/go-mod
+
 jobs:
   vet:
     runs-on: ubuntu-24.04
@@ -30,15 +36,43 @@ jobs:
           go-version: "1.26"
           check-latest: true
           cache: false
-      # Each Go job keeps its own build cache: a shared key would hold
-      # whichever job saved first, and -race builds differ from plain ones.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Compiling the dependencies and linking the tests takes minutes, so the
+      # vet and test jobs share one build cache, which this job saves on main
+      # whenever go.sum or the Go sources change. Other branches and pull
+      # requests restore the newest one saved for the same go.sum, or failing
+      # that for the same Go version, and rebuild only what changed. The module
+      # zips are left out because builds read the extracted sources.
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+            /dev/shm/go-build
+            /dev/shm/go-mod
+            !/dev/shm/go-mod/cache/download/**/*.zip
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
+      # go sets a cache entry's mtime to now when it uses the entry, unless the
+      # mtime is less than an hour old. Dating the restored entries two hours
+      # back lets the next save drop the ones this run did not use, so the
+      # cache does not grow with every commit.
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true' && steps.cache.outputs.cache-matched-key != ''
+        run: find "$GOCACHE" -mindepth 2 -maxdepth 2 -exec touch -m -d '2 hours ago' {} +
       - run: go vet ./...
+      # Builds every test binary into the cache, so the test jobs only run them.
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        run: go test -vet=off -run '^$' ./...
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true' && steps.cache.outputs.cache-matched-key != ''
+        run: find "$GOCACHE" -mindepth 2 -maxdepth 2 -mmin +60 -exec rm -rf {} +
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            /dev/shm/go-build
+            /dev/shm/go-mod
+            !/dev/shm/go-mod/cache/download/**/*.zip
+          key: ${{ steps.cache.outputs.cache-primary-key }}
 
   test:
     name: test ${{ matrix.shard }}
@@ -60,12 +94,16 @@ jobs:
           go-version: "1.26"
           check-latest: true
           cache: false
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ matrix.shard }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+            /dev/shm/go-build
+            /dev/shm/go-mod
+            !/dev/shm/go-mod/cache/download/**/*.zip
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
       # -count=1 because some tests run the Python validator and the report
       # model, which go test does not track as inputs. The vet job runs every
       # check go test would.
@@ -95,12 +133,15 @@ jobs:
           go-version: "1.26"
           check-latest: true
           cache: false
+      # -race builds differ from plain ones, so this job keeps its own cache.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+            /dev/shm/go-build
+            /dev/shm/go-mod
+            !/dev/shm/go-mod/cache/download/**/*.zip
+          key: go-race-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+          restore-keys: go-race-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
       - run: go test -race -count=1 ./...
 
   report-and-contract:
