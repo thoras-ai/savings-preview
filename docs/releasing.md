@@ -2,7 +2,7 @@
 
 Pushing a tag that starts with `v` runs `.github/workflows/release.yml`:
 
-1. **checks** runs the same jobs as CI (`.github/workflows/ci.yml`): `go vet`, `go test -race`, the Python and Node tests, and the fixture check against the contract.
+1. **checks** runs the CI workflow (`.github/workflows/ci.yml`): `go vet`, `go test`, `go test -race`, the Python and Node tests, and the fixture check against the contract. Pull requests run the same jobs except `go test -race`, which runs on pushes to `main`, nightly, on demand and here, so a release never skips it.
 2. **build** fails unless the tagged commit is on `main`. It then runs `scripts/release.sh build <tag>`, which cross-compiles `darwin/amd64`, `darwin/arm64`, `linux/amd64` and `linux/arm64` binaries with `CGO_ENABLED=0` and the tag passed as `-X main.version=<tag>`. It uploads them as the `binaries` workflow artifact. CI and the release use the latest Go 1.26 patch release, not the minimum version in `go.mod`; change `go-version` in both workflows when moving to a new minor version.
 3. **publish** downloads the binaries, runs `scripts/release.sh package <tag>`, and creates a GitHub release for the tag with generated notes. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a prerelease.
 
