@@ -322,3 +322,16 @@ test('the chart series carry per-step peak usage next to the mean', () => {
   assert.deepStrictEqual(chart.legend('cpu').map((l) => l.name), ['Requested', 'Usage + 10%', 'Peak usage', 'Mean usage', 'Gap']);
   assert.deepStrictEqual(chart.legend('spend').map((l) => l.name), ['Current spend', 'Without waste', 'Waste']);
 });
+
+test('the cluster peak adds each workload highest point in a bucket', () => {
+  // A 1-minute workload peaks once in each 5-minute bucket of a 5-minute workload.
+  const fine = doc({ cpu: Array.from({ length: 10 }, (_, i) => (i % 5 === 2 ? 3 : 1)), mem: Array(10).fill(1), step: 60 });
+  const coarse = doc({ cpu: [1, 1], mem: [1, 1], step: 300 });
+  coarse.resourceMetrics.forEach(rm => rm.resource.attributes.forEach(a => {
+    if (a.key === 'k8s.deployment.name') a.value.stringValue = 'worker';
+  }));
+  const r = model.analyze({ resourceMetrics: fine.resourceMetrics.concat(coarse.resourceMetrics) });
+  assert.strictEqual(r.totals.counted, 2);
+  assert.strictEqual(r.series.peakCpu[0], 3 + 1);
+  assert.ok(r.series.useCpu[0] < r.series.peakCpu[0]);
+});
