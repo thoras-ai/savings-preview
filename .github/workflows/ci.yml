@@ -60,7 +60,7 @@ jobs:
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true' && steps.cache.outputs.cache-matched-key != ''
         run: find "$GOCACHE" -mindepth 2 -maxdepth 2 -exec touch -m -d '2 hours ago' {} +
       - run: go vet ./...
-      # Builds every test binary into the cache, so the test jobs only run them.
+      # Compiles every test package into the cache, so the test jobs only link and run them.
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: go test -vet=off -run '^$' ./...
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true' && steps.cache.outputs.cache-matched-key != ''
