@@ -123,7 +123,7 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 			if ok, err := c.present(ctx, CAdvisorProbe, o.Now); err != nil {
 				return nil, rep, fmt.Errorf("probe container metrics: %w", err)
 			} else if ok {
-				return nil, rep, fmt.Errorf("the store has no per-container usage metrics (container_memory_working_set_bytes with container and image labels), but cAdvisor is collected (machine_memory_bytes has series): the collector probably dropped container series without a container label, as the Grafana k8s-monitoring chart does by default, because the cluster's container runtime does not label them (older containerd setups, minikube)")
+				return nil, rep, fmt.Errorf("the store has no per-container usage metrics (container_memory_working_set_bytes with container and image labels), but cAdvisor is collected (machine_memory_bytes has series): the collector probably dropped container series without a container label, as the Grafana k8s-monitoring chart does by default, because the cluster's container runtime does not label them (older containerd setups, minikube). Collect per-container usage another way, such as container_cpu_usage_seconds_total and container_memory_working_set_bytes from the kubelet's /metrics/resource endpoint; see docs/prometheus-adapter.md, Grafana Cloud")
 			}
 			return nil, rep, fmt.Errorf("the store has no per-container usage metrics (container_memory_working_set_bytes with container and image labels); the kubelet cAdvisor job is probably not collected")
 		}

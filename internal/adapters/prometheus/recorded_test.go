@@ -16,7 +16,7 @@ import (
 type recording struct {
 	Store     string              `json:"store"`
 	Backend   string              `json:"backend,omitempty"`  // as ResolveBackend names it; empty for Mimir
-	Cluster   string              `json:"cluster,omitempty"`  // empty for minikube
+	Cluster   string              `json:"cluster,omitempty"`  // empty means "minikube"
 	Selector  string              `json:"selector,omitempty"` // as ParseSelector returns it
 	Now       int64               `json:"now"`
 	Days      int                 `json:"days"`

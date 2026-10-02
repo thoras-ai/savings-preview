@@ -135,7 +135,7 @@ savings-preview prometheus --url https://prometheus-prod-NN-prod-REGION.grafana.
 - **What the customer creates:** an access policy scoped to the stack with the `metrics:read` scope, and a token for it. No other scope is needed.
 - **Limits:** a range selector may cover at most 32 days; a longer one fails with `err-mimir-max-query-length`. Range queries are split by day, and the instant queries that look back over the whole `--days` window are split into pieces of at most 32 days, so `--days` beyond 32 works.
 - **Adaptive Metrics:** an aggregation rule can drop the `pod`, `container` or other labels from cAdvisor and kube-state-metrics series. The run then stops and names the metric and the labels, instead of producing usage that cannot be attributed to workloads. A cluster whose container runtime does not label cAdvisor series (older containerd setups, minikube) stops the same way on Grafana Cloud, since its pod-level series cannot be told apart from aggregated ones. On Grafana Cloud usage is never split from pod-level series: there a series without a `container` label may be the sum of all of a pod's containers and the pod total, which would double the usage. The fix is to exclude the metric from Adaptive Metrics recommendations, or to keep the labels in its rule, and run again once new data has arrived.
-- **Container series dropped at collection:** the Grafana k8s-monitoring chart drops cAdvisor series without a `container` label by default, so on such a runtime the store has no container usage at all. The run stops and says so when it finds `machine_memory_bytes` but no container series.
+- **Container series dropped at collection:** the Grafana k8s-monitoring chart drops cAdvisor series without a `container` label by default, so on such a runtime the store has no container usage at all. The run stops and says so when it finds `machine_memory_bytes` but no container series. The kubelet's resource endpoint labels containers on such runtimes; the minikube values below show how to collect it, although its series carry no `image` label, which the adapter needs and those values add.
 
 #### Setup for a stack that already holds the cluster
 
@@ -161,7 +161,7 @@ savings-preview prometheus --url https://prometheus-prod-NN-prod-REGION.grafana.
 
 1. **Start a trial** at grafana.com. It creates a stack with a Prometheus endpoint.
 2. **Create a token and save it** as in steps 1 to 3 above, with the scopes `metrics:read` and `metrics:write`: the collector writes with it and the adapter reads with it. Keep the instance ID.
-3. **Create the Secret** the collector reads, from the file:
+3. **Create the Secret** the collector reads, from the file. These steps use the namespace `monitoring`. When the cluster already has one, as with kube-prometheus-stack, pick another name and use it throughout, since step 7 deletes the namespace.
 
    ```
    kubectl --context minikube create namespace monitoring

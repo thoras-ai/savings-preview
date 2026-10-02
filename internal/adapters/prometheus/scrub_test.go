@@ -238,6 +238,11 @@ func TestRecordGrafanaCloud(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, m := range matcher.FindAllStringSubmatch(sel, -1) {
+		if _, ok := scrubbedLabels[m[1]]; ok && (m[2] == "=~" || m[2] == "!~") {
+			t.Fatalf("RECORD_SELECTOR matches %s with a regular expression, which the recording would keep as is; use = or !=", m[1])
+		}
+	}
 	rec := &recording{Store: "grafana-cloud", Backend: BackendGrafanaCloud, Cluster: "minikube", Selector: sel,
 		Now: time.Now().Truncate(time.Minute).Unix(), Days: 1, StepS: 60, Responses: map[string]response{}}
 	recordRun(t, rec, &HTTPGetter{Base: store.Base, Auth: Basic{User: user, Password: pass}}, "testdata/grafana-cloud.json")
