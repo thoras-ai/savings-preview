@@ -4,7 +4,7 @@ Savings Preview runs on your machine with your existing kubeconfig. It reads the
 
 > **What this reads and writes**
 >
-> - Reads only: queries to your metrics store or Datadog, `list` on services and Prometheus Operator resources to find a store, `get` on `services/proxy` to query it, and, when it polls, `list` on pods, ReplicaSets, Deployments, StatefulSets, nodes and metrics-server usage. Never Secrets, ConfigMaps or logs.
+> - Reads only: queries to your metrics store or Datadog, `list` on services and Prometheus Operator resources to find a store, `get` on `services/proxy` to query it, and, when it polls, `list` on pods, ReplicaSets, Deployments, StatefulSets, nodes and metrics-server usage. `check` also asks the API server who you are and what you may do. Never Secrets, ConfigMaps or logs.
 > - Writes nothing in the cluster. On your machine it writes the data file, a compact copy, `savings-preview.zip` and, when it polls, a `savings-preview.otlp.json.readings/` directory.
 > - Sends nothing anywhere except requests to your API server, the store you name with `--url`, or the Datadog API when you give it keys.
 >
@@ -27,7 +27,46 @@ Unpacked with `tar` as above, the binary runs as is. If the archive was opened i
 
 The commands below assume `savings-preview` is on your `PATH`. Move it to a directory such as `/usr/local/bin`, or run it as `./savings-preview`.
 
-<!-- `savings-preview check` (preflight of access and data sources) goes here once it ships. -->
+## Check before the first run
+
+`savings-preview check` takes the same flags as `run` and answers in a few seconds whether `run` can work and how well. It shows the identity your kubeconfig gives, whether that identity may make each request, whether metrics-server answers, which stores it finds and how much history they hold, whether Datadog keys are valid, and which source `run` would read. It pulls no history and writes nothing.
+
+    $ savings-preview check --context minikube
+    Kubernetes
+      context minikube, cluster minikube, API server https://127.0.0.1:32771
+      identity: minikube-user (groups system:masters, system:authenticated)
+
+    Access (kubectl auth can-i)
+      prometheus  list services -A                                yes
+      prometheus  list prometheuses.monitoring.coreos.com -A      yes
+      prometheus  list prometheusagents.monitoring.coreos.com -A  yes
+      prometheus  get services/proxy -A                           yes
+      poll        list pods -A                                    yes
+      poll        list replicasets.apps -A                        yes
+      poll        list deployments.apps -A                        yes
+      poll        list statefulsets.apps -A                       yes
+      poll        list nodes                                      yes
+      poll        list pods.metrics.k8s.io -A                     yes
+
+    metrics-server: answers
+
+    Prometheus-compatible stores
+      no Prometheus-compatible store found in the cluster
+
+    Datadog: no keys (DD_API_KEY and DD_APP_KEY, or --api-key-file and --app-key-file)
+
+    Source
+      1. no  Datadog: no keys given
+      2. no  a store in the cluster: no Prometheus-compatible store found in the cluster
+      3. yes polling metrics-server: access allowed and metrics-server answers
+      run would read: metrics-server, by polling
+      why: no other source can be read
+      expected tier: 3 (limited history)
+      limit: polling gives tier 3 until it has 7 days of readings
+
+    limited: run reads metrics-server, by polling; expect tier 3 (limited history): polling gives tier 3 until it has 7 days of readings
+
+The last line sums it up. The exit status is 0 when `run` would read 14 days at 1-minute steps, 1 when it would read something less, such as polling or a store with less history, and 2 when there is nothing it can read. A `no` in the access table names the request your identity is missing; a role in [deploy/rbac/](../deploy/rbac/README.md) grants it.
 
 ## Run
 
@@ -113,7 +152,15 @@ The report opens on the summary:
 
 The target for each workload is 1.1 times its highest use in any 15 minutes. Waste is the request above the target. Prices come from AWS on-demand list prices (us-east-1) for known instance types, and from a 4-core, 16 GiB, $0.192 per hour node otherwise.
 
-**Workloads** lists each Deployment and StatefulSet with its spend, savings and the CPU and memory to free. **Assumptions** lists the settings every figure uses: pricing, headroom, peak window, namespaces and time range. The page address keeps them, so a copied link opens the same view. **Data and method** lists the workloads left out of the totals and why. DaemonSets and bare pods are not counted.
+The other sections:
+
+- **Where the money is** maps savings or spend by namespace or by workload, and ranks the namespaces and the top 10 workloads. With more than 60 workloads the map opens on namespaces; select one to see its workloads.
+- **Workloads** lists every Deployment and StatefulSet, with a filter. Select one to see its requested, usage and target over time with OOM kills marked, the per-pod requests Thoras would set, and what could make the saving smaller or unsafe: OOM kills, limits below the peak-safe value, or provisional data.
+- **Cluster and nodes** sets the nodes' allocatable CPU and memory against what the workloads request, would need once right-sized, and use. It lists the instance types with their list prices and shows the waste as nodes that could be freed.
+- **Assumptions** holds the settings every figure uses: headroom above the peak, the peak window, pricing (an instance type from built-in AWS, Google Cloud and Azure list prices, or your own rates per core-hour and GiB-hour), a spot or committed-use discount, an optional annual cloud bill to show the savings as a share of, the loaded engineer cost, namespaces and time range. Changing one recomputes every section. Each setting has its own Reset, and Reset to defaults clears them all.
+- **Data and method** describes the file (source, window, resolution, tier, pricing), lists the workloads, containers and nodes the totals leave out or price differently and why, and spells out the calculation with the current settings. DaemonSets and bare pods are not counted.
+
+The page address keeps the settings, so **Copy link** in the header gives a link that opens the same view. **Print summary** prints a one-page summary under the current settings.
 
 ## Share the results
 
