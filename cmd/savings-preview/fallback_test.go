@@ -160,7 +160,7 @@ func TestRunFlags(t *testing.T) {
 		t.Fatalf("parsed %+v", o)
 	}
 	for _, bad := range [][]string{
-		{"--source", "datadog"}, {"--interval", "1500ms"}, {"--interval", "10s"}, {"--rollup", "0"}, {"--keep-raw", "-1h"}, {"--write-every", "0"}, {"--duration", "-1m"}, {"--target", "nonsense"}, {"extra"},
+		{"--source", "nonsense"}, {"--interval", "1500ms"}, {"--interval", "10s"}, {"--rollup", "0"}, {"--keep-raw", "-1h"}, {"--write-every", "0"}, {"--duration", "-1m"}, {"--target", "nonsense"}, {"extra"},
 	} {
 		if _, err := runFlags(bad); err == nil {
 			t.Errorf("%v: want an error", bad)

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	savingspreview "github.com/thoras-ai/savings-preview"
+	"github.com/thoras-ai/savings-preview/internal/adapters/datadog"
 	"github.com/thoras-ai/savings-preview/internal/adapters/polling"
 	"github.com/thoras-ai/savings-preview/internal/adapters/prometheus"
 	"github.com/thoras-ai/savings-preview/internal/contract"
@@ -33,11 +34,18 @@ type runOptions struct {
 	out                          string
 	source                       string
 	target                       *prometheus.Candidate
+	direct                       *directFlags
+	datadog                      *datadog.Flags
+	useDatadog                   bool // read from Datadog before anything else
+	selector                     string
+	promSelector                 string
+	ddFilters                    []string
 	days                         int
 	step                         time.Duration
 	duration, interval           time.Duration
 	writeEvery, keepRaw, rollup  time.Duration
 	noOpen                       bool
+	now                          time.Time // end of the history pulled; zero is now
 }
 
 func runFlags(args []string) (*runOptions, error) {
@@ -45,11 +53,14 @@ func runFlags(args []string) (*runOptions, error) {
 	o := &runOptions{}
 	fs.StringVar(&o.kubeconfig, "kubeconfig", "", "path to the kubeconfig (default: KUBECONFIG or ~/.kube/config)")
 	fs.StringVar(&o.context, "context", "", "kubeconfig context (default: the current context)")
-	fs.StringVar(&o.cluster, "cluster-name", "", "cluster name recorded in the file (default: the kubeconfig cluster name)")
+	fs.StringVar(&o.cluster, "cluster-name", "", "cluster name recorded in the file (default: the kubeconfig cluster name, or for Datadog the cluster tag of the series)")
 	fs.StringVar(&o.out, "out", report.DataName, "contract file to write; the zip is written next to it")
 	fs.StringVar(&o.out, "o", report.DataName, "same as --out")
-	fs.StringVar(&o.source, "source", "auto", "where to read usage: auto (a store, else polling), prometheus or poll")
-	target := fs.String("target", "", "store to use as [scheme:]namespace/service:port[/path-prefix], skipping discovery")
+	fs.StringVar(&o.source, "source", "auto", "where to read usage: auto (Datadog when its keys are given, else a store, else polling), prometheus, datadog or poll")
+	target := fs.String("target", "", "store to use as [scheme:]namespace/service:port[/path-prefix], skipping discovery, or as an http(s) URL like --url")
+	o.direct = addDirectFlags(fs)
+	o.datadog = datadog.AddFlags(fs)
+	fs.StringVar(&o.selector, "selector", "", `filters added to every query, to read one cluster from a store that holds several: label matchers for a Prometheus-compatible store, e.g. 'cluster="prod-us"', or tag filters for Datadog, e.g. 'kube_cluster_name:prod-us'`)
 	fs.IntVar(&o.days, "days", 14, "days of history to pull from a store")
 	fs.DurationVar(&o.step, "step", time.Minute, "resolution of the series pulled from a store")
 	fs.DurationVar(&o.duration, "duration", 0, "how long to poll when there is no store (default: until Ctrl-C)")
@@ -61,13 +72,15 @@ func runFlags(args []string) (*runOptions, error) {
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `usage: savings-preview [run] [flags]
 
-Reads usage history from a Prometheus-compatible store in the cluster, or polls
-metrics-server when there is none, writes the contract file, checks it, and
-opens the report on a local address. It also writes a compact copy of the
-file at 15-minute steps, which the report reads. A zip with a summary and a
-self-contained copy of the report, which carries the compact copy, is written
-next to the contract file; the full file stays on disk. Everything is read-only; nothing
-is uploaded.
+Reads usage history from Datadog when its keys are given, else from a
+Prometheus-compatible store in the cluster or at --url, or polls metrics-server
+when there is none. A store named with --url or --target, or a source chosen
+with --source, is used or the run fails; it does not fall back. The run writes
+the contract file, checks it, and opens the report on a local address. It also
+writes a compact copy of the file at 15-minute steps, which the report reads.
+A zip with a summary and a self-contained copy of the report, which carries
+the compact copy, is written next to the contract file; the full file stays on
+disk. Everything is read-only; nothing is uploaded.
 
 `)
 		fs.PrintDefaults()
@@ -79,9 +92,33 @@ is uploaded.
 		return nil, fmt.Errorf("unexpected argument %q", fs.Arg(0))
 	}
 	switch o.source {
-	case "auto", "prometheus", "poll":
+	case "auto", "prometheus", "datadog", "poll":
 	default:
-		return nil, fmt.Errorf("--source must be auto, prometheus or poll, not %q", o.source)
+		return nil, fmt.Errorf("--source must be auto, prometheus, datadog or poll, not %q", o.source)
+	}
+	if err := o.direct.check(target); err != nil {
+		return nil, err
+	}
+	named := o.direct.url != "" || *target != ""
+	if named && (o.source == "datadog" || o.source == "poll") {
+		return nil, fmt.Errorf("--url and --target name a Prometheus-compatible store; they do not apply with --source %s", o.source)
+	}
+	o.useDatadog = o.source == "datadog" || (o.source == "auto" && !named && o.datadog.KeysGiven())
+	if o.useDatadog {
+		filters, err := datadog.ParseSelector(o.selector)
+		if err != nil {
+			return nil, fmt.Errorf("--selector: %w", err)
+		}
+		o.ddFilters = filters
+		if o.step < time.Minute || o.step%time.Minute != 0 {
+			return nil, errors.New("--step must be a whole number of minutes with Datadog")
+		}
+	} else {
+		m, err := prometheus.ParseSelector(o.selector)
+		if err != nil {
+			return nil, fmt.Errorf("--selector: %w", err)
+		}
+		o.promSelector = m
 	}
 	if *target != "" {
 		c, err := parseTarget(*target)
@@ -116,19 +153,13 @@ func runRun(args []string) error {
 	if err != nil {
 		return err
 	}
-	conn, err := kube.Connect(o.kubeconfig, o.context)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	s, err := newSources(o, os.Stderr)
 	if err != nil {
 		return err
 	}
-	cluster := o.cluster
-	if cluster == "" {
-		cluster = conn.ClusterName
-	}
-	printAccess(os.Stderr, conn, o)
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	if err := collect(ctx, conn, cluster, o); err != nil {
+	if err := collect(ctx, s, o, os.Stderr); err != nil {
 		return err
 	}
 
@@ -208,44 +239,95 @@ func withFile(path string, check func(io.Reader) []string) []string {
 	return check(bufio.NewReader(f))
 }
 
-// collect writes the contract file to o.out.
-func collect(ctx context.Context, conn *kube.Conn, cluster string, o *runOptions) error {
-	if o.source != "poll" {
-		res, err := tryStore(ctx, newStoreSteps(conn, cluster, o), o.target, func(m string) { fmt.Fprintln(os.Stderr, m) })
-		switch {
-		case err == nil:
-			if err := writeContract(o.out, res.file); err != nil {
-				return err
-			}
-			rep := res.report
-			fmt.Fprintf(os.Stderr, "wrote %s from %s: %d containers in %d workloads, %d nodes; data from %s to %s\n", o.out, res.store,
-				rep.Containers, rep.Workloads, rep.Nodes, rep.Start.UTC().Format(time.RFC3339), rep.End.UTC().Format(time.RFC3339))
-			for _, w := range rep.Warnings {
-				fmt.Fprintln(os.Stderr, "warning:", w)
-			}
-			return nil
-		case !isFallback(err) || o.source == "prometheus":
-			return err
-		}
-		fmt.Fprintf(os.Stderr, "Not using a metrics store: %v.\nFalling back to polling metrics-server.\n\n", err)
-	}
-	return pollWithProgress(ctx, conn, cluster, o)
+// pulled is a contract file read from a store or from Datadog.
+type pulled struct {
+	from                         string
+	file                         *contract.File
+	containers, workloads, nodes int
+	start, end                   time.Time
+	notes, warnings              []string
 }
 
-func newStoreSteps(conn *kube.Conn, cluster string, o *runOptions) storeSteps {
-	proxy := func(c prometheus.Candidate) (*prometheus.Client, error) {
-		px, err := conn.Proxy(c.Namespace, c.Service, c.Port, c.Scheme, c.Prefix)
-		if err != nil {
-			return nil, err
-		}
-		return &prometheus.Client{G: px}, nil
+func fromPrometheus(from string, f *contract.File, rep *prometheus.Report) *pulled {
+	p := &pulled{from: from, file: f, containers: rep.Containers, workloads: rep.Workloads, nodes: rep.Nodes,
+		start: rep.Start, end: rep.End, warnings: rep.Warnings}
+	if rep.UsageFromPods {
+		p.notes = append(p.notes, "the store has no per-container usage series, so container usage is the pod's usage split between its containers by their requests")
 	}
-	return storeSteps{
+	return p
+}
+
+// sources are the places run reads usage from. A nil func is not tried.
+// Tests replace them.
+type sources struct {
+	direct  func(context.Context) (*pulled, error) // the store at --url
+	datadog func(context.Context) (*pulled, error)
+	store   storeSteps // discovery, or the store named with --target
+	poll    func(context.Context) error
+}
+
+// newSources connects to the cluster when the run may need it and prints
+// what the run will read.
+func newSources(o *runOptions, w io.Writer) (sources, error) {
+	var s sources
+	var conn *kube.Conn
+	var connErr error
+	connect := func() (*kube.Conn, error) {
+		if conn == nil && connErr == nil {
+			if conn, connErr = kube.Connect(o.kubeconfig, o.context); connErr == nil {
+				fmt.Fprintf(w, "Context %s (cluster %s, API server %s)\n", conn.Context, conn.ClusterName, conn.Config.Host)
+			}
+		}
+		return conn, connErr
+	}
+	clusterName := func() (string, error) {
+		if o.cluster != "" {
+			return o.cluster, nil
+		}
+		c, err := connect()
+		if err != nil {
+			return "", err
+		}
+		return c.ClusterName, nil
+	}
+
+	// Datadog and a store at --url are reached without the cluster, so the
+	// kubeconfig is read only when the run needs a cluster name or may fall
+	// back to the cluster.
+	var cluster string
+	switch {
+	case o.direct.url != "":
+		var err error
+		if cluster, err = clusterName(); err != nil {
+			return s, fmt.Errorf("--cluster-name is required with --url when the kubeconfig cannot be read: %w", err)
+		}
+	case !o.useDatadog:
+		if _, err := connect(); err != nil {
+			return s, err
+		}
+	}
+	printAccess(w, o)
+
+	if o.direct.url != "" {
+		s.direct = func(ctx context.Context) (*pulled, error) { return pullDirect(ctx, o, cluster, w) }
+		return s, nil
+	}
+	if o.useDatadog {
+		s.datadog = func(ctx context.Context) (*pulled, error) { return pullDatadog(ctx, o, w) }
+	}
+	if o.source == "datadog" {
+		return s, nil
+	}
+	s.store = storeSteps{
 		discover: func(ctx context.Context) (*prometheus.Discovery, error) {
-			return prometheus.Discover(ctx, conn.Clientset, conn.Dynamic)
+			c, err := connect()
+			if err != nil {
+				return nil, err
+			}
+			return prometheus.Discover(ctx, c.Clientset, c.Dynamic)
 		},
 		check: func(ctx context.Context, c prometheus.Candidate) error {
-			cl, err := proxy(c)
+			cl, err := proxyClient(connect, c, o)
 			if err != nil {
 				return err
 			}
@@ -253,27 +335,167 @@ func newStoreSteps(conn *kube.Conn, cluster string, o *runOptions) storeSteps {
 			return cl.Check(ctx)
 		},
 		pull: func(ctx context.Context, c prometheus.Candidate) (*contract.File, *prometheus.Report, error) {
-			cl, err := proxy(c)
+			cl, err := proxyClient(connect, c, o)
 			if err != nil {
 				return nil, nil, err
 			}
-			fmt.Fprintf(os.Stderr, "pulling %d days of history from %s\n", o.days, c)
+			cluster, err := clusterName()
+			if err != nil {
+				return nil, nil, err
+			}
+			fmt.Fprintf(w, "pulling %s of history from %s\n", days(o.days), c)
 			return prometheus.Run(ctx, prometheus.Options{Client: cl, Cluster: cluster, Days: o.days, Step: o.step, Concurrency: 2,
 				Log: func(string, ...any) {}})
 		},
 	}
+	s.poll = func(ctx context.Context) error {
+		c, err := connect()
+		if err != nil {
+			return err
+		}
+		cluster, err := clusterName()
+		if err != nil {
+			return err
+		}
+		return pollWithProgress(ctx, c, cluster, o)
+	}
+	return s, nil
 }
 
-func printAccess(w io.Writer, conn *kube.Conn, o *runOptions) {
-	fmt.Fprintf(w, "Context %s (cluster %s, API server %s)\n", conn.Context, conn.ClusterName, conn.Config.Host)
-	fmt.Fprintln(w, "This run only reads from the cluster; it creates, changes and deletes nothing. It will:")
-	if o.source != "poll" {
-		if o.target == nil {
-			fmt.Fprintln(w, "  - list Services, and Prometheus Operator resources if installed, to find a metrics store")
-		}
-		fmt.Fprintln(w, "  - query that store through the API server's service proxy (GET requests only)")
+func proxyClient(connect func() (*kube.Conn, error), c prometheus.Candidate, o *runOptions) (*prometheus.Client, error) {
+	conn, err := connect()
+	if err != nil {
+		return nil, err
 	}
-	if o.source != "prometheus" {
+	px, err := conn.Proxy(c.Namespace, c.Service, c.Port, c.Scheme, c.Prefix)
+	if err != nil {
+		return nil, err
+	}
+	return &prometheus.Client{G: px, Selector: o.promSelector, MaxRange: o.direct.maxRange}, nil
+}
+
+// pullDirect reads the history from the store at --url.
+func pullDirect(ctx context.Context, o *runOptions, cluster string, w io.Writer) (*pulled, error) {
+	g, store, err := o.direct.open(ctx)
+	if err != nil {
+		return nil, err
+	}
+	name := storeName(store)
+	fmt.Fprintf(w, "pulling %s of history from the %s\n", days(o.days), name)
+	cl := &prometheus.Client{G: g, Selector: o.promSelector, MaxRange: store.MaxRange}
+	f, rep, err := prometheus.Run(ctx, prometheus.Options{Client: cl, Cluster: cluster, Days: o.days, Step: o.step, Concurrency: 2,
+		Log: func(string, ...any) {}, AdaptiveMetrics: store.Name == prometheus.BackendGrafanaCloud})
+	if err != nil {
+		return nil, directHint(err, store)
+	}
+	if !anyPriced(f) {
+		return nil, fmt.Errorf("the %s has no container with all of %s, so no savings can be computed from it",
+			name, strings.Join(contract.RequiredContainerMetrics, ", "))
+	}
+	return fromPrometheus("the "+name, f, rep), nil
+}
+
+// pullDatadog reads the history from the Datadog metrics query API.
+func pullDatadog(ctx context.Context, o *runOptions, w io.Writer) (*pulled, error) {
+	c, err := o.datadog.Client()
+	if err != nil {
+		return nil, err
+	}
+	fmt.Fprintf(w, "pulling %s of history from Datadog at %s\n", days(o.days), c.Base)
+	f, rep, err := datadog.Run(ctx, datadog.Options{Client: c, Filters: o.ddFilters, Cluster: o.cluster, Days: o.days, Step: o.step,
+		Concurrency: 2, Now: o.now})
+	if err != nil {
+		return nil, datadog.Hint(err)
+	}
+	if !anyPriced(f) {
+		return nil, fmt.Errorf("Datadog has no container with all of %s, so no savings can be computed from it",
+			strings.Join(contract.RequiredContainerMetrics, ", "))
+	}
+	return &pulled{from: "Datadog", file: f, containers: rep.Containers, workloads: rep.Workloads, nodes: rep.Nodes,
+		start: rep.Start, end: rep.End, warnings: rep.Warnings}, nil
+}
+
+// collect writes the contract file to o.out. Datadog chosen by its keys and
+// a store found by discovery fall back to the next source; a store named with
+// --url or --target, and any source chosen with --source, do not.
+func collect(ctx context.Context, s sources, o *runOptions, w io.Writer) error {
+	if o.source == "poll" {
+		return s.poll(ctx)
+	}
+	if s.direct != nil {
+		p, err := s.direct(ctx)
+		if err != nil {
+			return err
+		}
+		return save(o.out, p, w)
+	}
+	if s.datadog != nil {
+		p, err := s.datadog(ctx)
+		var ce *datadog.ClusterError
+		switch {
+		case err == nil:
+			return save(o.out, p, w)
+		case o.source == "datadog" || ctx.Err() != nil || errors.As(err, &ce):
+			return err
+		}
+		fmt.Fprintf(w, "Not using Datadog: %v.\n", err)
+		if o.selector != "" {
+			fmt.Fprintln(w, "--selector holds Datadog tag filters, so it is not applied to the store or to polling.")
+		}
+		fmt.Fprintln(w)
+	}
+	res, err := tryStore(ctx, s.store, o.target, func(m string) { fmt.Fprintln(w, m) })
+	switch {
+	case err == nil:
+		return save(o.out, fromPrometheus(res.store.String(), res.file, res.report), w)
+	case !isFallback(err) || o.source == "prometheus":
+		return err
+	}
+	fmt.Fprintf(w, "Not using a metrics store: %v.\nFalling back to polling metrics-server.\n\n", err)
+	return s.poll(ctx)
+}
+
+func days(n int) string {
+	if n == 1 {
+		return "1 day"
+	}
+	return fmt.Sprintf("%d days", n)
+}
+
+func save(out string, p *pulled, w io.Writer) error {
+	if err := writeContract(out, p.file); err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "wrote %s from %s: %d containers in %d workloads, %d nodes; data from %s to %s\n", out, p.from,
+		p.containers, p.workloads, p.nodes, p.start.UTC().Format(time.RFC3339), p.end.UTC().Format(time.RFC3339))
+	for _, n := range p.notes {
+		fmt.Fprintln(w, "note:", n)
+	}
+	for _, m := range p.warnings {
+		fmt.Fprintln(w, "warning:", m)
+	}
+	return nil
+}
+
+func printAccess(w io.Writer, o *runOptions) {
+	fmt.Fprintln(w, "This run only reads; it creates, changes and deletes nothing. It will:")
+	next := "  - "
+	if o.useDatadog {
+		fmt.Fprintln(w, "  - query the Datadog metrics API with the keys given (read-only queries)")
+		next = "  - if Datadog has no usable data, "
+	}
+	switch {
+	case o.source == "poll" || o.source == "datadog":
+	case o.direct.url != "":
+		fmt.Fprintf(w, "  - query the store at %s directly (read-only queries)\n", prometheus.RedactURL(o.direct.url))
+	default:
+		if o.target == nil {
+			fmt.Fprintln(w, next+"list Services, and Prometheus Operator resources if installed, to find a metrics store")
+			next = "  - "
+		}
+		fmt.Fprintln(w, next+"query that store through the API server's service proxy (GET requests only)")
+	}
+	if o.source == "auto" && o.direct.url == "" || o.source == "poll" {
 		prefix := "  - "
 		if o.source == "auto" {
 			prefix = "  - if no usable store is found, "

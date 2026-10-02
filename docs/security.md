@@ -46,7 +46,7 @@ A `list` on pods returns whole pod objects: container images, commands and argum
 
 ### `savings-preview run`
 
-The default command. It needs the access of `prometheus` (without `--target`, discovery) and, when it falls back to polling, the access of `poll`; `poll-and-prometheus.yaml` grants both. With `--source poll` it needs only `poll.yaml`, and with `--source prometheus` only the `prometheus` roles. When a request is forbidden during discovery, it reports why and polls instead. Before reading anything it prints which of these reads it will make.
+The default command. It needs the access of `prometheus` (without `--target`, discovery) and, when it falls back to polling, the access of `poll`; `poll-and-prometheus.yaml` grants both. With `--source poll` it needs only `poll.yaml`, and with `--source prometheus` only the `prometheus` roles. With `--url` it needs no Kubernetes access, and reads the kubeconfig only for the cluster name when `--cluster-name` is not given. When Datadog keys are given it first makes the requests of `datadog`; with `--source datadog` it makes only those and needs no Kubernetes access. When a request is forbidden during discovery, it reports why and polls instead. Before reading anything it prints which of these reads it will make.
 
 ### `savings-preview datadog`
 
