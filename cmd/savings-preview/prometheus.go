@@ -138,15 +138,7 @@ func runPrometheus(args []string) error {
 		}
 		return err
 	}
-	fh, err := os.Create(*out)
-	if err != nil {
-		return err
-	}
-	if err := f.Write(fh); err != nil {
-		fh.Close()
-		return err
-	}
-	if err := fh.Close(); err != nil {
+	if err := writeContract(*out, f); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "wrote %s: %d containers in %d workloads, %d nodes; data from %s to %s\n", *out,
