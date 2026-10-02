@@ -68,8 +68,13 @@ test('data and method follows the levers', () => {
     'Average over the time range set under Assumptions'
   ]) assert.ok(out.includes(s), s);
   assert.ok(!out.includes('ledger-db'), 'workloads outside the namespaces are not listed');
+  assert.ok(!out.includes('is a spot node'), 'node pricing notes are left out when rates are set');
   const outside = text(method(context(data, { range: [1, 2] })));
   assert.ok(outside.includes('checkout-api shop: no data in the time range set under Assumptions'));
+  assert.ok(outside.includes('No data in the time range set under Assumptions. The file covers Sep 16, 12:00 AM to Sep 30, 12:00 AM UTC, 14 days.'));
+  assert.ok(!/-\d+ seconds/.test(outside));
+  const outsidePrint = text(SP.print.html(context(data, { range: [1, 2] }), PRINTED));
+  assert.ok(outsidePrint.includes('checkout-api (shop) has no data in the selected time range'), outsidePrint);
 });
 
 test('a polled file reads as provisional, with its rolled-up peaks named', () => {
@@ -78,6 +83,8 @@ test('a polled file reads as provisional, with its rolled-up peaks named', () =>
   const out = text(method(ctx));
   assert.ok(out.includes('Provisional tier 3'), out.slice(0, 400));
   assert.ok(out.includes('live polling'));
+  const missed = text(method(context(ctx.data, { range: [1, 2] })));
+  assert.ok(missed.includes('No data in the time range set under Assumptions. The file covers'), missed.slice(0, 600));
   const printed = SP.print.html(ctx, PRINTED);
   assert.ok(printed.includes('banner-caution'));
   assert.ok(printed.includes('print-provisional'));
@@ -92,7 +99,8 @@ test('the printed summary shows the totals the parity test checks against the Go
   for (const s of [
     'printed Oct 2, 2026', ui.money(go.savings), ui.money(go.spend), ui.money(go.spend - go.savings), ui.money(go.savings / 12),
     ui.num(go.cores, 1) + ' cores', ui.num(go.gib, 1) + ' GiB', ui.pct(go.savings / go.spend) + ' of projected spend',
-    '1 of 4 workloads has too little data for a savings figure and is not in the totals: report-worker (batch) missing memory usage data.',
+    '1 of 4 workloads has too little data for a savings figure and is not in the totals: report-worker (batch) is missing memory usage data.',
+    'priced from the node inventory (2 of 2 nodes at AWS us-east-1 on-demand list prices; spot nodes are priced at on-demand), averaged',
     'Target is 1.1 times the highest usage in any 15-minute window'
   ]) assert.ok(out.includes(s), s);
   assert.deepStrictEqual(out.match(/checkout-api|ledger-db|search-indexer/g), ['checkout-api', 'ledger-db', 'search-indexer']);
@@ -104,6 +112,7 @@ test('the printed summary follows the levers', () => {
   const out = text(SP.print.html(ctx, PRINTED));
   assert.ok(out.includes(ui.money(ctx.result.totals.savings)));
   assert.notStrictEqual(ctx.result.totals.savings, model.analyze(fixture()).totals.savings);
+  assert.ok(text(SP.print.html(context(data, { rates: { perCore: 0.05, perGiB: 0.006 } }), PRINTED)).includes('priced at $0.05 per core-hour and $0.006 per GiB-hour, averaged'));
   for (const s of ['Filtered', 'Target is 1.3 times', 'Only the namespaces shop are counted.', 'at $100,000 loaded cost']) assert.ok(out.includes(s), s);
 });
 

@@ -34,11 +34,20 @@
       '</div>';
   }
 
-  function confidence(r, level, st) {
+  // The model's reasons as the end of a sentence about the workload.
+  function why(reason) {
+    if (reason === 'Missing replica count') return 'has no replica count';
+    if (reason === 'No time with complete data') return 'never has all its series at the same time';
+    if (reason === 'No data in the selected time range') return 'has no data in the selected time range';
+    if (/^Missing /.test(reason)) return 'is missing ' + reason.slice(8);
+    return 'is left out: ' + reason.charAt(0).toLowerCase() + reason.slice(1);
+  }
+
+    function confidence(r, level, st) {
     var t = r.totals, out = '<p>' + ui.confidencePill(level) + ' ' + esc(summary.confidenceText(r.fidelity, level, st.peakMinutes)) + '</p>';
     var left = r.workloads.filter(function (w) { return !w.series; });
     if (left.length) {
-      var named = left.slice(0, 3).map(function (w) { return w.name + ' (' + w.ns + ') ' + w.reason.charAt(0).toLowerCase() + w.reason.slice(1); });
+      var named = left.slice(0, 3).map(function (w) { return w.name + ' (' + w.ns + ') ' + why(w.reason); });
       out += '<p class="print-muted">' + ui.num(left.length) + ' of ' + ui.num(t.workloads) + ' ' + ui.plural(t.workloads, 'workload') + ' ' +
         (left.length === 1 ? 'has' : 'have') + ' too little data for a savings figure and ' + (left.length === 1 ? 'is' : 'are') + ' not in the totals: ' +
         esc(named.join('; ') + (left.length > 3 ? '; and ' + (left.length - 3) + ' more' : '')) + '.</p>';
@@ -83,8 +92,8 @@
   function method(r, st) {
     var scope = st.namespaces ? ' Only the namespaces ' + st.namespaces.join(', ') + ' are counted.' : '';
     return '<div class="print-box"><h2>How the figure is computed</h2><p>' + esc('Target is ' + ui.num(1 + st.headroom, 2) + ' times the highest usage in any ' +
-      st.peakMinutes + '-minute window, per workload, for CPU and memory. Waste is the amount requested above the target. A workload’s cost is the larger of its CPU and memory cost, priced with ' +
-      r.pricing.basis + ', averaged over ' + (st.range ? 'the selected time range' : 'the window') + ' and annualized at 8,760 hours. Replica counts are taken as they were; horizontal scaling is out of scope.' + scope) + '</p></div>';
+      st.peakMinutes + '-minute window, per workload, for CPU and memory. Waste is the amount requested above the target. A workload’s cost is the larger of its CPU and memory cost, priced ' +
+      (r.pricing.custom ? 'at ' + r.pricing.basis : 'from the node inventory (' + r.pricing.basis + ')') + ', averaged over ' + (st.range ? 'the selected time range' : 'the window') + ' and annualized at 8,760 hours. Replica counts are taken as they were; horizontal scaling is out of scope.' + scope) + '</p></div>';
   }
 
   // now is the print date; tests pass a fixed one.

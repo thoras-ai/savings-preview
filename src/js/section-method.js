@@ -36,9 +36,12 @@
   function windowText(r, st) {
     var f = r.fidelity;
     if (f.start === null) return 'No usage readings';
+    var all = f.snapshot ? 'one reading, ' + time(f.start) + ' UTC' : span(f.start, f.end);
+    var a = st.range ? Math.max(st.range[0], f.start) : f.start, b = st.range ? Math.min(st.range[1], f.end) : f.end;
+    if (st.range && a >= b) return 'No data in the time range set under Assumptions. The file covers ' + all + '.';
     if (f.snapshot) return 'One reading, ' + time(f.start) + ' UTC';
-    if (!st.range) return span(f.start, f.end);
-    return span(Math.max(st.range[0], f.start), Math.min(st.range[1], f.end)) + ', the time range set under Assumptions. The file covers ' + span(f.start, f.end) + '.';
+    if (!st.range) return all;
+    return span(a, b) + ', the time range set under Assumptions. The file covers ' + all + '.';
   }
 
   function resolution(f) {
@@ -122,13 +125,15 @@
     return who(w) + ': ' + esc(w.reason) + '.';
   }
 
-  function nodeItems(nodes) {
+  // With rates set under Assumptions the nodes do not set prices, so only the
+  // nodes the file could not price are worth naming.
+  function nodeItems(nodes, custom) {
     var out = [];
     nodes.forEach(function (n) {
       var name = '<span class="wl-name">' + esc(n.name) + '</span>';
       if (!(n.cores > 0) || !(n.gib > 0)) out.push(name + ' has no allocatable CPU or memory, so it is not used for pricing.');
       else if (model.nodePrices[n.hostType] === undefined) out.push(name + (n.hostType && n.hostType !== 'unknown' ? ' has instance type ' + code(n.hostType) + ', which has no list price here,' : ' has no instance type,') + ' so it is not used for pricing.');
-      else {
+      else if (!custom) {
         if (n.capacity === 'spot') out.push(name + ' is a spot node priced at the on-demand list price.');
         if (n.region && n.region !== 'us-east-1') out.push(name + ' is in ' + esc(n.region) + ' and priced at us-east-1 list prices.');
       }
@@ -148,7 +153,7 @@
 
   function missingCard(r, data) {
     var left = r.workloads.filter(function (w) { return !w.series || w.status === 'partial'; });
-    var items = left.map(workloadItem).concat(nodeItems(data.nodes), r.fidelity.notes.map(esc));
+    var items = left.map(workloadItem).concat(nodeItems(data.nodes, r.pricing.custom), r.fidelity.notes.map(esc));
     var after = [];
     if (left.some(unread)) after.push('A workload’s cost is the larger of its CPU and memory cost, so it cannot be computed from one of them.');
     after.push((left.length ? 'Every other' : 'Every') + ' required series was present for every workload.');
