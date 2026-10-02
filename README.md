@@ -2,6 +2,8 @@
 
 A read-only CLI that reads a cluster's existing usage history, writes it as one OTel metrics file, and shows what Thoras would have saved.
 
+To run it on your cluster, start with [docs/getting-started.md](docs/getting-started.md).
+
 ![The report page with the synthetic sample: the summary section](docs/images/report.png)
 
 The report page is also published at https://curly-dollop-gw8yzn1.pages.github.io/. The site is private: it needs a GitHub login with access to the thoras-ai organization. It opens a `savings-preview.otlp.json`, a `savings-preview.zip` or a `report.html` in the browser, and nothing is uploaded.
