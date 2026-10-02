@@ -2,18 +2,48 @@
 (function () {
   'use strict';
 
-  var model = SP.model, chart = SP.chart;
+  var model = SP.model, chart = SP.chart, files = SP.files;
   var DATA_URL = new URLSearchParams(location.search).get('data') || 'savings-preview.otlp.json';
-  var state = { result: null, selected: null, mode: 'spend', sort: { key: 'annualSavings', dir: -1 } };
+  var THEME_KEY = 'savings-preview-theme';
+  var state = { result: null, selected: null, mode: 'spend', sort: { key: 'annualSavings', dir: -1 }, theme: 'auto' };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
   }
 
+  // Storage can be missing or blocked (private windows, pages opened from disk).
+  function storedTheme() {
+    try {
+      var v = localStorage.getItem(THEME_KEY);
+      return v === 'light' || v === 'dark' ? v : 'auto';
+    } catch (e) { return 'auto'; }
+  }
+
+  function setTheme(choice) {
+    state.theme = choice;
+    try {
+      if (choice === 'auto') localStorage.removeItem(THEME_KEY);
+      else localStorage.setItem(THEME_KEY, choice);
+    } catch (e) { /* the choice lasts until the page closes */ }
+    applyTheme();
+  }
+
   function applyTheme() {
-    var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var dark = state.theme === 'dark' ||
+      (state.theme === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    Array.prototype.forEach.call(document.querySelectorAll('[data-theme-choice]'), function (b) {
+      b.setAttribute('aria-checked', String(b.getAttribute('data-theme-choice') === state.theme));
+    });
+  }
+
+  // A page with data-samples is the published copy: it opens on the upload
+  // screen and lists sample files next to it.
+  function samples() {
+    var raw = document.body.getAttribute('data-samples');
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch (e) { return null; }
   }
 
   function money(v) {
@@ -28,9 +58,18 @@
   function showError(message) {
     $('loading').hidden = true;
     $('report').hidden = true;
+    $('open-another').hidden = true;
     $('start').hidden = false;
     $('error').textContent = message || '';
     $('error').hidden = !message;
+    $('file').value = '';
+  }
+
+  function showLoading() {
+    $('start').hidden = true;
+    $('report').hidden = true;
+    $('open-another').hidden = true;
+    $('loading').hidden = false;
   }
 
   function load(doc) {
@@ -41,6 +80,7 @@
     $('loading').hidden = true;
     $('start').hidden = true;
     $('report').hidden = false;
+    $('open-another').hidden = false;
     renderAll();
   }
 
@@ -55,13 +95,25 @@
   }
 
   function readFile(file) {
-    var reader = new FileReader();
-    reader.onload = function () {
-      var doc;
-      try { doc = JSON.parse(reader.result); } catch (e) { showError('That file is not valid JSON.'); return; }
-      load(doc);
-    };
-    reader.readAsText(file);
+    showLoading();
+    files.read(file).then(load, function (e) { showError(e.message); });
+  }
+
+  function openSample(url) {
+    showLoading();
+    fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('The sample did not load (HTTP ' + r.status + ').');
+      return r.arrayBuffer();
+    }).then(function (buf) { return files.fromBytes(new Uint8Array(buf)); })
+      .then(load, function (e) { showError(e.message); });
+  }
+
+  function renderSamples(list) {
+    $('sample-list').innerHTML = list.map(function (s) {
+      return '<li><button type="button" class="sample" data-sample="' + esc(s.url) + '"><span class="sample-name">' + esc(s.name) +
+        '</span><span class="sample-detail">' + esc(s.detail) + '</span></button></li>';
+    }).join('');
+    $('samples').hidden = false;
   }
 
   function renderAll() {
@@ -131,10 +183,9 @@
     tabs.innerHTML = Object.keys(chart.modes).map(function (k) {
       return '<button type="button" role="tab" aria-selected="' + (k === state.mode) + '" data-mode="' + k + '">' + chart.modes[k].label + '</button>';
     }).join('');
-    var mode = chart.modes[state.mode];
-    $('legend').innerHTML = '<span><i class="swatch swatch-a"></i>' + esc(mode.aName) + '</span>' +
-      '<span><i class="swatch swatch-b"></i>' + esc(mode.bName) + '</span>' +
-      '<span><i class="swatch swatch-gap"></i>' + (mode.money ? 'Waste' : 'Gap') + '</span>';
+    $('legend').innerHTML = chart.legend(state.mode).map(function (item) {
+      return '<span><i class="swatch swatch-' + item.kind + '"></i>' + esc(item.name) + '</span>';
+    }).join('');
     var host = $('chart');
     if (!series) { host.innerHTML = '<p class="empty">No workload has enough data to chart.</p>'; return; }
     chart.render(host, series, state.mode, { title: w ? w.name : 'Whole cluster' });
@@ -218,11 +269,21 @@
       }
     });
     $('file').addEventListener('change', function (e) { if (e.target.files[0]) readFile(e.target.files[0]); });
-    ['dragover', 'drop'].forEach(function (ev) {
+    ['dragover', 'dragleave', 'drop'].forEach(function (ev) {
       document.addEventListener(ev, function (e) {
         e.preventDefault();
+        $('drop').classList.toggle('over', ev === 'dragover');
         if (ev === 'drop' && e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
       });
+    });
+    $('open-another').addEventListener('click', function () { showError(''); });
+    $('sample-list').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-sample]');
+      if (b) openSample(b.getAttribute('data-sample'));
+    });
+    $('theme').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-theme-choice]');
+      if (b) setTheme(b.getAttribute('data-theme-choice'));
     });
     var timer;
     window.addEventListener('resize', function () {
@@ -242,10 +303,12 @@
     try { return JSON.parse(el.textContent); } catch (e) { return null; }
   }
 
+  state.theme = storedTheme();
   applyTheme();
   bind();
-  var inline = inlineData();
+  var inline = inlineData(), list = samples();
+  if (list) renderSamples(list);
   if (inline) load(inline);
-  else if (location.protocol === 'file:') showError('');
+  else if (list || location.protocol === 'file:') showError('');
   else fetchData();
 })();

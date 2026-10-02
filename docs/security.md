@@ -73,7 +73,7 @@ It contains no Secrets, environment variables, logs, images, annotations, labels
 
 ## Where the data goes
 
-Nowhere, unless you send it. The program makes no network requests other than to the API server, the `--url` store, or the Datadog API. The report page (`scripts/build_report.py`, also built into the binary) is one offline HTML file that reads the output file in the browser and makes no network requests. `run` serves the page and the compact file on 127.0.0.1 on a random port until you press Ctrl-C; the server answers only requests addressed to that address, so it cannot be reached from other machines or read by a web page under another name. Sharing the output file or the zip with Thoras is a separate step that you choose to take.
+Nowhere, unless you send it. The program makes no network requests other than to the API server, the `--url` store, or the Datadog API. The report page (`scripts/build_report.py`, also built into the binary) is one offline HTML file that reads the output file in the browser and makes no network requests. The copy published on GitHub Pages (`build_report.py --site`) also fetches its two sample files from the same site when one is picked; a file opened there is read in the browser and not uploaded. `run` serves the page and the compact file on 127.0.0.1 on a random port until you press Ctrl-C; the server answers only requests addressed to that address, so it cannot be reached from other machines or read by a web page under another name. Sharing the output file or the zip with Thoras is a separate step that you choose to take.
 
 ## How to check this
 

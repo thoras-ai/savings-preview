@@ -2,6 +2,10 @@
 
 A read-only CLI that reads a cluster's existing usage history, writes it as one OTel metrics file, and shows what Thoras would have saved.
 
+![The report page with the synthetic sample, CPU view](docs/images/report.png)
+
+The report page is also published at https://curly-dollop-gw8yzn1.pages.github.io/. The site is private: it needs a GitHub login with access to the thoras-ai organization. It opens a `savings-preview.otlp.json`, a `savings-preview.zip` or a `report.html` in the browser, and nothing is uploaded.
+
 ## Quickstart
 
     make build                      # bin/savings-preview-{darwin,linux}-{amd64,arm64}
@@ -24,6 +28,7 @@ Or build for this machine only with `go build -o bin/savings-preview ./cmd/savin
 
 - `docs/contract.md`: the OTel file every adapter writes and the report reads.
 - `fixtures/savings-preview.otlp.json`: a synthetic file that follows the contract. Regenerate it with `python3 scripts/gen_fixture.py`.
+- `fixtures/minikube-poll.otlp.json`: one minute of `savings-preview poll` readings from a local minikube cluster, with the cluster, node, namespace and workload names replaced (`kube-system`, `cert-manager`, `coredns` and `metrics-server` kept).
 - `scripts/validate_contract.py FILE`: checks a file against the contract.
 - `src/` and `scripts/build_report.py`: the report page. It reads one contract file and shows spend, savings, a requested-versus-target chart and a workload table.
 - `docs/security.md`: what the CLI reads and writes, where its output goes, and how to check. `deploy/rbac/` has read-only ServiceAccounts for each source.
@@ -31,14 +36,17 @@ Or build for this machine only with `go build -o bin/savings-preview ./cmd/savin
 - `docs/releasing.md`: how a `v*` tag becomes a GitHub release with binaries and checksums.
 - `docs/poll-adapter.md`: the poll adapter, for clusters with no usage history. It reads the cluster at an interval and keeps the readings on disk.
 - `docs/datadog-adapter.md`: the Datadog adapter. It reads the history from the Datadog metrics query API with an API key and an application key.
+- `docs/design.md`: the design rules the report page follows, and how to re-sync the design tokens in `design/`.
 
-Run every test with `make test`, or the Go tests with `go test ./...`, the contract tests with `python3 -m unittest discover -s tests`, and the page tests with `node --test tests/report_model.test.js`. The scripts need Python 3 and the standard library only.
+Run every test with `make test`, or the Go tests with `go test ./...`, the contract tests with `python3 -m unittest discover -s tests`, and the page tests with `node --test tests/*.test.js`. The scripts need Python 3 and the standard library only.
 
 ## Report page
 
 `python3 scripts/build_report.py [OUTDIR]` writes `OUTDIR/index.html` (default `dist/`): one file with the scripts, styles and fonts inlined. It makes no network requests, so it works offline.
 
-The page fetches `savings-preview.otlp.json` from the same directory, or the file named in the `data` query parameter. A page that holds the file in a `<script type="application/json" id="report-data">` element, like the `report.html` in the zip, uses that instead of fetching. When the fetch fails, for example when the page is opened from disk, it asks for the file instead.
+The page fetches `savings-preview.otlp.json` from the same directory, or the file named in the `data` query parameter. A page that holds the file in a `<script type="application/json" id="report-data">` element, like the `report.html` in the zip, uses that instead of fetching. When the fetch fails, for example when the page is opened from disk, it asks for a file instead: a contract file, a `savings-preview.zip`, or a `report.html`, chosen or dropped on the page and read in the browser. The header switches between the light and dark themes or follows the system (Auto); the choice is kept in the browser's local storage.
+
+`python3 scripts/build_report.py --site OUTDIR` builds the copy for GitHub Pages: it opens on the upload screen and lists the two fixtures as samples, copied to `OUTDIR/samples/`. `.github/workflows/pages.yml` builds and deploys it on every push to `main`; the repository's Pages source must be set to GitHub Actions. The site holds only the page and the two fixtures, no customer data.
 
 To try it with the fixture:
 
@@ -48,4 +56,4 @@ To try it with the fixture:
 
 The savings math is in `src/js/model.js`. The target is 1.1 times the trailing 15-minute maximum of usage, per workload. Waste is the request above the target. Cost is the larger of the CPU and memory cost, priced from the node resources when their instance types are in the built-in AWS price table, and from a 4-core, 16 GiB, $0.192 per hour node otherwise. A container missing a required series is listed but not counted. When a file mixes steps (`thoras.step_spans`), each point counts for its own step, averages are weighted by time, and peaks come from the `.max` series where the file has them.
 
-`src/styles/primitives.css` and `src/styles/semantic.css` are copies of the dashboard's design tokens (`dashboard/src/styles/tokens/`). Re-copy them to pick up token changes; `zinc.css` supplies the Tailwind zinc values they reference.
+The page's design tokens are derived from the dashboard's tokens and live in `design/`. `docs/design.md` describes them, the rules the page follows, and how to re-sync them with `scripts/sync_design_tokens.py`.
