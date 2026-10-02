@@ -35,6 +35,9 @@ type LabelsMissingError struct {
 	Metric       string
 	Labels       []string
 	Aggregations bool // the store is known to aggregate series, as Grafana Cloud Adaptive Metrics does
+	// Runtime is set when a container runtime that does not label cAdvisor
+	// series would look the same.
+	Runtime bool
 }
 
 func (e *LabelsMissingError) Error() string {
@@ -43,6 +46,10 @@ func (e *LabelsMissingError) Error() string {
 	if e.Aggregations {
 		cause = "an Adaptive Metrics aggregation rule probably removed them"
 		fix = fmt.Sprintf("Exclude %s from Adaptive Metrics recommendations, or change its rule to keep these labels, and run again once new data has arrived.", e.Metric)
+	}
+	if e.Runtime {
+		cause += ", or the cluster's container runtime does not label cAdvisor series (older containerd setups, minikube), and splitting pod-level usage is not safe on this store"
+		fix += " Without such a rule, the runtime needs to label container series."
 	}
 	return fmt.Sprintf("%s has series but none with the %s label%s: %s. Without them usage and requests cannot be attributed to workloads, and the figures would be wrong. %s",
 		e.Metric, strings.Join(e.Labels, ", "), plural(len(e.Labels)), cause, fix)

@@ -96,6 +96,9 @@ func runPrometheus(args []string) error {
 			return err
 		}
 		if *awsRegion != "" {
+			if store.Name != prometheus.BackendAMP {
+				return fmt.Errorf("--aws-region applies to Amazon Managed Prometheus, not to %s", store.Name)
+			}
 			store.Region = *awsRegion
 		}
 		auth, err := directAuth(ctx, store, credentialFiles{token: *tokenFile, basic: *basicFile, headers: *headerFile}, *tenant)
@@ -323,6 +326,7 @@ func directHint(err error, store prometheus.Backend) error {
 		case prometheus.BackendAMP:
 			return fmt.Errorf("%w (the AWS identity needs aps:QueryMetrics on the workspace; see docs/prometheus-adapter.md)", err)
 		}
+		return fmt.Errorf("%w (pass the store's credentials with --basic-auth-file, --bearer-token-file or --header-file, or %s, %s or %s)", err, envBasic, envBearer, envHeaders)
 	}
 	return err
 }

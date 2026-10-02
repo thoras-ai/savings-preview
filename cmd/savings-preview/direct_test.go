@@ -147,8 +147,19 @@ func TestTargetURLNeedsClusterName(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "only one of --url") {
 		t.Errorf("got %v", err)
 	}
+	err = runPrometheus([]string{"--url", "http://prom.example", "--aws-region", "us-east-1", "--cluster-name", "c"})
+	if err == nil || !strings.Contains(err.Error(), "--aws-region applies") {
+		t.Errorf("got %v", err)
+	}
 	err = runPrometheus([]string{"--target", "monitoring/prometheus:9090", "--tenant", "t", "--cluster-name", "c"})
 	if err == nil || !strings.Contains(err.Error(), "apply only with --url") {
+		t.Errorf("got %v", err)
+	}
+}
+
+func TestDirectHintForGateway(t *testing.T) {
+	err := directHint(&prometheus.APIError{Status: 401, Message: "<html>401 Authorization Required</html>"}, prometheus.Backend{Name: prometheus.BackendMimir})
+	if err == nil || !strings.Contains(err.Error(), "--basic-auth-file") {
 		t.Errorf("got %v", err)
 	}
 }

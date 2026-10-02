@@ -115,7 +115,7 @@ Every store is checked for the labels the queries join on, as described in [Miss
 savings-preview prometheus --url https://mimir.example.com --tenant TENANT --cluster-name prod-us
 ```
 
-- **URL:** the gateway, query-frontend or monolithic Mimir. The Prometheus API is under `/prometheus`, which is added when the URL has no path. Give the path explicitly when the operator changed `prometheus_http_prefix` or a gateway maps it elsewhere.
+- **URL:** the gateway, query-frontend or monolithic Mimir. The Prometheus API is under `/prometheus`, which is added when the URL has no path. Give the path explicitly when the operator changed `prometheus_http_prefix` or a gateway maps it elsewhere. Cortex serves the API under `/api/prom`, so a Cortex URL needs that path.
 - **Tenant:** `--tenant` sets `X-Scope-OrgID`. It is not needed when multi-tenancy is off. A multi-tenant Mimir answers `401 no org id` without it.
 - **Gateway auth:** whatever the gateway in front of Mimir uses, as basic auth, a bearer token or headers. Mimir itself does no authentication.
 - **What the customer provides:** the URL, the tenant ID that holds the cluster's metrics, and gateway credentials with read access to that tenant.
@@ -132,7 +132,7 @@ SAVINGS_PREVIEW_BASIC_AUTH=INSTANCE_ID:TOKEN savings-preview prometheus \
 - **Credentials:** basic auth, the Prometheus instance ID (the numeric user on the same page) as user and an access policy token as password.
 - **What the customer creates:** an access policy scoped to the stack with the `metrics:read` scope, and a token for it. No other scope is needed.
 - **Limits:** a query may cover at most 32 days, counting range selectors. Range queries are split by day, and the instant queries that look back over the whole `--days` window are split into pieces of at most 32 days, so `--days` beyond 32 works.
-- **Adaptive Metrics:** an aggregation rule can drop the `pod`, `container` or other labels from cAdvisor and kube-state-metrics series. The run then stops and names the metric and the labels, instead of producing usage that cannot be attributed to workloads. On Grafana Cloud usage is never split from pod-level series: there a series without a `container` label may be the sum of all of a pod's containers and the pod total, which would double the usage. The fix is to exclude the metric from Adaptive Metrics recommendations, or to keep the labels in its rule, and run again once new data has arrived.
+- **Adaptive Metrics:** an aggregation rule can drop the `pod`, `container` or other labels from cAdvisor and kube-state-metrics series. The run then stops and names the metric and the labels, instead of producing usage that cannot be attributed to workloads. A cluster whose container runtime does not label cAdvisor series (older containerd setups, minikube) stops the same way on Grafana Cloud, since its pod-level series cannot be told apart from aggregated ones. On Grafana Cloud usage is never split from pod-level series: there a series without a `container` label may be the sum of all of a pod's containers and the pod total, which would double the usage. The fix is to exclude the metric from Adaptive Metrics recommendations, or to keep the labels in its rule, and run again once new data has arrived.
 
 ### Amazon Managed Prometheus
 

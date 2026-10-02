@@ -183,7 +183,7 @@ func TestAdaptiveMetricsDroppedContainerLabel(t *testing.T) {
 	if !errors.As(err, &le) || le.Metric != "container_memory_working_set_bytes" || strings.Join(le.Labels, ",") != "container,image" {
 		t.Fatalf("got %v", err)
 	}
-	if !strings.Contains(err.Error(), "Adaptive Metrics") {
+	if !strings.Contains(err.Error(), "Adaptive Metrics") || !strings.Contains(err.Error(), "container runtime") {
 		t.Errorf("message: %v", err)
 	}
 	for _, q := range f.requests {

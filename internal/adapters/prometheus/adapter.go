@@ -118,7 +118,7 @@ func Run(ctx context.Context, o Options) (*contract.File, *Report, error) {
 			if missing, err := c.missingLabels(ctx, "container_memory_working_set_bytes", containerLabels, o.Now); err != nil {
 				return nil, rep, fmt.Errorf("probe container metrics: %w", err)
 			} else if len(missing) > 0 {
-				return nil, rep, &LabelsMissingError{Metric: "container_memory_working_set_bytes", Labels: missing, Aggregations: true}
+				return nil, rep, &LabelsMissingError{Metric: "container_memory_working_set_bytes", Labels: missing, Aggregations: true, Runtime: true}
 			}
 			return nil, rep, fmt.Errorf("the store has no per-container usage metrics (container_memory_working_set_bytes with container and image labels); the kubelet cAdvisor job is probably not collected")
 		}
