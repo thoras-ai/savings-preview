@@ -32,6 +32,7 @@ var (
 		"src/js/section-cluster.js",
 		"src/js/section-assumptions.js",
 		"src/js/section-method.js",
+		"src/js/print.js",
 		"src/js/app.js",
 	}
 	styles   = []string{"design/zinc.css", "design/primitives.css", "design/semantic.css", "design/elevation.css", "src/styles/report.css"}

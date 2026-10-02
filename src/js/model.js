@@ -28,7 +28,10 @@
     cpuReq: 'k8s.container.cpu.request.desired',
     memReq: 'k8s.container.memory.request.desired',
     cpuAlloc: 'k8s.node.cpu.allocatable',
-    memAlloc: 'k8s.node.memory.allocatable'
+    memAlloc: 'k8s.node.memory.allocatable',
+    cpuLim: 'k8s.container.cpu.limit.desired',
+    memLim: 'k8s.container.memory.limit.desired',
+    oom: 'thoras.container.oom_kills'
   };
   var REQUIRED = [M.cpuUse, M.memUse, M.cpuReq, M.memReq];
   var REPLICA_METRICS = { deployment: 'k8s.deployment.pod.desired', statefulset: 'k8s.statefulset.pod.desired' };
@@ -89,12 +92,14 @@
   function parse(doc) {
     var rms = doc && doc.resourceMetrics;
     if (!Array.isArray(rms) || !rms.length) throw new Error('No resourceMetrics found. This is not a Savings Preview file.');
-    var containers = [], workloads = {}, nodes = [], cluster = '';
+    var containers = [], workloads = {}, nodes = [], cluster = '', contract = { version: '', schemaUrl: '' };
     rms.forEach(function (rm) {
       var a = attrMap(rm.resource);
       if (a['k8s.cluster.name'] && !cluster) cluster = a['k8s.cluster.name'];
+      if (rm.schemaUrl && !contract.schemaUrl) contract.schemaUrl = String(rm.schemaUrl);
       var series = {};
       (rm.scopeMetrics || []).forEach(function (sm) {
+        if (sm.scope && sm.scope.version && !contract.version) contract.version = String(sm.scope.version);
         (sm.metrics || []).forEach(function (m) { series[m.name] = readSeries(m); });
       });
       var kind = a['k8s.deployment.name'] ? 'deployment' : a['k8s.statefulset.name'] ? 'statefulset' : null;
@@ -132,7 +137,7 @@
       }
     });
     if (!containers.length) throw new Error('The file has no container series, so there is nothing to analyze.');
-    return { cluster: cluster, containers: containers, workloads: workloads, nodes: nodes };
+    return { cluster: cluster, contract: contract, containers: containers, workloads: workloads, nodes: nodes };
   }
 
   function pricing(nodes) {
@@ -216,7 +221,8 @@
   function prepareWorkload(id, info, parts) {
     var p = {
       id: id, ns: info.ns, kind: info.kind, name: info.name, containers: [], notes: [], status: 'excluded', reason: '',
-      s: null, weight: null, wasteCpu: null, wasteMem: null, peaks: null
+      s: null, weight: null, wasteCpu: null, wasteMem: null, peaks: null,
+      replicas: null, limCpu: null, limMem: null, oom: oomKills(parts)
     };
     var usable = [];
     parts.forEach(function (c) {
@@ -247,6 +253,9 @@
     var s = {};
     FIELDS.forEach(function (f) { s[f] = new Float64Array(n); });
     var pkCpu = s.peakCpu, pkMem = s.peakMem;
+    // Per-pod limits, summed over containers; null when any container has none.
+    var limCpu = new Float64Array(n), limMem = new Float64Array(n);
+    var hasLimCpu = true, hasLimMem = true;
     usable.forEach(function (c, ci) {
       var at = function (name) { return resample(c.series[name], grid, c.step, c.spans, !!c.held[name]); };
       var cu = at(M.cpuUse), mu = at(M.memUse), cr = at(M.cpuReq), mr = at(M.memReq);
@@ -262,6 +271,14 @@
         pkCpu[i] += (isFinite(pc[i]) ? pc[i] : cu[i]) * replicas[i];
         pkMem[i] += (isFinite(pm[i]) ? pm[i] : mu[i]) / GIB * replicas[i];
       }
+      if (c.series[M.cpuLim] && c.series[M.cpuLim].t.length) {
+        var lc = at(M.cpuLim);
+        for (var a = 0; a < n; a++) limCpu[a] += lc[a];
+      } else hasLimCpu = false;
+      if (c.series[M.memLim] && c.series[M.memLim].t.length) {
+        var lm = at(M.memLim);
+        for (var b = 0; b < n; b++) limMem[b] += lm[b] / GIB;
+      } else hasLimMem = false;
     });
     var anyValid = false;
     for (var i = 0; i < n; i++) {
@@ -273,11 +290,26 @@
     s.t = grid; s.step = step;
     p.s = s;
     p.weight = weight;
+    p.replicas = replicas;
+    p.limCpu = hasLimCpu ? limCpu : null;
+    p.limMem = hasLimMem ? limMem : null;
     p.wasteCpu = new Float64Array(n);
     p.wasteMem = new Float64Array(n);
     p.status = p.containers.some(function (c) { return c.excluded; }) ? 'partial' : 'ok';
     if (p.status === 'partial') p.reason = 'Some containers lack data and are left out';
     return p;
+  }
+
+  // OOM kills across a workload's containers, summed by time: {t, n}, sorted.
+  function oomKills(parts) {
+    var byTime = {};
+    parts.forEach(function (c) {
+      var s = c.series[M.oom];
+      if (!s) return;
+      for (var i = 0; i < s.t.length; i++) if (s.v[i] > 0) byTime[s.t[i]] = (byTime[s.t[i]] || 0) + s.v[i];
+    });
+    var t = Object.keys(byTime).map(Number).sort(function (a, b) { return a - b; });
+    return { t: Float64Array.from(t), n: Float64Array.from(t.map(function (x) { return byTime[x]; })) };
   }
 
   // First index whose time is at or after t, in a sorted time array.
@@ -301,7 +333,7 @@
     var res = {
       id: p.id, ns: p.ns, kind: p.kind, name: p.name, containers: p.containers, notes: p.notes,
       status: p.status, reason: p.reason, series: null,
-      annualSpend: 0, annualSavings: 0, savingsPct: 0, wasteCores: 0, wasteGiB: 0, reqCores: 0, reqGiB: 0
+      annualSpend: 0, annualSavings: 0, savingsPct: 0, wasteCores: 0, wasteGiB: 0, reqCores: 0, reqGiB: 0, useCores: 0, useGiB: 0
     };
     if (!p.s) return res;
     var s = p.s, n = s.t.length, weight = p.weight, lo = 0, hi = n;
@@ -327,6 +359,8 @@
     res.series = lv.range ? clip(s, lv.range) : s;
     res.reqCores = mean(s.reqCpu, weight, lo, hi);
     res.reqGiB = mean(s.reqMem, weight, lo, hi);
+    res.useCores = mean(s.useCpu, weight, lo, hi);
+    res.useGiB = mean(s.useMem, weight, lo, hi);
     var cur = mean(s.cur, weight, lo, hi);
     res.annualSpend = cur * HOURS_PER_YEAR;
     res.annualSavings = (cur - mean(s.opt, weight, lo, hi)) * HOURS_PER_YEAR;
@@ -494,7 +528,7 @@
     var fid = fidelity(data.containers);
     fid.notes = noteSummaries(workloads);
     return {
-      cluster: data.cluster, fidelity: fid, pricing: pricing(data.nodes), nodes: data.nodes,
+      cluster: data.cluster, contract: data.contract, fidelity: fid, pricing: pricing(data.nodes), nodes: data.nodes,
       namespaces: namespaces.sort(), workloads: workloads
     };
   }
@@ -533,11 +567,12 @@
       if (!scope || scope[p.ns]) workloads.push(computeWorkload(p, rates, lv));
     });
     var counted = workloads.filter(function (w) { return w.series; });
-    var totals = { spend: 0, savings: 0, cores: 0, gib: 0, reqCores: 0, reqGiB: 0, workloads: workloads.length, counted: counted.length };
+    var totals = { spend: 0, savings: 0, cores: 0, gib: 0, reqCores: 0, reqGiB: 0, useCores: 0, useGiB: 0, workloads: workloads.length, counted: counted.length };
     counted.forEach(function (w) {
       totals.spend += w.annualSpend; totals.savings += w.annualSavings;
       totals.cores += w.wasteCores; totals.gib += w.wasteGiB;
       totals.reqCores += w.reqCores; totals.reqGiB += w.reqGiB;
+      totals.useCores += w.useCores; totals.useGiB += w.useGiB;
     });
     var series = counted.length ? combine(counted) : null;
     if (series && lv.range) series = clip(series, lv.range);
@@ -559,7 +594,8 @@
   }
 
   var api = {
-    analyze: analyze, prepare: prepare, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, resample: resample, rollingMax: rollingMax,
+    analyze: analyze, prepare: prepare, nodePrices: NODE_PRICES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
+    lowerBound: lowerBound, upperBound: upperBound, mean: mean,
     fidelityLabel: fidelityLabel, formatSpan: formatSpan, formatStep: formatStep, notes: NOTES, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

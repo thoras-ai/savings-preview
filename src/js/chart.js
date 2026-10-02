@@ -85,11 +85,17 @@
     return mode.money ? fmtMoney(v) + ' per year' : fmtNum(v, 2) + ' ' + mode.unit;
   }
 
+  // opts: title, height, fromZero, names ({a, b} to rename those series),
+  // className (added to the svg) and markers ([{t, label}], vertical lines at
+  // those times, such as OOM kills).
   function render(host, series, modeKey, opts) {
-    var mode = MODES[modeKey];
     opts = opts || {};
+    var mode = opts.names ? Object.assign({}, MODES[modeKey], { aName: opts.names.a || MODES[modeKey].aName, bName: opts.names.b || MODES[modeKey].bName }) : MODES[modeKey];
     var width = Math.max(320, host.clientWidth || 800);
     var height = opts.height || 340;
+    // Pattern ids are document-wide, and a pattern inside a hidden chart does
+    // not paint, so a chart shown only in print passes its own id.
+    var hatchId = opts.patternId || 'hatch';
     var d = downsample(series, mode);
     var n = d.t.length;
     var vals = [];
@@ -162,16 +168,22 @@
     }
     if (n === 1) xt = '<text class="axis" x="' + (m.left + w / 2) + '" y="' + (height - 8) + '" text-anchor="middle">' + esc(fmtDate(t0, true)) + '</text>';
 
+    var marks = (opts.markers || []).filter(function (mk) { return n > 1 && mk.t >= t0 && mk.t <= t1 + series.step; }).map(function (mk) {
+      var px = (m.left + Math.min(1, (mk.t - t0) / span) * w).toFixed(1);
+      return '<g class="marker"><line x1="' + px + '" x2="' + px + '" y1="' + m.top + '" y2="' + (m.top + h) + '"/>' +
+        '<circle cx="' + px + '" cy="' + m.top + '" r="4"><title>' + esc(mk.label) + '</title></circle></g>';
+    }).join('');
+
     host.innerHTML =
-      '<svg class="chart" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' +
-      esc((opts.title || 'Chart') + ': ' + legend(modeKey).slice(0, -1).map(function (l) { return l.name; }).join(', ')) + '">' +
-      '<defs><pattern id="hatch" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">' +
+      '<svg class="chart' + (opts.className ? ' ' + esc(opts.className) : '') + '" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' +
+      esc((opts.title || 'Chart') + ': ' + [mode.aName, mode.bName].concat(mode.peak ? ['Peak usage', 'Mean usage'] : []).join(', ')) + '">' +
+      '<defs><pattern id="' + hatchId + '" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">' +
       '<line x1="0" y1="0" x2="0" y2="3" class="hatch-line" stroke-width="1"/></pattern></defs>' +
-      grid + xt + gaps.replace(/class="gap"/g, 'class="gap" fill="url(#hatch)"') +
+      grid + xt + gaps.replace(/class="gap"/g, 'class="gap" fill="url(#' + hatchId + ')"') +
       (mode.peak ? '<path class="line-u" d="' + uPath + '"/><path class="line-p" d="' + pPath + '"/>' : '') +
       '<path class="line-a" d="' + aPath + '"/><path class="line-b" d="' + bPath + '"/>' + dots +
       '<line class="cursor" y1="' + m.top + '" y2="' + (m.top + h) + '" x1="0" x2="0" visibility="hidden"/>' +
-      '<rect class="hit" x="' + m.left + '" y="' + m.top + '" width="' + w + '" height="' + h + '" fill="transparent"/></svg>' +
+      '<rect class="hit" x="' + m.left + '" y="' + m.top + '" width="' + w + '" height="' + h + '" fill="transparent"/>' + marks + '</svg>' +
       '<div class="tip" hidden></div>';
 
     var svg = host.querySelector('svg'), tip = host.querySelector('.tip');
@@ -192,6 +204,10 @@
       if (mode.peak) rows += row('p', 'Peak usage', valueText(mode, d.p[best])) + row('u', 'Mean usage', valueText(mode, d.u[best]));
       rows += '<div class="tip-row tip-total"><span>' + (mode.money ? 'Waste' : 'Gap') + '</span><span>' +
         valueText(mode, Math.max(0, d.a[best] - d.b[best])) + '</span></div>';
+      var until = best + 1 < n ? d.t[best + 1] : d.t[best] + d.size * series.step;
+      (opts.markers || []).forEach(function (mk) {
+        if (mk.t >= d.t[best] && mk.t < until) rows += '<div class="tip-row tip-marker"><span>' + esc(mk.label) + '</span></div>';
+      });
       tip.innerHTML = rows;
       tip.hidden = false;
       var tw = tip.offsetWidth;

@@ -75,6 +75,7 @@ Diagonal 1px lines every 3px mark value that is potential rather than actual: wa
 - Gridlines are dotted in `--border-lighter`. Tick labels are Roboto Mono 12px in `--text-light`.
 - The page's chart compares requested (solid, `--chart-2`) with the target, usage plus 10% (dashed, `--chart-1`), and hatches the gap between them. In the CPU and memory views it also draws actual usage: the per-step peak as a solid `--text-default` line and the mean as a lighter `--chart-other` line. When the chart folds points to fit its width, peaks keep the highest value in each bucket and the other series take the mean.
 - The dashboard's projected annual spend chart shows three scenarios over twelve months: without Thoras (dashed violet), current configuration (solid blue) and fully optimized (dashed teal). The band between the first two is hatched green (savings already captured) and the band between current and optimized is hatched red (waste still available). The legend carries each total. Those colours are hard-coded in the dashboard and have no tokens yet; the report's spend view uses the same idea with two lines, current spend and spend without waste.
+- The workload drill-down chart uses its own colours, from primitives because no role fits: requested azure-500, usage brand-500 (the mean at 2px, the per-step peak as a 1px line), the target iris-500 dashed, and OOM kills as ruby-500 dashed vertical lines with a dot at the top. In dark they step to the 400 shades. It starts at zero, like the spend chart.
 - Every series is named in the legend, with a swatch that matches its stroke (solid, dashed or hatched).
 
 ## States
@@ -126,12 +127,24 @@ An SVG inside a card, with the legend above it and a tooltip that follows the po
 
 ### Pill
 
-A fully rounded chip for short states and counts, one to three words. Colour pairs are the 100 step of a scale with its 950 step as text: brand for the full-history tier, mango for warnings ("No estimate", limited history), zinc for neutral states ("Partial data"), azure-50 for informational tiers.
+A fully rounded chip for short states and counts, one to three words. Colour pairs are the 100 step of a scale with its 950 step as text: brand for the full-history tier and counted workloads, mango for warnings ("No estimate", limited history), zinc for neutral states ("Partial data"), ruby for OOM kill counts, azure-50 for informational tiers. "Not counted" is an outline pill: `--surface-inset` with a `--border-lighter` ring and `--text-light`.
+
+### Risk note
+
+One sentence in a tinted box, `--primitive-radius-8`, no border: `--surface-danger` with `--text-on-danger` for what has already gone wrong (OOM kills), `--surface-caution` with `--text-on-caution` for what could (a limit below the peak-safe value, provisional data), `--surface-info` with `--text-on-info` for context. Notes stack 8px apart, most serious first.
 
 ### Segmented control
 
 A row of options in a fully rounded track (`--surface-inset` with a `--border-lighter` edge). The selected option is `--surface-default` with a 1px `--border-light` ring and weight 500. Used for the chart's Spend, CPU and Memory views, and, with the `--fixed-*` tokens, for the theme switch in the header.
 
+### Capacity bar
+
+A flat bar for one resource against a capacity: the nodes' allocatable CPU or memory, or the requests when the file has no nodes. Three layers start at the left edge: requests hatched in ruby-400, right-sized requests in iris-300 (iris-500 in dark), and usage in zinc-800 (zinc-200 in dark) on top. Right-sized requests are the target capped at each workload's current request, so requests minus right-sized requests is the waste. The track is `--surface-inset` with a 1px `--border-emphasized` edge, and a layer larger than the capacity stops at the edge. The figures sit to the right in Roboto Mono 12px `--text-light`, and the legend above names each layer with a matching swatch.
+
 ### Alert
 
 A caution banner with one sentence. Put the count first, in bold, so the scope is clear: "**1 of 4 workloads** have too little data for a savings figure and are not in the totals."
+
+### Print summary
+
+What prints while a report is open: one letter-size document with half-inch margins, always in the light theme (the element carries `data-theme="light"`, so the semantic tokens resolve to light whatever the page theme). It repeats the summary's figures under the current settings: the cluster heading and confidence pill, the four headline figures in a two-column grid, confidence, what this means, spend over the window, the top workloads, and a paragraph on how the figure is computed. Cards are 1px `--border-light` boxes with `--primitive-radius-8` and no shadow, and none splits across a page break. Body text is `--primitive-text-xs`. Provisional data prints as on screen: the caution banner, dashed mango-400 edges and rounded figures with ~.
