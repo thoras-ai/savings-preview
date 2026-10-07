@@ -131,7 +131,7 @@ func Contexts(kubeconfig string) ([]string, error) {
 	}
 	raw, err := rules.Load()
 	if err != nil {
-		return nil, fmt.Errorf("load kubeconfig: %w", err)
+		return nil, configError(rules, "", nil, err)
 	}
 	names := make([]string, 0, len(raw.Contexts))
 	for n := range raw.Contexts {

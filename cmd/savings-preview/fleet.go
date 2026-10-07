@@ -431,7 +431,12 @@ func printFleetCheck(w io.Writer, fc *fleetCheck, color bool) {
 		}
 		switch r.ExitCode {
 		case checkBlocked:
-			problem = p.bad(r.Summary)
+			problem = r.Summary
+			// The summary points at the Kubernetes lines, which this table does not print.
+			if r.Kubernetes != nil && r.Kubernetes.Error != "" {
+				problem = r.Kubernetes.Error
+			}
+			problem = p.bad(oneLine(problem))
 		case checkLimited:
 			problem = p.warn("tier " + tier)
 			if len(r.Source.Limits) > 0 {
