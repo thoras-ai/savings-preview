@@ -26,6 +26,8 @@ The rules follow `CurrentAverageNode` in the platform's `go/internal/repositorie
 5. **Rates.** The per-core rate is the average priced node's hourly price over its average listed vCPUs, and the per-GiB rate the same over its listed GiB. A workload costs the larger of its CPU and its memory cost. Nodes that are not priced are left out of the averages.
 6. **Fallback.** With no node priced, the rates come from the product's default node: 4 cores, 16 GiB, $0.192 per hour. This is what a minikube or kind cluster gets, since its nodes have no cloud provider ID or instance type.
 
+In a file with several clusters, each cluster is priced from its own nodes with these rules, and its workloads with its cluster's rates. A fleet that spans clouds prices each cluster from its own cloud's table.
+
 The levers under Assumptions override these rates: an instance type, typed rates, and a discount. The instance-type picker lists the same table, so a type picked in its cloud's reference region costs what the default pricing charges for an on-demand node of that type. In another region the picker scales the price by a factor per region (`src/js/prices.js`); the factors are approximate. The suggested rates ("Priced by their own cloud and region") scale each node's price by the same factors.
 
 ## Differences from the product

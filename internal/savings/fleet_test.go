@@ -30,6 +30,35 @@ func renamed(t *testing.T, path, name string) []any {
 	return rms
 }
 
+// onGKE moves a fixture's nodes to Google Cloud: each node takes the next of
+// types as its instance type and gcp as its provider.
+func onGKE(rms []any, types ...string) []any {
+	i := 0
+	for _, rm := range rms {
+		attrs := rm.(map[string]any)["resource"].(map[string]any)["attributes"].([]any)
+		node := false
+		for _, a := range attrs {
+			node = node || a.(map[string]any)["key"] == "k8s.node.name"
+		}
+		if !node {
+			continue
+		}
+		for _, a := range attrs {
+			a := a.(map[string]any)
+			switch a["key"] {
+			case "host.type":
+				a["value"] = map[string]any{"stringValue": types[i%len(types)]}
+			case "cloud.provider":
+				a["value"] = map[string]any{"stringValue": "gcp"}
+			case "cloud.region":
+				a["value"] = map[string]any{"stringValue": "us-central1"}
+			}
+		}
+		i++
+	}
+	return rms
+}
+
 func analyzeAll(t *testing.T, rms []any) *Summary {
 	t.Helper()
 	b, err := json.Marshal(map[string]any{"resourceMetrics": rms})
@@ -160,6 +189,36 @@ const r = model.analyze(doc);
 console.log(JSON.stringify({ totals: r.totals, clusters: r.clusters.map(c => ({ name: c.name, spend: c.spend, savings: c.savings, counted: c.counted, workloads: c.workloads })) }));
 `
 
+// Each cluster of a fleet is priced from its own nodes, from its own cloud's table.
+func TestFleetClustersArePricedFromTheirOwnCloud(t *testing.T) {
+	eks := renamed(t, "../../fixtures/savings-preview.otlp.json", "eks")
+	// The fixture's first node is on-demand, its second spot.
+	gke := onGKE(renamed(t, "../../fixtures/savings-preview.otlp.json", "gke"), "n2-standard-4", "n2d-custom-8-32768")
+	f := analyzeAll(t, append(append([]any{}, eks...), gke...))
+	if len(f.Clusters) != 2 {
+		t.Fatalf("clusters: %+v", f.Clusters)
+	}
+	want := map[string]string{
+		"eks": "2 of 2 nodes at AWS us-east-1 on-demand and spot list prices",
+		"gke": "2 of 2 nodes at Google Cloud us-central1 on-demand and spot list prices",
+	}
+	for _, c := range f.Clusters {
+		if c.Summary == nil || c.Pricing != want[c.Cluster] {
+			t.Errorf("%s: %+v", c.Cluster, c.Summary)
+		}
+	}
+	// gke: n2-standard-4 on-demand and n2d-custom-8-32768 at its spot per-unit prices.
+	hourly := 0.218756 + 8*0.01015 + 32*0.001663
+	r := pricing([]node{{hostType: "n2-standard-4", provider: "gcp", capacity: "on_demand"}, {hostType: "n2d-custom-8-32768", provider: "gcp", capacity: "spot"}})
+	if !same(r.perCore, hourly/12) || !same(r.perGiB, hourly/48) {
+		t.Errorf("gke rates: %+v", r)
+	}
+	alone := analyzeAll(t, onGKE(renamed(t, "../../fixtures/savings-preview.otlp.json", "gke"), "n2-standard-4", "n2d-custom-8-32768"))
+	if f.Clusters[1].Totals != alone.Totals {
+		t.Errorf("gke in the fleet %+v, alone %+v", f.Clusters[1].Totals, alone.Totals)
+	}
+}
+
 func TestFleetParityWithModelJS(t *testing.T) {
 	nodeBin, err := exec.LookPath("node")
 	if err != nil {
@@ -170,6 +229,7 @@ func TestFleetParityWithModelJS(t *testing.T) {
 		t.Fatal(err)
 	}
 	rms := append(renamed(t, "../../fixtures/savings-preview.otlp.json", "alpha"), renamed(t, "../../fixtures/intermittent.otlp.json", "beta")...)
+	rms = append(rms, onGKE(renamed(t, "../../fixtures/savings-preview.otlp.json", "gamma"), "e2-standard-4", "n2d-custom-8-32768")...)
 	b, err := json.Marshal(map[string]any{"resourceMetrics": rms})
 	if err != nil {
 		t.Fatal(err)
@@ -221,7 +281,7 @@ func TestFleetParityWithModelJS(t *testing.T) {
 	for _, c := range got.Clusters {
 		byName[c.Cluster] = c
 	}
-	if len(js.Clusters) != 2 {
+	if len(js.Clusters) != 3 {
 		t.Fatalf("js clusters: %+v", js.Clusters)
 	}
 	for _, c := range js.Clusters {
