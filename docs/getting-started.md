@@ -178,6 +178,29 @@ Give `run` an API key and an application key scoped to `timeseries_query`. If Da
 
 `--list` prints the clusters Datadog knows about. [datadog-adapter.md](datadog-adapter.md#setup-for-an-organization-that-already-uses-datadog) shows how to find the site and create the scoped key.
 
+## Many clusters
+
+One run can read many clusters and write one report for all of them. Name the kubeconfig contexts with `--context` once for each, list them in a file with `--contexts-file`, or read every context in the kubeconfig with `--all-contexts`:
+
+    savings-preview check --context prod-us --context prod-eu --context staging
+    savings-preview run --context prod-us --context prod-eu --context staging
+    savings-preview run --contexts-file clusters.txt
+    savings-preview run --all-contexts
+
+The contexts file has one context name per line; `#` starts a comment. Without any of these flags the run reads one cluster, the current context, as before.
+
+Each cluster needs the same read access as a single-cluster run, in that cluster: the identity each context uses needs the access listed at the top of this page, and [deploy/rbac/](../deploy/rbac/) has the same read-only roles for each. Each cluster is read the way a single run reads it: a store found in the cluster first, then polling metrics-server. `--target`, `--days`, `--step` and the polling flags apply to every cluster. Up to three clusters are read at a time, and each line of progress starts with its context in brackets. Clusters that poll all poll in the same window, so `--duration 168h` takes a week, not a week per cluster.
+
+A cluster that cannot be read, because its context is missing, its credentials have expired or it has no usage data, does not stop the others. The run lists it with the reason at the end and in the report's Data and method section, and fails only when no cluster can be read. Two contexts that point at the same kubeconfig cluster are each read and named after their context.
+
+The run writes the same files as a single-cluster run, holding every cluster: `savings-preview.otlp.json`, `savings-preview.compact.otlp.json` and `savings-preview.zip`. `summary.json` in the zip keeps its fields, which now hold the fleet's totals, and adds `clusters`, one entry per cluster with its own figures, or with `error` for a cluster that was not read. Each cluster's own file is kept in `savings-preview.clusters/`.
+
+Datadog, `--url`, `--cluster-name` and `--source datadog` name one cluster, so they work only with one context. To read clusters that live in Datadog or in one shared store, run once per cluster with `--selector`, and open the files together on the report page.
+
+`check` with several contexts prints one line per cluster (its source, how much history the store holds, the tier and any problem) and a line for the fleet. It exits 0 when every cluster is ready, 2 when none can run, and 1 otherwise. `--json` prints each cluster's full check.
+
+The report page also opens several files at once: choose or drop the `.json`, `.zip` or `report.html` files from runs of one cluster each, and the page shows them as one fleet. A cluster that appears in more than one file is counted once, from the file whose data ends latest, and Data and method says which file was left out.
+
 ## Read the report
 
 The report opens on one page:
@@ -187,6 +210,8 @@ The report opens on one page:
 - **The gap chart**: requested spend today against spend with Thoras over the window, with usage under them and the waste hatched.
 - **Three workloads, before and after**: monthly spend today and with Thoras for the biggest saver that runs all day, a job that runs in bursts, and one that is already right-sized. Select one to open its drill-down.
 - **Across your fleet**: the saving times the number of clusters like this one, in dollars and in loaded engineers.
+
+A report of several clusters opens on the fleet: the headline and Today and with Thoras add up every cluster, each priced from its own nodes, the gap chart sums them over the window, a table lists each cluster's spend today and with Thoras, the biggest saving first, and Across your fleet counts the clusters in the report. Select a cluster to see page one for it alone; Show all clusters goes back. Under Assumptions, Clusters includes or excludes clusters from every figure, and the link keeps the choice. Namespaces are named `cluster/namespace`, since clusters often share namespace names.
 - **Next step**: Book a demo, and Copy summary, which copies four plain lines for chat or email. With less than 7 days of data it also suggests a week-long run.
 
 The target for each workload is 1.1 times its highest use in any 15 minutes. Waste is the request above the target. Prices come from AWS on-demand list prices (us-east-1) for known instance types, and from a 4-core, 16 GiB, $0.192 per hour node otherwise.

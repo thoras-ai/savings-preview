@@ -6,7 +6,7 @@ To run it on your cluster, start with [docs/getting-started.md](docs/getting-sta
 
 ![The report page with the synthetic sample: the summary section](docs/images/report.png)
 
-The report page is also published at https://curly-dollop-gw8yzn1.pages.github.io/. The site is private: it needs a GitHub login with access to the thoras-ai organization. It opens a `savings-preview.otlp.json`, a `savings-preview.zip` or a `report.html` in the browser, and nothing is uploaded.
+The report page is also published at https://curly-dollop-gw8yzn1.pages.github.io/. The site is private: it needs a GitHub login with access to the thoras-ai organization. It opens a `savings-preview.otlp.json`, a `savings-preview.zip` or a `report.html`, or several of them at once, in the browser, and nothing is uploaded.
 
 ## Install
 
@@ -37,6 +37,12 @@ Or download an archive from the release page, check it with `shasum -a 256 -c ch
     make build                      # bin/savings-preview-{darwin,linux}-{amd64,arm64}
     ./bin/savings-preview-darwin-arm64 --context my-cluster
 
+To read several clusters into one report, give `--context` more than once, or use `--contexts-file FILE` or `--all-contexts`:
+
+    ./bin/savings-preview-darwin-arm64 --context prod-us --context prod-eu --context staging
+
+[Many clusters](docs/getting-started.md#many-clusters) has the details.
+
 Or build for this machine only with `go build -o bin/savings-preview ./cmd/savings-preview`. The binary carries the report page, so it needs nothing next to it. An installed release runs the same way: `savings-preview --context my-cluster`.
 
 Before the first run, `savings-preview check` with the same flags answers in a few seconds whether the run can work and how well:
@@ -62,7 +68,7 @@ It prints the identity the kubeconfig gives, the result of `kubectl auth can-i` 
 - `fixtures/savings-preview.otlp.json`: a synthetic file that follows the contract. Regenerate it with `python3 scripts/gen_fixture.py`.
 - `fixtures/intermittent.otlp.json`: two synthetic days at 15-minute steps with containers that run only part of the time (an init container, a check that runs now and then) and workloads whose memory series start six hours after their CPU series. Regenerate it with `python3 scripts/gen_intermittent_fixture.py`.
 - `fixtures/minikube-poll.otlp.json`: one minute of `savings-preview poll` readings from a local minikube cluster, with the cluster, node, namespace and workload names replaced (`kube-system`, `cert-manager`, `coredns` and `metrics-server` kept).
-- `scripts/gen_demo`: writes `fixtures/demo-cluster.compact.otlp.json`, a 60-workload cluster for demos, listed on the published page as Demo cluster. The file is about 20 MB, so it is generated rather than committed: run `go run ./scripts/gen_demo` (or `make demo`) before building the site. The output is the same on every run. `docs/demo.md` is a five-minute walk through the report with it.
+- `scripts/gen_demo`: writes `fixtures/demo-cluster.compact.otlp.json`, a 60-workload cluster for demos, listed on the published page as Demo cluster. The file is about 20 MB, so it is generated rather than committed: run `go run ./scripts/gen_demo` (or `make demo`) before building the site. The output is the same on every run. `docs/demo.md` is a five-minute walk through the report with it. `go run ./scripts/gen_demo -fleet` writes `fixtures/fleet.compact.otlp.json`, about 27 MB, listed as Fleet of clusters (`#sample=fleet`): three clusters in two regions built from the demo cluster's workloads, and a fourth recorded as not read.
 - `scripts/validate_contract.py FILE`: checks a file against the contract.
 - `src/` and `scripts/build_report.py`: the report page. It reads one contract file and shows spend, savings, a requested-versus-target chart and a workload table.
 - `docs/security.md`: what the CLI reads and writes, where its output goes, and how to check. `deploy/rbac/` has read-only ServiceAccounts for each source.
@@ -91,13 +97,16 @@ The page opens on the saving: the annual figure and its share of spend, today ne
 | `headroom` | Target headroom over the peak, in percent | `10` |
 | `peak` | Rolling peak window, in minutes | `15` |
 | `ns` | Namespaces to count, comma separated | All |
+| `cluster` | Clusters to count, in a report of several, comma separated | All |
 | `from`, `to` | Time range, in Unix seconds | The whole file |
 | `cost` | Loaded cost of an engineer per year, in USD | `200000` |
 | `bill` | Annual cloud bill, in USD | None |
-| `clusters` | Clusters like this one, for the fleet figure on page one | `1` |
+| `clusters` | Clusters like this one, for the fleet figure on page one of a single-cluster report | `1` |
 | `workload` | Workload whose drill-down the workloads section shows, as `namespace/kind/name` | None |
 
 For example, `index.html#section=workloads&headroom=20&ns=shop,data`. A value that does not parse is ignored. With the defaults, the totals match the CLI's `summary.json`.
+
+A file with several clusters, or several files opened together, opens on the fleet. The headline, Today and with Thoras, and the gap chart add up every cluster, each priced from its own nodes. A table replaces the three workloads, with each cluster's spend today and with Thoras, the biggest saving first, and each row opens page one for that cluster alone. Across your fleet shows the real number of clusters. Assumptions adds a Clusters filter (`cluster` in the link), namespaces are named `cluster/namespace`, and Data and method lists each cluster with its source, data and figures, the clusters that could not be read and why, and any cluster found in more than one file, which counts once, from the file whose data ends latest. A file with one cluster shows exactly as before.
 
 Each section is a script in `src/js/section-*.js` that registers itself with `SP.sections` (`src/js/sections.js` describes the contract). Shared pieces are in `src/js/model.js` (`prepare` reads a file once, `compute` applies the settings), `src/js/state.js` (the settings and their hash form), `src/js/levers.js` (the choices and resets the assumptions section offers), `src/js/prices.js` (the instance-type list prices) and `src/js/components.js` (number formats, KPI tile, confidence pill, banner). A new script must be listed in both `scripts/build_report.py` and `page.go`.
 

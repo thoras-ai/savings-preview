@@ -1,17 +1,17 @@
 # Savings Preview OTel contract
 
-Version 1.0.0. Every adapter writes one OTLP-JSON metrics file in this shape, and the report page reads only that file. `scripts/validate_contract.py` checks a file against this document. `fixtures/savings-preview.otlp.json` is a valid example.
+Version 1.4.0, which adds files that hold several clusters to version 1.0.0. A 1.0.0 file is a valid 1.4.0 file read the same way, and writers keep writing 1.0.0 for one cluster. Every adapter writes one OTLP-JSON metrics file in this shape, and the report page reads only that file. `scripts/validate_contract.py` checks a file against this document. `fixtures/savings-preview.otlp.json` is a valid example.
 
 ## Pinned conventions
 
 - OpenTelemetry semantic conventions **1.44.0**. Every `resourceMetrics` and `scopeMetrics` entry carries `schemaUrl` = `https://opentelemetry.io/schemas/1.44.0`.
 - Most of the Kubernetes and container metrics below are still `development` stability upstream. The pinned version is part of the contract: a later semconv rename does not change this file format until the contract version moves.
 - Names with no semantic-convention equivalent live under `thoras.`.
-- Instrumentation scope on every `scopeMetrics`: `name` = `thoras.savings_preview`, `version` = `1.0.0`.
+- Instrumentation scope on every `scopeMetrics`: `name` = `thoras.savings_preview`, `version` = `1.0.0` for a file with one cluster, or `1.4.0` for a file with several clusters or a cluster that could not be read (see Several clusters below). Every scope in a file has the same version.
 
 ## File layout
 
-OTLP/JSON as defined by the OTLP protobuf mapping: 64-bit integers and timestamps are strings, `asInt` is a digit string, `asDouble` is a number. One file describes one cluster. Resources are of three kinds, told apart by their attributes:
+OTLP/JSON as defined by the OTLP protobuf mapping: 64-bit integers and timestamps are strings, `asInt` is a digit string, `asDouble` is a number. A 1.0.0 file describes one cluster; a 1.4.0 file may describe several. Resources are of three kinds, told apart by their attributes, and a 1.4.0 file adds a fourth, the cluster resource, described under Several clusters:
 
 | Kind | Identified by | Holds |
 | --- | --- | --- |
@@ -27,7 +27,7 @@ All kinds:
 
 | Attribute | Type | Meaning |
 | --- | --- | --- |
-| `k8s.cluster.name` | string | Same value on every resource in the file. |
+| `k8s.cluster.name` | string | The cluster the resource belongs to. Same value on every resource in a 1.0.0 file. |
 | `thoras.source` | string | Where the data came from, for example `prometheus`, `datadog`, `gke`, `kubectl-snapshot`. |
 | `thoras.step_seconds` | int | Spacing of the data points, in seconds. |
 | `thoras.fidelity_tier` | int | 1, 2 or 3, see below. |
@@ -151,9 +151,24 @@ A reader averaging a held series over time weights each point by the time until 
 - At a step where a container has no CPU usage or no memory usage point, the report takes it as not running: it adds no usage and no request to its workload there. Init containers, checks that run now and then, and sidecars that have exited look like this. A workload has no value at a step where none of its containers has both usage points. A running container that loses one of its two usage series for a while, in a scrape gap or at the step after it starts, is also read as not running there, so its workload's figures dip for those steps.
 - Optional metrics are simply absent when unavailable, with no declaration.
 
+## Several clusters
+
+A file of contract version 1.4.0 may hold several clusters. `savings-preview run` writes one when it reads more than one context, and the report page builds the same in memory from several files opened together.
+
+- Each resource belongs to the cluster named in its `k8s.cluster.name`. Resources of one cluster need not be next to each other.
+- Identity is per cluster: two clusters may each have a workload with the same namespace, kind and name, or a node with the same name, and each is a resource of its own. A workload's container resources and its workload resource are matched within its cluster.
+- Every rule above applies to each cluster on its own. Node resources price only their own cluster's workloads, and fidelity tier, step and span are each cluster's own.
+- A cluster that could not be read is recorded by a cluster resource: `k8s.cluster.name` and `thoras.cluster.error`, a non-empty string saying why, with no other attributes required. Its `scopeMetrics` has the scope and no metrics. A cluster has either a cluster resource or other resources, never both, and at most one cluster resource.
+
+| Attribute | Type | Meaning |
+| --- | --- | --- |
+| `thoras.cluster.error` | string | Only on a cluster resource. Why the cluster could not be read, for example an expired credential or a missing context. |
+
+A reader totals each cluster as it would a file of its own and sums the clusters. A file with one cluster and no cluster resource is written as 1.0.0, so releases that read only 1.0.0 still read it.
+
 ## Versioning
 
-The scope `version` names the contract a file follows. Each release reads only the versions it knows and rejects other files with a message naming the version. A change that keeps every existing file valid with the same meaning bumps the minor version; any other change bumps the major version. Minor versions 1.1 to 1.3 are not used, because files from builds and releases before 1.0.0 carry them.
+The scope `version` names the contract a file follows. Each release reads only the versions it knows and rejects other files with a message naming the version. A change that keeps every existing file valid with the same meaning bumps the minor version; any other change bumps the major version. Minor versions 1.1 to 1.3 are not used, because files from builds and releases before 1.0.0 carry them. 1.4.0 added files with several clusters and the cluster resource; this release reads 1.0.0 and 1.4.0, and releases up to v0.2.0 read only 1.0.0.
 
 ## Out of scope
 

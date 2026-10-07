@@ -84,7 +84,8 @@ On your machine it writes:
 - the output file, `savings-preview.otlp.json` by default (`--out` for `prometheus`, `datadog` and `run`, `-o` for `poll` and `run`);
 - for `poll`, and for `run` when it polls, a `FILE.readings/` directory holding the readings taken so far, so a stopped run can continue;
 - for `run` and `export --compact`, a compact copy of the output file next to it (`savings-preview.compact.otlp.json` by default): the same resources at 15-minute steps;
-- for `run`, a zip next to the output file (`savings-preview.zip` by default) holding `summary.json` (cluster name, time span, fidelity tier, the savings totals, and the file name and size of the full output file) and `report.html`, the report page with the compact file inside it.
+- for `run`, a zip next to the output file (`savings-preview.zip` by default) holding `summary.json` (cluster name, time span, fidelity tier, the savings totals, and the file name and size of the full output file) and `report.html`, the report page with the compact file inside it;
+- for `run` with several contexts, a `savings-preview.clusters/` directory next to the output file with each cluster's own file, its compact copy and, for a cluster that polls, its readings. The output file, the compact file and the zip hold every cluster, and `summary.json` lists them with the reason any could not be read.
 
 ## What the output contains
 
@@ -96,7 +97,7 @@ It contains no Secrets, environment variables, logs, images, annotations, labels
 
 ## Where the data goes
 
-Nowhere, unless you send it. The program makes no network requests other than to the API server, the `--url` store, Google Cloud Monitoring and Google's token endpoint with `--project`, Entra ID's token endpoint for an Azure Monitor workspace, CloudWatch with `--backend cloudwatch`, or the Datadog API. The report page (`scripts/build_report.py`, also built into the binary) is one offline HTML file that reads the output file in the browser and makes no network requests. The copy published on GitHub Pages (`build_report.py --site`) also fetches its two sample files from the same site when one is picked; a file opened there is read in the browser and not uploaded. `run` serves the page and the compact file on 127.0.0.1 on a random port until you press Ctrl-C; the server answers only requests addressed to that address, so it cannot be reached from other machines or read by a web page under another name. Sharing the output file or the zip with Thoras is a separate step that you choose to take.
+Nowhere, unless you send it. The program makes no network requests other than to the API server, the `--url` store, Google Cloud Monitoring and Google's token endpoint with `--project`, Entra ID's token endpoint for an Azure Monitor workspace, CloudWatch with `--backend cloudwatch`, or the Datadog API. The report page (`scripts/build_report.py`, also built into the binary) is one offline HTML file that reads the output file in the browser and makes no network requests. The copy published on GitHub Pages (`build_report.py --site`) also fetches its sample files from the same site when one is picked; a file opened there is read in the browser and not uploaded. `run` serves the page and the compact file on 127.0.0.1 on a random port until you press Ctrl-C; the server answers only requests addressed to that address, so it cannot be reached from other machines or read by a web page under another name. Sharing the output file or the zip with Thoras is a separate step that you choose to take.
 
 ## How releases are built
 

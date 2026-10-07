@@ -4,6 +4,20 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 
 ## Unreleased
 
+### New
+
+- `run` and `check` read several clusters in one run. Give `--context` more than once, list contexts in a file with `--contexts-file` (one per line, `#` comments), or read every context in the kubeconfig with `--all-contexts`. Each cluster is read as a single run reads it, a store in the cluster first and then polling, up to three at a time, with each progress line prefixed by its context. Clusters that poll do so in the same window. A cluster that cannot be read is reported with the reason and left out; the run fails only when no cluster can be read. Without these flags, `run` and `check` read one cluster as before. See [Many clusters](docs/getting-started.md#many-clusters).
+- A run of several clusters writes one `savings-preview.otlp.json`, its compact copy and `savings-preview.zip` holding every cluster, and keeps each cluster's own file in `savings-preview.clusters/`. `summary.json` adds `clusters`, each cluster's own summary or the `error` that kept it from being read; the existing fields keep their names and hold the fleet's figures: totals summed over the clusters, the worst tier, the coarsest step and the earliest start to the latest end.
+- `check` with several contexts prints a line per cluster with its source, history, tier and any problem, and a line for the fleet. It exits 0 when every cluster is ready, 2 when none can run and 1 otherwise. `--json` prints `status`, `exit_code`, `summary` and `clusters`, each with its context and its full check.
+- The report shows a file of several clusters as a fleet. Page one leads with the fleet total, lists each cluster's spend today and with Thoras by saving, and counts the real clusters under Across your fleet. Each cluster is priced from its own nodes. Assumptions adds a Clusters filter that the link keeps (`cluster=`), and Data and method lists each cluster, the clusters that could not be read and why, and any cluster found in more than one file. A file with one cluster shows as before.
+- The report page opens several files at once, chosen or dropped together, and shows them as one fleet. A cluster in more than one file counts once, from the file whose data ends latest.
+- Contract 1.4.0: a file may hold several clusters, and a cluster resource with `thoras.cluster.error` records a cluster that could not be read. The change is additive. Files with one cluster are still written as 1.0.0, and the validators, `export` and the report read both versions. Releases up to v0.2.0 refuse a 1.4.0 file with a message naming its version.
+- The published page lists a Fleet of clusters sample (`#sample=fleet`), written by `go run ./scripts/gen_demo -fleet`.
+
+### Changed messages
+
+- The contract validators (`scripts/validate_contract.py`, and the check `run` makes) report a wrong scope version as `scope version must be 1.0.0 or 1.4.0`, and `export` names both versions when it refuses a file. No flag, field or exit status changed.
+
 ### Fixes
 
 - When the kubeconfig sets no current context and `--context` is not given, `run`, `prometheus`, `poll` and `check` say so, list the kubeconfig's contexts and show the command to run with one of them. Before, they printed client-go's `no configuration has been provided, try setting KUBERNETES_MASTER environment variable`. A missing kubeconfig now names the paths looked at, and a `--context` that is not in the kubeconfig lists the contexts that are. `check` prints the message once under Kubernetes and refers to it on the source lines. In `check --json`, `kubernetes.error` holds the new message, which can span several lines, and the `order` notes and `summary` refer to it in a few words; field names and types are unchanged. Exit codes are unchanged.
