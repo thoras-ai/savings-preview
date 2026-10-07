@@ -689,13 +689,16 @@ func nodeAttrs(name string, info, labels map[string]string) *contract.Node {
 }
 
 func capacityType(l map[string]string) string {
+	if k := strings.ToLower(firstLabel(l, "karpenter.sh/capacity-type")); strings.Contains(k, "spot") || strings.Contains(k, "preemptible") {
+		return "spot"
+	}
 	switch strings.ToLower(firstLabel(l, "eks.amazonaws.com/capacityType", "karpenter.sh/capacity-type", "node.kubernetes.io/capacity-type")) {
 	case "spot":
 		return "spot"
 	case "on_demand", "on-demand", "ondemand":
 		return "on_demand"
 	}
-	if firstLabel(l, "cloud.google.com/gke-spot") == "true" || firstLabel(l, "cloud.google.com/gke-preemptible") == "true" ||
+	if strings.EqualFold(firstLabel(l, "cloud.google.com/gke-spot"), "true") || strings.EqualFold(firstLabel(l, "cloud.google.com/gke-preemptible"), "true") ||
 		firstLabel(l, "cloud.google.com/gke-provisioning") == "spot" ||
 		strings.EqualFold(firstLabel(l, "kubernetes.azure.com/scalesetpriority"), "spot") {
 		return "spot"

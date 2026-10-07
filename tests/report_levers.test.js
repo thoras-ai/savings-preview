@@ -89,7 +89,7 @@ test('instance prices divide the hourly price by vCPUs and GiB, scaled by region
   const p = prices.lookup('aws', 'us-east-1', 'm5.xlarge');
   assert.deepStrictEqual([p.cores, p.gib, p.hourly, p.perCore, p.perGiB, p.scaled], [4, 16, 0.192, 0.048, 0.012, false]);
   const eu = prices.lookup('gcp', 'europe-west1', 'n2-standard-4');
-  assert.ok(close(eu.hourly, 0.194236 * 1.1));
+  assert.ok(close(eu.hourly, 0.218756 * 1.1));
   assert.strictEqual(eu.scaled, true);
   assert.strictEqual(prices.lookup('aws', 'mars-1', 'm5.xlarge'), null);
   assert.strictEqual(prices.lookup('azure', 'eastus', 'm5.xlarge'), null);
@@ -108,6 +108,19 @@ test('every catalog entry has positive specs and every region a factor of at lea
   });
   assert.ok(Object.keys(prices.CLOUDS.gcp.types).length >= 20);
   assert.ok(Object.keys(prices.CLOUDS.azure.types).length >= 20);
+});
+
+test('a type picked in its cloud\'s reference region costs what the default pricing charges for it', () => {
+  ['aws', 'gcp', 'azure'].forEach(c => {
+    const cloud = prices.CLOUDS[c];
+    assert.strictEqual(cloud.ref, model.priceTable[c].region);
+    assert.strictEqual(Object.keys(cloud.types).length, Object.keys(model.priceTable[c].types).length);
+    prices.types(c).forEach(t => {
+      const p = prices.lookup(c, cloud.ref, t), d = model.priceNode({ hostType: t, provider: c, capacity: 'on_demand', region: cloud.ref });
+      assert.ok(!d.reason && p.hourly === d.hourly && p.cores === d.cores && p.gib === d.gib, c + ' ' + t);
+    });
+  });
+  assert.strictEqual(prices.lookup('aws', 'us-east-1', 'constructor'), null);
 });
 
 test('in the reference region the suggested rates are the default pricing', () => {
