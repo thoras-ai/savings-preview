@@ -2,7 +2,7 @@
 
 A read-only CLI that reads a cluster's existing usage history, writes it as one OTel metrics file, and shows what Thoras would have saved.
 
-To run it on your cluster, start with [docs/getting-started.md](docs/getting-started.md).
+To run it on your cluster, start with [docs/getting-started.md](docs/getting-started.md). The one-page version for sales and live calls is [docs/quickstart-sales.md](docs/quickstart-sales.md).
 
 ![The report page with the synthetic sample: the summary section](docs/images/report.png)
 

@@ -13,6 +13,7 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 - The report page opens several files at once, chosen or dropped together, and shows them as one fleet. A cluster in more than one file counts once, from the file whose data ends latest.
 - Contract 1.4.0: a file may hold several clusters, and a cluster resource with `thoras.cluster.error` records a cluster that could not be read. The change is additive. Files with one cluster are still written as 1.0.0, and the validators, `export` and the report read both versions. Releases up to v0.2.0 refuse a 1.4.0 file with a message naming its version.
 - The published page lists a Fleet of clusters sample (`#sample=fleet`), written by `go run ./scripts/gen_demo -fleet`.
+- [docs/quickstart-sales.md](docs/quickstart-sales.md): one page for sales on installing, running on one or several clusters, sharing the result, running it with a prospect's engineer, and common problems.
 
 ### Changed messages
 
