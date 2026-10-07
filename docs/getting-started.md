@@ -44,16 +44,17 @@ A Homebrew release is coming.
 
 To install by hand instead, get the archive for your machine and `checksums.txt` from the release. Archives are `savings-preview_<version>_<os>_<arch>.tar.gz` for `darwin` and `linux`, `amd64` and `arm64`.
 
-Check the download and unpack it:
+Check the download, clear the macOS download flag, and unpack it:
 
     shasum -a 256 -c --ignore-missing checksums.txt     # Linux: sha256sum -c --ignore-missing checksums.txt
+    xattr -c savings-preview_*_darwin_arm64.tar.gz 2>/dev/null
     tar -xzf savings-preview_*_darwin_arm64.tar.gz
     cd savings-preview_*_darwin_arm64
     ./savings-preview --version
 
-Unpacked with `tar` as above, the binary runs as is. If the archive was opened in Finder instead, macOS may refuse to run the binary because it is not notarized. Remove the quarantine attribute Finder copied onto it:
+On macOS, the `xattr` line clears the download flag a browser sets on the archive, which otherwise stops the binary from running because it is not notarized. It does nothing to an archive without the flag. If the binary was unpacked before the flag was cleared, or by Finder, clear it on the binary:
 
-    xattr -d com.apple.quarantine savings-preview
+    xattr -c savings-preview
 
 The commands below assume `savings-preview` is on your `PATH`. Move it to a directory such as `/usr/local/bin`, or run it as `./savings-preview`.
 

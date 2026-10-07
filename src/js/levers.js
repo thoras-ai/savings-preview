@@ -119,6 +119,15 @@
     return patch;
   }
 
+  // The nodes whose own clouds and regions the pricing card may suggest rates
+  // from, or null. Taking those rates replaces each cluster's own pricing with
+  // one rate, so a report of several clusters suggests only while the filter
+  // leaves exactly one.
+  function suggestionNodes(data, r) {
+    if (data.multi && r.clusters.length !== 1) return null;
+    return r.nodes || data.nodes;
+  }
+
   // The result strip: label, value and an optional note, with separators
   // before the capacity and the counted workloads, as in the summary.
   function figures(r, st, ui, approx) {
@@ -146,7 +155,7 @@
 
   var api = {
     PEAK_WINDOWS: PEAK_WINDOWS, LEVERS: LEVERS, peakWindows: peakWindows, peakIndex: peakIndex, rangeChoices: rangeChoices, rangeFor: rangeFor,
-    toggleNamespace: toggleNamespace, changed: changed, anyChanged: anyChanged, resetPatch: resetPatch, figures: figures, pctOf: pctOf, when: when
+    toggleNamespace: toggleNamespace, changed: changed, anyChanged: anyChanged, resetPatch: resetPatch, suggestionNodes: suggestionNodes, figures: figures, pctOf: pctOf, when: when
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else (self.SP = self.SP || {}).levers = api;

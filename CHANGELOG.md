@@ -2,7 +2,7 @@
 
 Each release's section here is its release notes on GitHub. `scripts/release_notes.py` reads the section for a tag, and the release workflow fails when there is none.
 
-## Unreleased
+## v0.2.1
 
 ### New
 
@@ -12,8 +12,10 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 - The report shows a file of several clusters as a fleet. Page one leads with the fleet total, lists each cluster's spend today and with Thoras by saving, and counts the real clusters under Across your fleet. Each cluster is priced from its own nodes. Assumptions adds a Clusters filter that the link keeps (`cluster=`), and Data and method lists each cluster, the clusters that could not be read and why, and any cluster found in more than one file. A file with one cluster shows as before.
 - The report page opens several files at once, chosen or dropped together, and shows them as one fleet. A cluster in more than one file counts once, from the file whose data ends latest.
 - Contract 1.4.0: a file may hold several clusters, and a cluster resource with `thoras.cluster.error` records a cluster that could not be read. The change is additive. Files with one cluster are still written as 1.0.0, and the validators, `export` and the report read both versions. Releases up to v0.2.0 refuse a 1.4.0 file with a message naming its version.
+- A link to the published page can open a sample: `#sample=` with `demo`, `synthetic`, `minikube` or `fleet`, together with the other settings in the link, such as `#sample=demo&section=workloads`. Opening a sample writes its id into the page link, and opening your own file clears it.
 - The published page lists a Fleet of clusters sample (`#sample=fleet`), written by `go run ./scripts/gen_demo -fleet`.
 - [docs/quickstart-sales.md](docs/quickstart-sales.md): one page for sales on installing, running on one or several clusters, sharing the result, running it with a prospect's engineer, and common problems.
+- The README's Install section shows how to install when gh has several accounts and the active one cannot read the repository: export `GH_TOKEN` for an account that can, which also reaches the gh calls inside `install.sh`.
 
 ### Changed messages
 
@@ -25,6 +27,8 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 - The spend chart on page one no longer goes blank when one container of a workload runs only some of the time, such as an init container, a periodic check or a sidecar that exits. A container with no CPU or memory usage at a step is taken as not running there and adds no usage and no request; before, the whole workload had no value at that step, and the chart left out every bucket where any workload had none. A workload now has no value only where none of its containers has usage.
 - In the chart, a workload with no value in a bucket inside its span takes its nearest value. The bucket is left empty only when the workloads filled this way make up more than 5% of its spend. Empty buckets at the start and end are dropped, so a store with a shorter memory history than CPU history no longer leaves the first hours blank.
 - The poll and Prometheus adapters mark a node as spot the way the product does. A node with `cloud.google.com/gke-preemptible=true`, or with a `karpenter.sh/capacity-type` value that contains `spot` or `preemptible` in any case, is written with `thoras.node.capacity_type` `spot`. Before, such a node was `unknown` unless the value was exactly `spot`. The attribute and its values are unchanged.
+- In a report of several clusters, Assumptions no longer offers to price every cluster at one rate pooled from all their nodes. Using that rate replaced each cluster's own pricing, and with some clusters filtered out the pool still counted their nodes. The suggestion now appears only when the Clusters filter keeps one cluster, with that cluster's rates. A file with one cluster shows it as before.
+- [Getting started](docs/getting-started.md#install-from-the-archive) clears the macOS download flag on an archive before unpacking it by hand, as the sales quickstart does. It said a binary unpacked with `tar` runs as is, which does not hold for an archive downloaded with a browser.
 
 ### Changed figures
 
@@ -39,6 +43,11 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
   - In a fleet, each cluster is priced from its own nodes with these rules, so a fleet that spans clouds prices each cluster from its own cloud's table. The fleet sample's annual spend is $70,887, with $41,311 in savings.
   - The instance-type picker under Assumptions lists the same table, 3,316 types instead of 128, so a type picked in its cloud's reference region costs what the default pricing charges for it. Every type the old list had is still there, but its price can differ: Google Cloud `n2-standard-4` goes from $0.194 to $0.219 per hour. A link made with an old pick keeps the rates it carries, so its figures do not change, and shows them as typed rates rather than as the instance type; picking the type again applies the new price.
   - `pricing` in `summary.json` and the report's pricing line name the clouds and regions used, for example `9 of 13 nodes at AWS us-east-1, Google Cloud us-central1 and Azure eastus on-demand and spot list prices`. An AWS cluster with only on-demand nodes keeps the old wording. Field names and types are unchanged.
+
+### Releases and dependencies
+
+- A release reuses the CI run on `main` for the tagged commit when one passed, instead of running the checks again, and builds the four platforms in parallel from the Go build cache CI saves. A govulncheck job scans the tagged commit with the vulnerability database of the day the tag is pushed. The release assets keep their names, archive layout and `checksums.txt` order, so `install.sh`, the Homebrew formula and `shasum -c` work as before. See [releasing.md](docs/releasing.md).
+- `golang.org/x/oauth2` 0.37.0 and `golang.org/x/sys` 0.48.0.
 
 ## v0.2.0
 

@@ -7,6 +7,8 @@ const model = require('../src/js/model.js');
 const files = require('../src/js/files.js');
 const summary = require('../src/js/section-summary.js');
 const state = require('../src/js/state.js');
+const levers = require('../src/js/levers.js');
+const prices = require('../src/js/prices.js');
 
 const read = name => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', name), 'utf8'));
 const close = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));
@@ -148,4 +150,21 @@ test('page one counts only the clusters with a workload in the figures', () => {
   // With one counted cluster left in scope, page one is that cluster's.
   const one = state.parse('#cluster=alpha,delta');
   assert.strictEqual(model.compute(data, state.levers(one)).fleet, false);
+});
+
+test('the pricing card suggests node rates only for a single cluster', () => {
+  const ref = read('savings-preview.otlp.json');
+  const data = model.prepare({ resourceMetrics: fleetDoc.resourceMetrics.concat(named(ref, 'delta', '1.4.0').resourceMetrics) });
+  assert.strictEqual(data.clusters.length, 3);
+  const nodes = hash => levers.suggestionNodes(data, model.compute(data, state.levers(state.parse(hash))));
+  // One rate for every cluster would replace their own pricing.
+  assert.strictEqual(nodes(''), null);
+  assert.strictEqual(nodes('#cluster=alpha,delta'), null);
+  // A filter that keeps one cluster suggests that cluster's rates, without the others' nodes.
+  const single = model.prepare(named(ref, 'delta'));
+  assert.ok(nodes('#cluster=delta').length < data.nodes.length);
+  assert.deepStrictEqual(nodes('#cluster=delta'), data.clusters.find(c => c.name === 'delta').nodes);
+  assert.deepStrictEqual(prices.fromNodes(nodes('#cluster=delta')), prices.fromNodes(single.nodes));
+  // A single-cluster file suggests from all of its nodes.
+  assert.deepStrictEqual(levers.suggestionNodes(single, model.compute(single)), single.nodes);
 });

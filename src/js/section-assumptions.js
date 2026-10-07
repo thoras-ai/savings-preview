@@ -213,8 +213,8 @@
       var b = e.target.closest('[data-reset],[data-use]');
       if (!b) return;
       if (b.hasAttribute('data-use')) {
-        var r = prices.fromNodes(view.result.nodes || view.data.nodes);
-        set({ rates: { perCore: r.perCore, perGiB: r.perGiB }, node: null });
+        var nodes = levers.suggestionNodes(view.data, view.result), r = nodes && prices.fromNodes(nodes);
+        if (r) set({ rates: { perCore: r.perCore, perGiB: r.perGiB }, node: null });
         return;
       }
       var which = b.getAttribute('data-reset');
@@ -291,7 +291,7 @@
     q(host, '[data-note="pricing"]').textContent = 'Priced with ' + basis + '.';
 
     // Rates from the nodes' own clouds and regions, when they differ from the default pricing.
-    var own = prices.fromNodes(r.nodes || data.nodes), suggest = q(host, '[data-suggest]');
+    var mine = levers.suggestionNodes(data, r), own = mine && prices.fromNodes(mine), suggest = q(host, '[data-suggest]');
     var differs = own && (Math.abs(own.perCore - base.perCore) > base.perCore * 0.005 || Math.abs(own.perGiB - base.perGiB) > base.perGiB * 0.005);
     var using = own && st.rates && Math.abs(st.rates.perCore - own.perCore) < own.perCore * 1e-3 && Math.abs(st.rates.perGiB - own.perGiB) < own.perGiB * 1e-3;
     suggest.hidden = !differs || using;
