@@ -79,10 +79,15 @@
     });
   }
 
-  // Settings from a link made for another file: namespaces and a workload
-  // this file does not have are dropped.
+  // Settings from a link made for another file: clusters, namespaces and a
+  // workload this file does not have are dropped.
   function fitToData(st, data) {
     var patch = {};
+    if (st.onlyClusters) {
+      var names = data.multi ? data.clusters.map(function (c) { return c.name; }) : [];
+      var keep = st.onlyClusters.filter(function (n) { return names.indexOf(n) >= 0; });
+      if (keep.length !== st.onlyClusters.length) patch.onlyClusters = keep.length ? keep : null;
+    }
     if (st.namespaces) {
       var known = st.namespaces.filter(function (n) { return data.namespaces.indexOf(n) >= 0; });
       if (known.length !== st.namespaces.length) patch.namespaces = known.length ? known : null;
@@ -183,9 +188,9 @@
     });
   }
 
-  function load(doc) {
+  function load(doc, opts) {
     var t0 = performance.now(), data;
-    try { data = model.prepare(doc); } catch (e) { showError(e.message); return; }
+    try { data = model.prepare(doc, opts); } catch (e) { showError(e.message); return; }
     // Cleared first, so the store does not recompute the previous file.
     page.data = null;
     store.set(fitToData(store.get(), data));
@@ -211,10 +216,12 @@
     }).then(load).catch(function () { showError(''); });
   }
 
-  function readFile(file) {
+  // Several files are joined into one fleet.
+  function readFiles(list) {
+    if (!list || !list.length) return;
     store.set({ sample: null });
     show('loading');
-    files.read(file).then(load, function (e) { showError(e.message); });
+    files.readAll(list).then(function (r) { load(r.doc, { dropped: r.dropped }); }, function (e) { showError(e.message); });
   }
 
   // The sample's id goes in the link, so the link opens the same sample.
@@ -258,7 +265,7 @@
       document.addEventListener(ev, function (e) {
         e.preventDefault();
         start.dragging($('start'), ev === 'dragover');
-        if (ev === 'drop' && e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+        if (ev === 'drop') readFiles(e.dataTransfer.files);
       });
     });
     $('open-another').addEventListener('click', function () { showError(''); window.scrollTo(0, 0); });
@@ -330,7 +337,7 @@
   applyTheme();
   buildLayout();
   page.samples = samples();
-  start.render($('start'), { samples: page.samples, open: readFile, openSample: openSample });
+  start.render($('start'), { samples: page.samples, open: readFiles, openSample: openSample });
   bind();
   // Load and render times, for checking the page stays fast on large files.
   SP.timing = function () { return page.timing; };

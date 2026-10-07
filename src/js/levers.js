@@ -93,6 +93,7 @@
     bill: ['bill'],
     cost: ['engineerCost'],
     namespaces: ['namespaces'],
+    clusters: ['onlyClusters'],
     range: ['range']
   };
 

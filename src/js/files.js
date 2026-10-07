@@ -99,7 +99,68 @@
     return file.arrayBuffer().then(function (buf) { return fromBytes(new Uint8Array(buf)); });
   }
 
-  var api = { read: read, fromBytes: fromBytes, fromText: fromText, fromZip: fromZip, zipEntries: zipEntries };
+  function clusterOf(rm) {
+    var list = (rm.resource && rm.resource.attributes) || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].key === 'k8s.cluster.name' && list[i].value) return String(list[i].value.stringValue || '');
+    }
+    return '';
+  }
+
+  function lastTime(rm) {
+    var last = -Infinity;
+    (rm.scopeMetrics || []).forEach(function (sm) {
+      (sm.metrics || []).forEach(function (m) {
+        var pts = ((m.gauge || m.sum || {}).dataPoints) || [];
+        if (pts.length) last = Math.max(last, Number(pts[pts.length - 1].timeUnixNano) / 1e9);
+      });
+    });
+    return last;
+  }
+
+  // Joins the files the CLI wrote, one cluster or several each, into one
+  // document. A cluster in more than one file is taken from the file whose
+  // data for it ends latest, the later file on a tie; a file that only
+  // records the cluster as not read loses to one with data.
+  //   list    [{name, doc}]
+  //   result  {doc, dropped: [{cluster, kept, dropped}]}
+  function combine(list) {
+    if (list.length === 1) return { doc: list[0].doc, dropped: [] };
+    var groups = {}, order = [];
+    list.forEach(function (f, fi) {
+      var rms = (f.doc && f.doc.resourceMetrics) || [];
+      if (!Array.isArray(rms) || !rms.length) fail(f.name + ' has no resourceMetrics, so it is not a Savings Preview file.');
+      var first = '';
+      rms.forEach(function (rm) { if (!first) first = clusterOf(rm); });
+      rms.forEach(function (rm) {
+        var c = clusterOf(rm) || first;
+        var key = fi + '\u0000' + c;
+        var g = groups[c];
+        if (!g) { g = groups[c] = {}; order.push(c); }
+        if (!g[key]) g[key] = { file: f.name, index: fi, end: -Infinity, rms: [] };
+        g[key].rms.push(rm);
+        g[key].end = Math.max(g[key].end, lastTime(rm));
+      });
+    });
+    var out = [], dropped = [];
+    order.forEach(function (c) {
+      var cands = Object.keys(groups[c]).map(function (k) { return groups[c][k]; });
+      var best = cands.reduce(function (a, b) { return b.end > a.end || (b.end === a.end && b.index > a.index) ? b : a; });
+      cands.forEach(function (x) { if (x !== best) dropped.push({ cluster: c, kept: best.file, dropped: x.file }); });
+      Array.prototype.push.apply(out, best.rms);
+    });
+    return { doc: { resourceMetrics: out }, dropped: dropped };
+  }
+
+  // Reads several Files and joins them; see combine.
+  function readAll(fileList) {
+    var list = Array.prototype.slice.call(fileList);
+    return Promise.all(list.map(function (f) {
+      return read(f).then(function (doc) { return { name: f.name, doc: doc }; }, function (e) { throw new Error(f.name + ': ' + e.message); });
+    })).then(combine);
+  }
+
+  var api = { read: read, readAll: readAll, combine: combine, fromBytes: fromBytes, fromText: fromText, fromZip: fromZip, zipEntries: zipEntries };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else (self.SP = self.SP || {}).files = api;
 })();

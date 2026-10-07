@@ -35,7 +35,7 @@ class BuildReportTest(unittest.TestCase):
                 self.assertTrue(os.path.isfile(os.path.join(out, s["url"])), s["url"])
             # Each sample has an id for links like #sample=demo.
             ids = [s["id"] for s in samples]
-            self.assertEqual(ids, ["demo", "synthetic", "minikube"])
+            self.assertEqual(ids, ["demo", "fleet", "synthetic", "minikube"])
             self.assertTrue(os.path.exists(os.path.join(out, ".nojekyll")))
 
     def test_page_includes_every_script(self):

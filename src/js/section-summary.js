@@ -66,10 +66,11 @@
     // source step, kept as one step's mean and peak.
     if (f.snapshot && f.sourceStepSeconds) from = 'From a read of your cluster under ' + model.formatSpan(f.stepSeconds) + '.';
     else if (f.snapshot) from = 'From a single reading of your cluster.';
-    else if (polled(f)) from = 'From a ' + spanAdjective(span) + ' read of your cluster.';
+    else if (polled(f)) from = 'From a ' + spanAdjective(span) + ' read of your ' + (r.fleet ? r.clusters.length + ' clusters.' : 'cluster.');
     else {
       var names = f.source ? f.source.split(', ').map(function (s) { return SOURCES[s] || s; }) : [];
-      from = 'From ' + model.formatSpan(span) + ' of your ' + (names.length ? names.join(' and ') + ' data.' : 'cluster’s metrics.');
+      from = 'From ' + model.formatSpan(span) + ' of your ' + (names.length ? names.join(' and ') + ' data' : 'cluster’s metrics') +
+        (r.fleet ? ' across ' + r.clusters.length + ' clusters.' : '.');
     }
     return from + ' Computed on your laptop. Nothing installed, nothing uploaded.';
   }
@@ -166,24 +167,32 @@
     return 'about ' + days + ' engineer-' + ui.plural(days, 'day');
   }
 
-  function headline(fig) {
+  function headline(fig, r) {
+    if (r && r.fleet) return 'Thoras would cut compute spend across your ' + r.clusters.length + ' clusters by ' + ui.money(fig.savings) + ' a year, ' + ui.pct(fig.share) + '.';
     return 'Thoras would cut this cluster’s compute spend by ' + ui.money(fig.savings) + ' a year, ' + ui.pct(fig.share) + '.';
   }
 
   function method(st) {
     return 'Target is ' + ui.num(1 + st.headroom, 2) + ' × the highest usage in any ' + st.peakMinutes + '-minute window; waste is the request above it.' +
+      (st.onlyClusters ? ' Only the ' + ui.plural(st.onlyClusters.length, 'cluster') + ' ' + st.onlyClusters.join(', ') + ' ' + (st.onlyClusters.length === 1 ? 'is' : 'are') + ' included.' : '') +
       (st.namespaces ? ' Only the ' + ui.plural(st.namespaces.length, 'namespace') + ' ' + st.namespaces.join(', ') + ' ' + (st.namespaces.length === 1 ? 'is' : 'are') + ' included.' : '');
   }
 
   // Plain text for pasting into chat or email.
   function summaryText(r, st) {
     var fig = figures(r);
-    return [
+    var lines = [
       'Savings preview: ' + (r.cluster || 'Unnamed cluster'),
-      'Thoras would cut compute spend by ' + ui.money(fig.savings) + ' a year, ' + ui.pct(fig.share) + '.',
-      'Utilization: ' + ui.pct(fig.today.utilization) + ' today, ' + ui.pct(fig.thoras.utilization) + ' with Thoras.',
-      provenance(r, st)
-    ].join('\n');
+      'Thoras would cut compute spend' + (r.fleet ? ' across ' + r.clusters.length + ' clusters' : '') + ' by ' + ui.money(fig.savings) + ' a year, ' + ui.pct(fig.share) + '.',
+      'Utilization: ' + ui.pct(fig.today.utilization) + ' today, ' + ui.pct(fig.thoras.utilization) + ' with Thoras.'
+    ];
+    if (r.fleet) {
+      r.clusters.forEach(function (c) {
+        if (c.counted) lines.push('  ' + c.name + ': ' + ui.money(c.savings) + ' a year of ' + ui.money(c.spend));
+      });
+    }
+    lines.push(provenance(r, st));
+    return lines.join('\n');
   }
 
   function capacity(cores, gib) {
@@ -233,13 +242,39 @@
       '<th scope="col" class="num">With Thoras</th><th scope="col" class="num">Saves</th></tr></thead><tbody>' + rows + '</tbody></table></div>' + oom + '</div>';
   }
 
+  function clusterLink(st, name, text) {
+    var href = '#' + state.serialize(Object.assign({}, st, { onlyClusters: [name], workload: null }));
+    return '<a href="' + esc(href) + '" data-cluster="' + esc(name) + '">' + text + '</a>';
+  }
+
+  // Each cluster before and after, the biggest saving first.
+  function clustersCard(r, st, killed) {
+    var rows = r.clusters.filter(function (c) { return c.counted; }).map(function (c) {
+      return '<tr><td>' + clusterLink(st, c.name, '<span class="wl-name">' + esc(c.name) + '</span>') +
+        '<div class="wl-sub">' + c.counted + ' ' + ui.plural(c.counted, 'workload') + '</div></td>' +
+        '<td class="num">' + esc(ui.money(c.spend)) + '</td><td class="num">' + esc(ui.money(c.spend - c.savings)) + '</td>' +
+        '<td class="num"><span class="pill pill-brand">' + esc(ui.money(c.savings)) + '</span></td></tr>';
+    }).join('');
+    var oom = killed ? '<p class="sum-note">' + killed + ' ' + ui.plural(killed, 'workload is', 'workloads are') +
+      ' being OOM-killed today. Thoras can raise their memory until the kills stop.</p>' : '';
+    return '<div class="card"><h2>Cluster by cluster</h2><div class="sub">Compute spend per year</div>' +
+      '<div class="table-wrap"><table class="sum-table"><thead><tr><th scope="col">Cluster</th><th scope="col" class="num">Today</th>' +
+      '<th scope="col" class="num">With Thoras</th><th scope="col" class="num">Saves</th></tr></thead><tbody>' + rows + '</tbody></table></div>' + oom + '</div>';
+  }
+
   function fleetFigures(savings, clusters, cost) {
     var total = savings * clusters;
     return '<div class="meaning-figure" data-fleet-total>' + esc(ui.money(total)) + ' a year</div>' +
       '<div class="muted" data-fleet-people>' + esc(engineers(total, cost)) + ', at ' + esc(ui.money(cost)) + ' each</div>';
   }
 
-  function fleetCard(fig, st) {
+  function fleetCard(fig, st, r) {
+    if (r.fleet) {
+      return '<div class="card"><h2>Across your fleet</h2><div class="fleet"><div class="fleet-figures">' +
+        '<div class="meaning-figure" data-fleet-total>' + esc(ui.money(fig.savings)) + ' a year</div>' +
+        '<div class="muted" data-fleet-people>' + esc(r.clusters.length + ' clusters, ' + engineers(fig.savings, st.engineerCost) + ', at ' + ui.money(st.engineerCost) + ' each') + '</div>' +
+        '</div></div></div>';
+    }
     return '<div class="card"><h2>Across your fleet</h2><div class="fleet">' +
       '<label class="fleet-input"><span>Clusters like this one</span><input type="number" min="1" max="10000" step="1" inputmode="numeric" value="' + st.clusters + '" data-clusters></label>' +
       '<div class="fleet-figures">' + fleetFigures(fig.savings, st.clusters, st.engineerCost) + '</div></div></div>';
@@ -247,7 +282,7 @@
 
   function nextCard(r, st) {
     var longer = thin(r, st) ? '<p class="muted">Run it for a week for a full-month figure: <code>' + esc(LONG_RUN) + '</code></p>' : '';
-    return '<div class="card next"><h2>Next step</h2><p>A two-week proof of value on this cluster, read-only, with the same numbers measured live.</p>' + longer +
+    return '<div class="card next"><h2>Next step</h2><p>A two-week proof of value on ' + (r.fleet ? 'these clusters' : 'this cluster') + ', read-only, with the same numbers measured live.</p>' + longer +
       '<div class="next-actions"><a class="button" href="' + BOOK_DEMO + '" target="_blank" rel="noopener">Book a demo</a>' +
       '<button type="button" class="button button-quiet" data-copy-summary>Copy summary</button></div></div>';
   }
@@ -261,11 +296,14 @@
       return '<div class="sum-head"><h1>' + EMPTY + '</h1><p class="sum-from">Change them under Assumptions in Details for engineers.</p></div>';
     }
     var fig = figures(r);
-    return '<div class="sum-head"><h1>' + esc(headline(fig)) + '</h1>' +
+    var all = data.multi && st.onlyClusters ? ' <a href="' + esc('#' + state.serialize(Object.assign({}, st, { onlyClusters: null }))) +
+      '" data-all-clusters>Show all ' + data.clusters.length + ' clusters</a>' : '';
+    var detail = r.fleet ? clustersCard(r, st, oomKilled(data, r, st)) : workloadsCard(pick(r, st), st, oomKilled(data, r, st));
+    return '<div class="sum-head"><h1>' + esc(headline(fig, r)) + '</h1>' +
       '<p class="sum-what">Thoras forecasts what each workload will use and keeps its CPU and memory requests at that forecast plus a safety buffer, raising or lowering them as demand moves.</p>' +
-      '<p class="sum-from">' + esc(provenance(r, st)) + '</p></div>' +
-      versus(fig) + gapCard(r, st, fig) + workloadsCard(pick(r, st), st, oomKilled(data, r, st)) +
-      '<div class="pair">' + fleetCard(fig, st) + nextCard(r, st) + '</div>' +
+      '<p class="sum-from">' + esc(provenance(r, st)) + all + '</p></div>' +
+      versus(fig) + gapCard(r, st, fig) + detail +
+      '<div class="pair">' + fleetCard(fig, st, r) + nextCard(r, st) + '</div>' +
       '<p class="basis">' + esc(method(st)) + '</p>';
   }
 
@@ -299,7 +337,7 @@
     var r = ctx.result, st = ctx.state;
     host.ctx = ctx;
     // Typing a cluster count updates the fleet figures in place, so the input keeps focus.
-    if (ctx.changed && ctx.changed.length === 1 && ctx.changed[0] === 'clusters' && host.querySelector('[data-clusters]')) {
+    if (ctx.changed && ctx.changed.length === 1 && ctx.changed[0] === 'clusters' && host.querySelector('[data-clusters]') && !r.fleet) {
       host.querySelector('.fleet-figures').innerHTML = fleetFigures(figures(r).savings, st.clusters, st.engineerCost);
       return;
     }
@@ -308,6 +346,18 @@
     if (host.bound) return;
     host.bound = true;
     host.addEventListener('click', function (e) {
+      var c = e.target.closest('a[data-cluster]');
+      if (c) {
+        e.preventDefault();
+        host.ctx.set({ onlyClusters: [c.getAttribute('data-cluster')], workload: null });
+        window.scrollTo(0, 0);
+        return;
+      }
+      if (e.target.closest('a[data-all-clusters]')) {
+        e.preventDefault();
+        host.ctx.set({ onlyClusters: null });
+        return;
+      }
       var a = e.target.closest('a[data-workload]');
       if (a) {
         e.preventDefault();
@@ -327,7 +377,7 @@
 
   var api = {
     EMPTY: EMPTY, coverage: coverage, provenance: provenance, thin: thin, figures: figures, utilization: utilization, pick: pick, activeShare: activeShare,
-    oomKilled: oomKilled, engineers: engineers, headline: headline, method: method, summaryText: summaryText, markup: markup, day: day
+    oomKilled: oomKilled, engineers: engineers, clustersCard: clustersCard, headline: headline, method: method, summaryText: summaryText, markup: markup, day: day
   };
   if (node) module.exports = api;
   else {

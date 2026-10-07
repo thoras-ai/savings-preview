@@ -1,0 +1,137 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
+const model = require('../src/js/model.js');
+const files = require('../src/js/files.js');
+const summary = require('../src/js/section-summary.js');
+const state = require('../src/js/state.js');
+
+const read = name => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', name), 'utf8'));
+const close = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));
+
+// A copy of doc with every resource in cluster name, at the given contract version.
+function named(doc, name, version) {
+  const out = JSON.parse(JSON.stringify(doc));
+  out.resourceMetrics.forEach(rm => {
+    rm.resource.attributes.forEach(a => { if (a.key === 'k8s.cluster.name') a.value = { stringValue: name }; });
+    (rm.scopeMetrics || []).forEach(sm => { if (version) sm.scope = Object.assign({}, sm.scope, { version }); });
+  });
+  return out;
+}
+
+function failed(name, reason) {
+  return {
+    resource: { attributes: [{ key: 'k8s.cluster.name', value: { stringValue: name } }, { key: 'thoras.cluster.error', value: { stringValue: reason } }] },
+    schemaUrl: 'https://opentelemetry.io/schemas/1.44.0',
+    scopeMetrics: [{ scope: { name: 'thoras.savings_preview', version: '1.4.0' }, schemaUrl: 'https://opentelemetry.io/schemas/1.44.0', metrics: [] }]
+  };
+}
+
+const poll = read('minikube-poll.otlp.json');
+const inter = read('intermittent.otlp.json');
+const a = named(poll, 'alpha', '1.4.0'), b = named(inter, 'beta', '1.4.0');
+const fleetDoc = { resourceMetrics: a.resourceMetrics.concat(b.resourceMetrics, [failed('gamma', 'list services: Unauthorized')]) };
+
+test('fleet totals are the sum of the clusters, each priced from its own nodes', () => {
+  const r = model.analyze(fleetDoc);
+  const ra = model.analyze(named(poll, 'alpha')), rb = model.analyze(named(inter, 'beta'));
+  assert.ok(r.fleet);
+  assert.strictEqual(r.cluster, '2 clusters');
+  for (const k of ['spend', 'savings', 'cores', 'gib', 'reqCores', 'reqGiB', 'useCores', 'useGiB', 'counted', 'workloads']) {
+    assert.ok(close(r.totals[k], ra.totals[k] + rb.totals[k]), k + ': ' + r.totals[k]);
+  }
+  const by = Object.fromEntries(r.clusters.map(c => [c.name, c]));
+  assert.ok(close(by.alpha.savings, ra.totals.savings) && close(by.beta.savings, rb.totals.savings));
+  assert.ok(close(r.clusters.reduce((s, c) => s + c.spend, 0), r.totals.spend));
+  // Sorted by savings, the biggest first.
+  assert.ok(r.clusters[0].savings >= r.clusters[1].savings);
+});
+
+test('a fleet records the clusters that could not be read and qualifies names by cluster', () => {
+  const data = model.prepare(fleetDoc);
+  assert.deepStrictEqual(data.failed, [{ name: 'gamma', reason: 'list services: Unauthorized' }]);
+  assert.deepStrictEqual(data.clusters.map(c => c.name), ['alpha', 'beta']);
+  assert.strictEqual(data.contract.version, '1.4.0');
+  assert.ok(data.workloads.every(w => w.id.startsWith(w.cluster + '/') && w.ns.startsWith(w.cluster + '/')));
+  assert.throws(() => model.prepare({ resourceMetrics: [failed('gamma', 'expired')] }), /No cluster in this file could be read: gamma \(expired\)/);
+});
+
+test('the cluster filter gives the figures of the clusters it keeps', () => {
+  const data = model.prepare(fleetDoc);
+  const r = model.compute(data, { clusters: ['beta'] });
+  const rb = model.analyze(named(inter, 'beta'));
+  assert.strictEqual(r.fleet, false);
+  assert.strictEqual(r.cluster, 'beta');
+  assert.ok(close(r.totals.savings, rb.totals.savings) && close(r.totals.spend, rb.totals.spend));
+  assert.strictEqual(r.pricing.basis, rb.pricing.basis);
+  assert.strictEqual(r.nodes.length, model.prepare(named(inter, 'beta')).nodes.length);
+});
+
+test('a single-cluster file keeps its ids, namespaces and figures', () => {
+  const data = model.prepare(poll);
+  assert.strictEqual(data.multi, false);
+  assert.ok(data.workloads.every(w => !w.id.startsWith(w.cluster + '/')));
+  const r = model.compute(data);
+  assert.strictEqual(r.fleet, false);
+  assert.strictEqual(r.cluster, data.cluster);
+  assert.strictEqual(r.pricing.basis, data.pricing.basis);
+});
+
+test('files from other contract versions are refused', () => {
+  assert.throws(() => model.prepare(named(poll, 'x', '1.2.0')), /contract version 1\.2\.0 and this page reads only 1\.0\.0 and 1\.4\.0/);
+});
+
+test('combining files keeps the newer copy of a cluster and says which was left out', () => {
+  const older = named(poll, 'alpha');
+  const newer = named(poll, 'alpha');
+  newer.resourceMetrics.forEach(rm => (rm.scopeMetrics || []).forEach(sm => (sm.metrics || []).forEach(m => {
+    ((m.gauge || m.sum).dataPoints).forEach(p => { p.timeUnixNano = String(BigInt(p.timeUnixNano) + 3600000000000n); });
+  })));
+  const r = files.combine([{ name: 'new.json', doc: newer }, { name: 'old.json', doc: older }, { name: 'beta.json', doc: named(inter, 'beta') }]);
+  assert.deepStrictEqual(r.dropped, [{ cluster: 'alpha', kept: 'new.json', dropped: 'old.json' }]);
+  const data = model.prepare(r.doc, { dropped: r.dropped });
+  assert.deepStrictEqual(data.clusters.map(c => c.name), ['alpha', 'beta']);
+  assert.strictEqual(data.dropped.length, 1);
+  // Counted once: the fleet is the newer alpha plus beta.
+  const total = model.compute(data).totals.savings;
+  assert.ok(close(total, model.analyze(newer).totals.savings + model.analyze(named(inter, 'beta')).totals.savings));
+
+  // Equal data: the file chosen later wins. A file that only failed loses to data.
+  const tie = files.combine([{ name: 'one.json', doc: older }, { name: 'two.json', doc: named(poll, 'alpha') }]);
+  assert.deepStrictEqual(tie.dropped, [{ cluster: 'alpha', kept: 'two.json', dropped: 'one.json' }]);
+  const fail = files.combine([{ name: 'data.json', doc: older }, { name: 'failed.json', doc: { resourceMetrics: [failed('alpha', 'expired')] } }]);
+  assert.deepStrictEqual(fail.dropped, [{ cluster: 'alpha', kept: 'data.json', dropped: 'failed.json' }]);
+});
+
+test('files uploaded together show as one fleet with the summed figures', () => {
+  const r = files.combine([{ name: 'a.json', doc: named(poll, 'alpha') }, { name: 'b.zip', doc: named(inter, 'beta') }]);
+  assert.deepStrictEqual(r.dropped, []);
+  const res = model.analyze(r.doc);
+  assert.ok(res.fleet);
+  assert.ok(close(res.totals.savings, model.analyze(named(poll, 'alpha')).totals.savings + model.analyze(named(inter, 'beta')).totals.savings));
+  const one = files.combine([{ name: 'a.json', doc: poll }]);
+  assert.strictEqual(one.doc, poll);
+});
+
+test('page one leads with the fleet total and lists the clusters', () => {
+  const data = model.prepare(fleetDoc), st = state.parse('');
+  const r = model.compute(data, state.levers(st));
+  const html = summary.markup(data, r, st);
+  assert.match(html, /Thoras would cut compute spend across your 2 clusters by \$/);
+  assert.match(html, /Cluster by cluster/);
+  assert.doesNotMatch(html, /Three workloads/);
+  assert.doesNotMatch(html, /Clusters like this one/);
+  assert.doesNotMatch(html, /gamma|not read|Unauthorized/);
+  assert.match(html, /data-cluster="alpha"/);
+  assert.match(summary.summaryText(r, st), /across 2 clusters/);
+
+  // A link to one cluster shows that cluster as a single-cluster page one.
+  const one = state.parse('#cluster=alpha');
+  const ro = model.compute(data, state.levers(one));
+  const h1 = summary.markup(data, ro, one);
+  assert.match(h1, /Thoras would cut this cluster’s compute spend/);
+  assert.match(h1, /Show all 2 clusters/);
+  assert.strictEqual(state.serialize(one), 'cluster=alpha');
+});

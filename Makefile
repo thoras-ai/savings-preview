@@ -32,9 +32,10 @@ test-all: demo
 vulncheck:
 	go tool -modfile=tools/go.mod govulncheck ./...
 
-# demo writes the demo cluster sample that the site build and its tests read.
+# demo writes the demo cluster and fleet samples that the site build and its tests read.
 demo:
 	go run ./scripts/gen_demo
+	go run ./scripts/gen_demo -fleet
 
 clean:
 	rm -rf bin

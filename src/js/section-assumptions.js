@@ -88,6 +88,15 @@
       }).join('') + '</div></div>';
   }
 
+  // Clusters, in a file with several. The links on page one set the same filter.
+  function clusters(data) {
+    return '<div class="card"><div class="card-head"><div><h2>Clusters</h2><div class="sub">Include or exclude clusters from every figure</div></div>' + reset('clusters') + '</div>' +
+      '<div class="lv-chips" role="group" aria-label="Clusters">' + data.clusters.map(function (c) {
+        return '<label class="lv-chip"><input type="checkbox" value="' + esc(c.name) + '" data-lever="cluster">' + esc(c.name) +
+          ' <span class="lv-count">' + c.workloads + '</span></label>';
+      }).join('') + '</div></div>';
+  }
+
   function timeRange(choices) {
     var body = choices ?
       '<div class="lv-grid">' +
@@ -107,7 +116,8 @@
       '<button type="button" class="lv-reset-all" data-reset="all">Reset to defaults</button></div>' +
       '<div class="card lv-result"><h2>Result with these settings <span class="pill pill-info" data-changed hidden>Changed from defaults</span></h2><div class="lv-kpis" data-kpis></div></div>' +
       '<div class="pair">' + rightSizing(data) + pricing() + '</div>' +
-      '<div class="pair">' + namespaces(data) + timeRange(view.choices) + '</div>' +
+      (data.multi ? '<div class="pair">' + clusters(data) + namespaces(data) + '</div>' + timeRange(view.choices) :
+        '<div class="pair">' + namespaces(data) + timeRange(view.choices) + '</div>') +
       '<p class="lv-link">Link for this view: <span data-current-link></span></p>';
     q(host, '#lv-cloud').value = view.cloud;
     q(host, '#lv-region').value = view.region;
@@ -191,6 +201,9 @@
       else if (name === 'cost') {
         var cost = positive(el.value.trim());
         if (cost) set({ engineerCost: cost });
+      } else if (name === 'cluster') {
+        var names = view.data.clusters.map(function (c) { return c.name; });
+        set({ onlyClusters: levers.toggleNamespace(view.current.onlyClusters, names, el.value, el.checked) });
       } else if (name === 'ns') set({ namespaces: levers.toggleNamespace(view.current.namespaces, view.data.namespaces, el.value, el.checked) });
       else if (name === 'from' || name === 'to') {
         set({ range: levers.rangeFor(view.choices, Number(q(host, '#lv-from').value), Number(q(host, '#lv-to').value)) });
@@ -200,7 +213,7 @@
       var b = e.target.closest('[data-reset],[data-use]');
       if (!b) return;
       if (b.hasAttribute('data-use')) {
-        var r = prices.fromNodes(view.data.nodes);
+        var r = prices.fromNodes(view.result.nodes || view.data.nodes);
         set({ rates: { perCore: r.perCore, perGiB: r.perGiB }, node: null });
         return;
       }
@@ -220,6 +233,7 @@
     var st = ctx.state, r = ctx.result, data = ctx.data, approx = ctx.approx;
     var changed = levers.changed(st, DEFAULTS);
     view.current = st;
+    view.result = r;
 
     q(host, '[data-changed]').hidden = !levers.anyChanged(st, DEFAULTS);
     q(host, '[data-reset="all"]').disabled = !levers.anyChanged(st, DEFAULTS);
@@ -259,7 +273,7 @@
     setValue(type, picked && picked.cloud === view.cloud && picked.region === view.region ? picked.type : '');
     type.placeholder = 'Search, e.g. ' + EXAMPLE[view.cloud];
     q(host, '[data-hint="type"]').textContent = '';
-    var cpu = q(host, '#lv-cpu'), gib = q(host, '#lv-gib'), base = data.pricing;
+    var cpu = q(host, '#lv-cpu'), gib = q(host, '#lv-gib'), base = r.basePricing || data.pricing;
     setValue(cpu, st.rates ? rate(st.rates.perCore) : '');
     setValue(gib, st.rates ? rate(st.rates.perGiB) : '');
     cpu.placeholder = rate(base.perCore) + ' from nodes';
@@ -277,7 +291,7 @@
     q(host, '[data-note="pricing"]').textContent = 'Priced with ' + basis + '.';
 
     // Rates from the nodes' own clouds and regions, when they differ from the default pricing.
-    var own = prices.fromNodes(data.nodes), suggest = q(host, '[data-suggest]');
+    var own = prices.fromNodes(r.nodes || data.nodes), suggest = q(host, '[data-suggest]');
     var differs = own && (Math.abs(own.perCore - base.perCore) > base.perCore * 0.005 || Math.abs(own.perGiB - base.perGiB) > base.perGiB * 0.005);
     var using = own && st.rates && Math.abs(st.rates.perCore - own.perCore) < own.perCore * 1e-3 && Math.abs(st.rates.perGiB - own.perGiB) < own.perGiB * 1e-3;
     suggest.hidden = !differs || using;
@@ -292,6 +306,14 @@
     Array.prototype.forEach.call(boxes, function (b) {
       b.checked = !on || on.indexOf(b.value) >= 0;
       b.disabled = !!on && on.length === 1 && b.checked;
+      b.parentNode.classList.toggle('off', !b.checked);
+    });
+
+    // Clusters.
+    var only = st.onlyClusters;
+    Array.prototype.forEach.call(host.querySelectorAll('input[data-lever="cluster"]'), function (b) {
+      b.checked = !only || only.indexOf(b.value) >= 0;
+      b.disabled = !!only && only.length === 1 && b.checked;
       b.parentNode.classList.toggle('off', !b.checked);
     });
 
