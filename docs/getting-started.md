@@ -12,7 +12,31 @@ Savings Preview runs on your machine with your existing kubeconfig. It reads the
 
 ## Install
 
-The release is in a private GitHub repository, so the download needs a GitHub login or token with read access to it. With [gh](https://cli.github.com) logged in, install the latest release with:
+The release is in a private GitHub repository, so the download needs a GitHub login or token with read access to it. The commands below take the token from [gh](https://cli.github.com), logged in as an account that can read the repository.
+
+### Homebrew
+
+On macOS or Linux:
+
+    brew tap thoras-ai/tap https://github.com/thoras-ai/homebrew-tap
+    HOMEBREW_GITHUB_API_TOKEN=$(gh auth token) brew install thoras-ai/tap/savings-preview
+
+`brew tap` clones the tap over HTTPS, so git needs GitHub credentials; `gh auth setup-git` configures them. Homebrew checks the archive against the checksum in the formula. Upgrade with `HOMEBREW_GITHUB_API_TOKEN=$(gh auth token) brew upgrade savings-preview`. Without the token, the download fails with a 404.
+
+### npx
+
+With Node.js 18 or later, run the CLI without installing it:
+
+    npx @thoras/savings-preview check --context my-cluster
+
+The first run downloads the release binary of the package's version for your machine, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux. Later runs start it from there. It downloads with `GITHUB_TOKEN`, `GH_TOKEN` or the token of a logged-in gh, in that order. Pin a version with `npx @thoras/savings-preview@0.3.0`, or install it with `npm install -g @thoras/savings-preview` to get a `savings-preview` command.
+
+| Variable | Use |
+| --- | --- |
+| `GITHUB_TOKEN` or `GH_TOKEN` | Token to download with. It needs read access to the repository's contents. |
+| `SAVINGS_PREVIEW_CACHE` | Directory to keep the binaries in. |
+
+### Install script
 
     gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh
 
@@ -37,8 +61,6 @@ Without gh, download `install.sh` from the release page and run it with a token:
 Then check the install:
 
     savings-preview --version
-
-A Homebrew release is coming.
 
 ### Install from the archive
 

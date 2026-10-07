@@ -12,9 +12,22 @@ The report page is also published at https://curly-dollop-gw8yzn1.pages.github.i
 
 ## Install
 
-The repository is private, so every download needs a GitHub login or token with access to it.
+The repository is private, so every download needs a GitHub login or token with access to it. With [gh](https://cli.github.com) logged in as an account that can read it, any of these works.
 
-With [gh](https://cli.github.com) logged in:
+With Homebrew, on macOS or Linux:
+
+    brew tap thoras-ai/tap https://github.com/thoras-ai/homebrew-tap
+    HOMEBREW_GITHUB_API_TOKEN=$(gh auth token) brew install thoras-ai/tap/savings-preview
+
+`brew tap` clones over HTTPS, so git needs GitHub credentials; `gh auth setup-git` configures them. Pass the token again on `brew upgrade savings-preview`. Without it, the download fails with a 404.
+
+With npx, which needs Node.js 18 or later:
+
+    npx @thoras/savings-preview check --context my-cluster
+
+The package downloads the release binary of the same version on first use, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux (`SAVINGS_PREVIEW_CACHE` to change). It downloads with `GITHUB_TOKEN`, `GH_TOKEN` or the token of a logged-in gh, in that order. `npm install -g @thoras/savings-preview` puts `savings-preview` on `PATH` instead.
+
+With the install script:
 
     gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh
 
@@ -29,8 +42,6 @@ If gh has several accounts and says "release not found", set `GH_TOKEN` to an ac
 Without gh, download `install.sh` from the release page and run it with a token. The script then downloads through the GitHub API with `curl`, using `GITHUB_TOKEN` or `GH_TOKEN`. The token needs read access to the repository's contents.
 
     GITHUB_TOKEN=<token> sh install.sh
-
-A Homebrew release is coming.
 
 Or download an archive from the release page, check it with `shasum -a 256 -c checksums.txt --ignore-missing`, and put the `savings-preview` binary on `PATH`.
 
@@ -82,12 +93,12 @@ It prints the identity the kubeconfig gives, the result of `kubectl auth can-i` 
 - `docs/prometheus-adapter.md`: the Prometheus adapter. Build it with `go build -o bin/savings-preview ./cmd/savings-preview`.
 - `CHANGELOG.md`: what changed in each release; each section is that release's notes. `docs/upgrading.md` has the upgrade steps.
 - `docs/releasing.md`: how a `v*` tag becomes a GitHub release with binaries, SBOMs, checksums, the install script and the Homebrew formula, and how to publish the formula to the tap.
-- `scripts/install.sh` and `packaging/homebrew/savings-preview.rb`: the install script and the Homebrew formula template that each release carries.
+- `scripts/install.sh` and `packaging/homebrew/savings-preview.rb`: the install script and the Homebrew formula template that each release carries. `packaging/npm/`: the npm package that downloads and runs the release binary.
 - `docs/poll-adapter.md`: the poll adapter, for clusters with no usage history. It reads the cluster at an interval and keeps the readings on disk.
 - `docs/datadog-adapter.md`: the Datadog adapter. It reads the history from the Datadog metrics query API with an API key and an application key.
 - `docs/design.md`: the design rules the report page follows, and how to re-sync the design tokens in `design/`.
 
-Run every test with `make test`, or the Go tests with `go test ./...`, the contract, install script and formula tests with `python3 -m unittest discover -s tests`, and the page tests with `node --test 'tests/**/*.test.js'`. `make test-all` also runs `go vet` and the Go tests under the race detector. The scripts need Python 3 and the standard library only.
+Run every test with `make test`, or the Go tests with `go test ./...`, the contract, install script and formula tests with `python3 -m unittest discover -s tests`, and the page and npm package tests with `node --test 'tests/**/*.test.js'`. `make test-all` also runs `go vet` and the Go tests under the race detector. The scripts need Python 3 and the standard library only.
 
 ## Report page
 

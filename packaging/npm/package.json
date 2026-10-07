@@ -1,0 +1,30 @@
+{
+  "name": "@thoras/savings-preview",
+  "version": "0.0.0",
+  "description": "Read a cluster's usage history and show what Thoras would have saved",
+  "homepage": "https://github.com/thoras-ai/savings-preview",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thoras-ai/savings-preview.git",
+    "directory": "packaging/npm"
+  },
+  "license": "UNLICENSED",
+  "bin": {
+    "savings-preview": "bin/savings-preview.js"
+  },
+  "files": [
+    "bin/",
+    "lib/"
+  ],
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
