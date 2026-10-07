@@ -4,7 +4,6 @@ package kube
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -38,7 +37,7 @@ func Connect(kubeconfig, kubeContext string) (*Conn, error) {
 	cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, ov)
 	raw, err := cc.RawConfig()
 	if err != nil {
-		return nil, fmt.Errorf("load kubeconfig: %w", err)
+		return nil, configError(rules, kubeContext, nil, err)
 	}
 	ctxName := kubeContext
 	if ctxName == "" {
@@ -53,7 +52,7 @@ func Connect(kubeconfig, kubeContext string) (*Conn, error) {
 	}
 	cfg, err := cc.ClientConfig()
 	if err != nil {
-		return nil, fmt.Errorf("load kubeconfig: %w", err)
+		return nil, configError(rules, kubeContext, &raw, err)
 	}
 	cfg.QPS, cfg.Burst = 5, 10
 	cs, err := kubernetes.NewForConfig(cfg)

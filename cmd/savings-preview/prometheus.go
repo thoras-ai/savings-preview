@@ -64,7 +64,7 @@ func runPrometheus(args []string) error {
 		var err error
 		conn, err = kube.Connect(*kubeconfig, *kctx)
 		if err != nil {
-			return err
+			return kube.WithCommand(err, "savings-preview prometheus")
 		}
 		if clusterName == "" {
 			clusterName = conn.ClusterName

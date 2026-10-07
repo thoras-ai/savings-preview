@@ -407,7 +407,7 @@ at any time.
 	}
 	conn, err := kube.Connect(*kubeconfig, *kubeContext)
 	if err != nil {
-		return err
+		return kube.WithCommand(err, "savings-preview "+name)
 	}
 	if *cluster == "" {
 		*cluster = conn.ClusterName
