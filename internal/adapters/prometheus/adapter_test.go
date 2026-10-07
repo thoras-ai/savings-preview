@@ -627,3 +627,22 @@ func TestFirstFailedQueryCancelsTheRest(t *testing.T) {
 		t.Errorf("queries kept running after the first failure: %d range calls", rangeCalls)
 	}
 }
+
+func TestCapacityTypeLabels(t *testing.T) {
+	for labels, want := range map[[2]string]string{
+		{"eks.amazonaws.com/capacityType", "SPOT"}:        "spot",
+		{"karpenter.sh/capacity-type", "on-demand"}:       "on_demand",
+		{"karpenter.sh/capacity-type", "preemptible"}:     "spot",
+		{"karpenter.sh/capacity-type", "Spot-Instance"}:   "spot",
+		{"karpenter.sh/capacity-type", "reserved"}:        "unknown",
+		{"cloud.google.com/gke-spot", "TRUE"}:             "spot",
+		{"cloud.google.com/gke-spot", "true"}:             "spot",
+		{"cloud.google.com/gke-preemptible", "true"}:      "spot",
+		{"cloud.google.com/gke-preemptible", "false"}:     "unknown",
+		{"kubernetes.azure.com/scalesetpriority", "Spot"}: "spot",
+	} {
+		if got := capacityType(map[string]string{labelKey(labels[0]): labels[1]}); got != want {
+			t.Errorf("%v: %s, want %s", labels, got, want)
+		}
+	}
+}

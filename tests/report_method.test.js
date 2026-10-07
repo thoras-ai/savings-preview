@@ -45,10 +45,9 @@ test('data and method describes the file at the default settings', () => {
   for (const s of [
     'demo-cluster', 'prometheus', 'Sep 16, 12:00 AM to Sep 30, 12:00 AM UTC, 14 days', '5-minute samples',
     'Good confidence tier 2: at least 7 days at 5-minute resolution.', '3 counted of 4 in the file',
-    '2 in the file, 2 with a known list price', '2 of 2 nodes at AWS us-east-1 on-demand list prices; spot nodes are priced at on-demand',
+    '2 in the file, 2 with a known list price', '2 of 2 nodes at AWS us-east-1 on-demand and spot list prices',
     'thoras.savings_preview 1.0.0, OpenTelemetry semantic conventions 1.44.0',
     'report-worker batch: missing memory usage (container.memory.working_set) data, so it is listed but not counted.',
-    'ip-10-0-2-27 is a spot node priced at the on-demand list price.',
     'Every other required series was present for every workload. No fidelity notes were recorded.',
     'trailing 15-minute window. The target is 1.1 × that peak.', 'Average over the window'
   ]) assert.ok(out.includes(s), s);
@@ -144,7 +143,7 @@ function largeDoc() {
   }
   for (let k = 0; k < 60; k++) {
     rms.push({
-      resource: { attributes: base.concat([S('k8s.node.name', 'node-' + k), S('host.type', 'm5.2xlarge'), S('cloud.region', 'us-east-1'), S('thoras.node.capacity_type', k % 3 ? 'on_demand' : 'spot')]) },
+      resource: { attributes: base.concat([S('k8s.node.name', 'node-' + k), S('host.type', 'm5.2xlarge'), S('cloud.region', k % 3 ? 'us-east-1' : 'us-west-2'), S('thoras.node.capacity_type', k % 3 ? 'on_demand' : 'spot')]) },
       scopeMetrics: [{ metrics: [{ name: 'k8s.node.cpu.allocatable', sum: { dataPoints: pts(() => 8) } }, { name: 'k8s.node.memory.allocatable', sum: { dataPoints: pts(() => 32 * GIB) } }] }]
     });
   }
@@ -164,7 +163,21 @@ test('data and method and the printed summary render 1,000 workloads within the 
   assert.ok(each < budget(50), each.toFixed(1) + ' ms');
   const out = text(html);
   assert.ok(out.includes('1-minute samples, kept as 15-minute peaks and means'));
-  assert.ok(out.includes('Show 32 more'), 'the 20 workloads and 20 spot nodes past the first 8 fold away');
-  assert.strictEqual((html.match(/<li>/g) || []).length, 40 + 6 + 4);
+  assert.ok(out.includes('Show 33 more'), 'the 20 workloads, 20 nodes outside us-east-1 and one line for the nodes with no cloud provider fold away past the first 8');
+  assert.ok(out.includes('60 nodes with no cloud provider in the file are priced as AWS'));
+  assert.strictEqual((html.match(/<li>/g) || []).length, 41 + 6 + 4);
   assert.ok(text(printed).includes('Thoras would cut this cluster’s compute spend by'));
+});
+
+test('in a fleet the method prices each cluster from its own nodes', () => {
+  const named = name => {
+    const doc = fixture();
+    doc.resourceMetrics.forEach(rm => rm.resource.attributes.forEach(a => { if (a.key === 'k8s.cluster.name') a.value = { stringValue: name }; }));
+    return doc.resourceMetrics;
+  };
+  const data = model.prepare({ resourceMetrics: named('east').concat(named('west')) });
+  const out = text(method(context(data)));
+  assert.ok(out.includes('Price a core-hour and a GiB-hour for each cluster from its own nodes'), out.slice(0, 200));
+  const one = text(method(context(model.prepare(fixture()))));
+  assert.ok(one.includes('Here that is $'));
 });

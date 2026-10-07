@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"math"
 	"os"
 	"os/exec"
@@ -132,20 +131,85 @@ func strs(vals ...string) []*string {
 	return out
 }
 
+// cloudNodes has EKS, GKE and AKS nodes: on-demand, spot, spot with no spot
+// price, GCP custom types, an unknown type, a cloud with no table and a node
+// whose cloud the file does not name. Prices are the platform table's rows.
+var cloudNodes = []struct {
+	n    node
+	want nodePrice
+}{
+	{node{hostType: "m5.xlarge", provider: "aws", region: "us-east-1", capacity: "on_demand", cores: 3.92, gib: 14.8},
+		nodePrice{cloud: "aws", cores: 4, gib: 16, hourly: 0.192}},
+	{node{hostType: "m5.2xlarge", provider: "aws", region: "us-west-2", capacity: "spot", cores: 7.91, gib: 30.1},
+		nodePrice{cloud: "aws", cores: 8, gib: 32, hourly: 0.384 * 0.36, spot: true, otherRegion: true}},
+	{node{hostType: "c8ib.large", provider: "aws", region: "us-east-1", capacity: "spot", cores: 1.93, gib: 3.1},
+		nodePrice{cloud: "aws", cores: 2, gib: 4, spot: true, reason: "spot"}},
+	{node{hostType: "n2-standard-4", provider: "gcp", region: "us-central1", capacity: "on_demand", cores: 3.92, gib: 13},
+		nodePrice{cloud: "gcp", cores: 4, gib: 16, hourly: 0.218756}},
+	{node{hostType: "e2-standard-4", provider: "gcp", region: "us-central1", capacity: "spot", cores: 3.92, gib: 13},
+		nodePrice{cloud: "gcp", cores: 4, gib: 16, hourly: 0.07547082, spot: true}},
+	{node{hostType: "n2d-custom-16-32768", provider: "gcp", region: "us-central1", capacity: "on_demand", cores: 15.89, gib: 27.5},
+		nodePrice{cloud: "gcp", cores: 16, gib: 32, hourly: 16*0.0325248 + 32*0.00435855, custom: true}},
+	{node{hostType: "n2d-custom-4-8192", provider: "gcp", region: "us-central1", capacity: "spot", cores: 3.92, gib: 6.1},
+		nodePrice{cloud: "gcp", cores: 4, gib: 8, hourly: 4*0.01015 + 8*0.001663, spot: true, custom: true}},
+	{node{hostType: "Standard_D4s_v5", provider: "azure", region: "eastus", capacity: "on_demand", cores: 3.86, gib: 12.4},
+		nodePrice{cloud: "azure", cores: 4, gib: 16, hourly: 0.192}},
+	{node{hostType: "Standard_D4s_v5", provider: "azure", region: "eastus", capacity: "spot", cores: 3.86, gib: 12.4},
+		nodePrice{cloud: "azure", cores: 4, gib: 16, hourly: 0.192, azureSpot: true}},
+	{node{hostType: "x9.unknown", provider: "aws", region: "us-east-1", capacity: "on_demand", cores: 4, gib: 16},
+		nodePrice{cloud: "aws", reason: "type"}},
+	{node{hostType: "VM.Standard.E4.Flex", provider: "oci", region: "us-ashburn-1", capacity: "on_demand", cores: 4, gib: 16},
+		nodePrice{cloud: "oci", reason: "cloud"}},
+	{node{hostType: "c5.large", provider: "unknown", region: "unknown", capacity: "unknown", cores: 1.93, gib: 3.1},
+		nodePrice{cloud: "aws", cores: 2, gib: 4, hourly: 0.085, inferred: true}},
+	{node{hostType: "unknown", provider: "unknown", region: "unknown", capacity: "unknown", cores: 2, gib: 2},
+		nodePrice{cloud: "unknown", reason: "type"}},
+}
+
+func TestPriceNode(t *testing.T) {
+	for _, c := range cloudNodes {
+		got := priceNode(c.n)
+		if got.cloud != c.want.cloud || got.reason != c.want.reason || !same(got.cores, c.want.cores) || !same(got.gib, c.want.gib) ||
+			!same(got.hourly, c.want.hourly) || got.spot != c.want.spot || got.custom != c.want.custom || got.inferred != c.want.inferred ||
+			got.azureSpot != c.want.azureSpot || got.otherRegion != c.want.otherRegion {
+			t.Errorf("%s %s %s: got %+v, want %+v", c.n.provider, c.n.hostType, c.n.capacity, got, c.want)
+		}
+	}
+	// A custom type with no size in its name falls back to the allocatable.
+	if got := priceNode(node{hostType: "e2-custom-small-2048", provider: "gcp", cores: 2, gib: 1.9}); !same(got.hourly, 2*0.02579582+1.9*0.00345659) || got.reason != "" {
+		t.Errorf("unsized custom type: %+v", got)
+	}
+	if got := priceNode(node{hostType: "e2-custom-small-2048", provider: "gcp", cores: math.NaN()}); got.reason != "size" {
+		t.Errorf("unsized custom type with no allocatable: %+v", got)
+	}
+}
+
 func TestPricing(t *testing.T) {
-	r := pricing([]node{{hostType: "x9.unknown", cores: 8, gib: 32}})
+	r := pricing([]node{{hostType: "x9.unknown", provider: "aws", cores: 8, gib: 32}})
 	if r.basis != "default node (4 cores, 16 GiB, $0.192 per hour)" || !same(r.perCore, 0.048) || !same(r.perGiB, 0.012) {
 		t.Fatalf("default: %+v", r)
 	}
 	r = pricing([]node{
-		{hostType: "m5.xlarge", region: "us-east-1", capacity: "on_demand", cores: 4, gib: 16},
-		{hostType: "r5.large", region: "eu-west-1", capacity: "spot", cores: 2, gib: 16},
-		{hostType: "x9.unknown", cores: 8, gib: 32},
-		{hostType: "m5.large", cores: math.NaN(), gib: 8},
+		{hostType: "m5.xlarge", provider: "aws", region: "us-east-1", capacity: "on_demand", cores: 3.92, gib: 14.8},
+		{hostType: "r5.large", provider: "aws", region: "us-east-1", capacity: "on_demand", cores: 1.93, gib: 15.1},
+		{hostType: "x9.unknown", provider: "aws", cores: 8, gib: 32},
 	})
-	want := "2 of 4 nodes at AWS us-east-1 on-demand list prices; spot nodes are priced at on-demand; nodes outside us-east-1 are priced as if in it"
-	if r.basis != want || !same(r.perCore, (0.192+0.126)/6) || !same(r.perGiB, (0.192+0.126)/32) {
-		t.Fatalf("table: %+v", r)
+	if want := "2 of 3 nodes at AWS us-east-1 on-demand list prices"; r.basis != want || !same(r.perCore, (0.192+0.126)/6) || !same(r.perGiB, (0.192+0.126)/32) {
+		t.Fatalf("aws: %+v", r)
+	}
+	var nodes []node
+	cost, cores, gib := 0.0, 0.0, 0.0
+	for _, c := range cloudNodes {
+		nodes = append(nodes, c.n)
+		if c.want.reason == "" {
+			cost, cores, gib = cost+c.want.hourly, cores+c.want.cores, gib+c.want.gib
+		}
+	}
+	r = pricing(nodes)
+	want := "9 of 13 nodes at AWS us-east-1, Google Cloud us-central1 and Azure eastus on-demand and spot list prices; " +
+		"Azure spot nodes are priced at on-demand; nodes outside those regions are priced as if in them"
+	if r.basis != want || !same(r.perCore, cost/cores) || !same(r.perGiB, cost/gib) {
+		t.Fatalf("clouds: %+v, want %q %v %v", r, want, cost/cores, cost/gib)
 	}
 }
 
@@ -296,6 +360,26 @@ func nodesDoc() map[string]any {
 			containerMetrics(n, step, func(i int) float64 { return 0.1 }, func(i int) float64 { return 3 + float64(i%4)/4 }, 0.5, 6, "")...),
 		rm(cache, metric("k8s.statefulset.pod.desired", fill(n, func(int) float64 { return 2 }), step, true)),
 	}}
+}
+
+// cloudsDoc prices the cloudNodes.
+func cloudsDoc() map[string]any {
+	doc := nodesDoc()
+	base := common(60, 1, "metrics-server")
+	var rms []any
+	for i, c := range cloudNodes {
+		rms = append(rms, rm(with(base, sAttr("k8s.node.name", fmt.Sprintf("node-%d", i)), sAttr("host.type", c.n.hostType), sAttr("cloud.provider", c.n.provider),
+			sAttr("cloud.region", c.n.region), sAttr("thoras.node.capacity_type", c.n.capacity)),
+			metric("k8s.node.cpu.allocatable", fill(4, func(int) float64 { return c.n.cores }), 3600, false),
+			metric("k8s.node.memory.allocatable", fill(4, func(int) float64 { return c.n.gib * gib }), 3600, true)))
+	}
+	for _, r := range doc["resourceMetrics"].([]any) {
+		attrs := r.(map[string]any)["resource"].(map[string]any)["attributes"].([]map[string]any)
+		if !slices.ContainsFunc(attrs, func(a map[string]any) bool { return a["key"] == "k8s.node.name" }) {
+			rms = append(rms, r)
+		}
+	}
+	return map[string]any{"resourceMetrics": rms}
 }
 
 // snapshotDoc has a single sample.
@@ -467,7 +551,19 @@ type jsResult struct {
 	Section struct {
 		ReqCores, ReqGiB, WasteCores, WasteGiB float64
 	} `json:"section"`
-	Prices map[string]float64 `json:"prices"`
+	// Nodes is each node as the page reads it and how it prices it.
+	Nodes []struct {
+		In struct {
+			HostType, Provider, Region, Capacity string
+			Cores, GiB                           *float64
+		}
+		Out struct {
+			Cloud                                          string
+			Cores, GiB, Hourly                             float64
+			Spot, Custom, Inferred, AzureSpot, OtherRegion bool
+			Reason                                         string
+		}
+	} `json:"nodes"`
 }
 
 // The page loads a file once and recomputes it whenever a lever changes, so
@@ -492,7 +588,8 @@ const out = process.argv.slice(4).map(f => {
   const s = section.summarize(data, r, { range: null, namespaces: null });
   const counted = r.totals.counted > 0;
   return {
-    cluster: r.cluster, fidelity: r.fidelity, basis: r.pricing.basis, totals: r.totals, money: ns, rows, prices: model.nodePrices,
+    cluster: r.cluster, fidelity: r.fidelity, basis: r.pricing.basis, totals: r.totals, money: ns, rows,
+    nodes: data.nodes.map(n => ({ in: { hostType: n.hostType, provider: n.provider, region: n.region, capacity: n.capacity, cores: n.cores, gib: n.gib }, out: model.priceNode(n) })),
     section: counted ? { ReqCores: s.cpu.req, ReqGiB: s.mem.req, WasteCores: s.cpu.req - s.cpu.target, WasteGiB: s.mem.req - s.mem.target } : {}
   };
 });
@@ -543,7 +640,7 @@ func TestParityWithModelJS(t *testing.T) {
 	}
 	dir := t.TempDir()
 	files := []string{fixture, intermittent}
-	for name, doc := range map[string]map[string]any{"partial": partialDoc(), "nodes": nodesDoc(), "snapshot": snapshotDoc(), "spans": spansDoc(), "held": heldDoc()} {
+	for name, doc := range map[string]map[string]any{"partial": partialDoc(), "nodes": nodesDoc(), "clouds": cloudsDoc(), "snapshot": snapshotDoc(), "spans": spansDoc(), "held": heldDoc()} {
 		b, err := json.Marshal(doc)
 		if err != nil {
 			t.Fatal(err)
@@ -616,8 +713,22 @@ func TestParityWithModelJS(t *testing.T) {
 					t.Errorf("%s: got %v, want %v", n.name, n.got, n.want)
 				}
 			}
-			if !maps.Equal(nodePrices, w.Prices) {
-				t.Errorf("node prices: got %v, want %v", nodePrices, w.Prices)
+			for _, n := range w.Nodes {
+				in := node{hostType: n.In.HostType, provider: n.In.Provider, region: n.In.Region, capacity: n.In.Capacity, cores: math.NaN(), gib: math.NaN()}
+				if n.In.Cores != nil {
+					in.cores = *n.In.Cores
+				}
+				if n.In.GiB != nil {
+					in.gib = *n.In.GiB
+				}
+				p, o := priceNode(in), n.Out
+				if p.cloud != o.Cloud || p.reason != o.Reason || !same(p.cores, o.Cores) || !same(p.gib, o.GiB) || !same(p.hourly, o.Hourly) ||
+					p.spot != o.Spot || p.custom != o.Custom || p.inferred != o.Inferred || p.azureSpot != o.AzureSpot || p.otherRegion != o.OtherRegion {
+					t.Errorf("node %+v: got %+v, want %+v", n.In, p, o)
+				}
+			}
+			if name == "clouds" && len(w.Nodes) != len(cloudNodes) {
+				t.Errorf("clouds: %d nodes, want %d", len(w.Nodes), len(cloudNodes))
 			}
 			js, _ := json.Marshal(got)
 			t.Logf("%s", js)

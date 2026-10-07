@@ -147,7 +147,12 @@ func TestNodeCapacityLabels(t *testing.T) {
 		{"eks.amazonaws.com/capacityType", "ON_DEMAND"}: "on_demand",
 		{"eks.amazonaws.com/capacityType", "SPOT"}:      "spot",
 		{"karpenter.sh/capacity-type", "on-demand"}:     "on_demand",
+		{"karpenter.sh/capacity-type", "spot"}:          "spot",
+		{"karpenter.sh/capacity-type", "Preemptible"}:   "spot",
+		{"karpenter.sh/capacity-type", "spot-capacity"}: "spot",
+		{"karpenter.sh/capacity-type", "reserved"}:      "unknown",
 		{"cloud.google.com/gke-spot", "true"}:           "spot",
+		{"cloud.google.com/gke-preemptible", "true"}:    "spot",
 		{"some/label", "x"}:                             "unknown",
 	} {
 		n := corev1.Node{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{labels[0]: labels[1]}}}

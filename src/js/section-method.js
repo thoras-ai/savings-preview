@@ -137,15 +137,24 @@
   // With rates set under Assumptions the nodes do not set prices, so only the
   // nodes the file could not price are worth naming.
   function nodeItems(nodes, custom) {
-    var out = [];
+    var out = [], inferred = {};
     nodes.forEach(function (n) {
-      var name = '<span class="wl-name">' + esc(n.name) + '</span>';
-      if (!(n.cores > 0) || !(n.gib > 0)) out.push(name + ' has no allocatable CPU or memory, so it is not used for pricing.');
-      else if (model.nodePrices[n.hostType] === undefined) out.push(name + (n.hostType && n.hostType !== 'unknown' ? ' has instance type ' + code(n.hostType) + ', which has no list price here,' : ' has no instance type,') + ' so it is not used for pricing.');
+      var name = '<span class="wl-name">' + esc(n.name) + '</span>', p = model.priceNode(n), type = code(n.hostType);
+      if (p.reason === 'type') out.push(name + (n.hostType && n.hostType !== 'unknown' ? ' has instance type ' + type + ', which has no list price here,' : ' has no instance type,') + ' so it is not used for pricing.');
+      else if (p.reason === 'cloud') out.push(name + ' runs on ' + esc(n.provider) + ', which has no list prices here, so it is not used for pricing.');
+      else if (p.reason === 'size') out.push(name + ' has custom type ' + type + ' with no size in its name and no allocatable CPU or memory, so it is not used for pricing.');
+      else if (p.reason === 'spot') out.push(name + ' is a spot node of type ' + type + ', which has no spot list price, so it is not used for pricing.');
       else if (!custom) {
-        if (n.capacity === 'spot') out.push(name + ' is a spot node priced at the on-demand list price.');
-        if (n.region && n.region !== 'us-east-1') out.push(name + ' is in ' + esc(n.region) + ' and priced at us-east-1 list prices.');
+        var cloud = model.cloudNames[p.cloud];
+        if (p.inferred) inferred[p.cloud] = (inferred[p.cloud] || 0) + 1;
+        if (p.custom) out.push(name + ' has custom type ' + type + ', priced per vCPU and per GiB for ' + ui.num(p.cores, 2) + ' vCPU and ' + ui.num(p.gib, 2) + ' GiB.');
+        if (p.azureSpot) out.push(name + ' is an Azure spot node priced at the on-demand list price.');
+        if (p.otherRegion) out.push(name + ' is in ' + esc(n.region) + ' and priced at ' + cloud + ' ' + esc(model.priceTable[p.cloud].region) + ' list prices.');
       }
+    });
+    Object.keys(inferred).forEach(function (c) {
+      var k = inferred[c];
+      out.push(ui.num(k) + ' ' + ui.plural(k, 'node') + ' with no cloud provider in the file ' + (k === 1 ? 'is' : 'are') + ' priced as ' + model.cloudNames[c] + ', the cloud ' + (k === 1 ? 'its instance type belongs' : 'their instance types belong') + ' to.');
     });
     return out;
   }
@@ -179,7 +188,8 @@
     var f = r.fidelity, p = r.pricing, d = model.constants.DEFAULT_NODE;
     var target = ui.num(1 + st.headroom, 2);
     var pricing = p.custom ? 'Price a core-hour and a GiB-hour at the rates set under Assumptions: ' + esc(rates(p)) + '.' :
-      p.priced ? 'Price a core-hour and a GiB-hour from the node inventory: the priced nodes’ total list price divided by their total cores, and by their total GiB. Here that is ' + esc(rates(p)) + '.' :
+      r.clusters && r.clusters.length > 1 ? 'Price a core-hour and a GiB-hour for each cluster from its own nodes: the priced nodes’ total list price divided by their total listed vCPUs, and by their total listed GiB, or the default node, ' + d.cores + ' cores, ' + d.gib + ' GiB, $' + d.hourly + ' per hour, for a cluster with no node of a known list price. Spot nodes count at their spot list price.' :
+      p.priced ? 'Price a core-hour and a GiB-hour from the node inventory: the priced nodes’ total list price divided by their total listed vCPUs, and by their total listed GiB. Spot nodes count at their spot list price. Here that is ' + esc(rates(p)) + '.' :
         'Price a core-hour and a GiB-hour from the default node, ' + d.cores + ' cores, ' + d.gib + ' GiB, $' + d.hourly + ' per hour, since the file has no node with a known list price: ' + esc(rates(p)) + '.';
     var steps = [
       'Total each workload’s usage and requests across its replicas at every step, for CPU and for memory. A container counts at a step only when it has CPU and memory usage there; one without them, such as an init container or a check that runs now and then, is not running and adds no usage and no request.',
@@ -225,7 +235,7 @@
       'Not a forecast. Thoras forecasts the next 15 minutes; this report uses the peak that actually happened, so it is what right-sizing would have done over the window.',
       'Not horizontal scaling. Replica counts are taken as they were. HPA and external metrics are out of scope.',
       'Not realized savings. Freed requests reduce the bill only when nodes are removed; see <a href="#section=cluster" data-go="cluster">Cluster and nodes</a>.',
-      'Not your negotiated prices. Nodes are priced at on-demand list prices, spot nodes included; set your own rates under <a href="#section=assumptions" data-go="assumptions">Assumptions</a>.'
+      'Not your negotiated prices. Nodes are priced at list prices, on-demand or spot; set your own rates under <a href="#section=assumptions" data-go="assumptions">Assumptions</a>.'
     ];
     return '<div class="card"><h2>What this is not</h2><ul class="facts-list">' + items.map(function (s) { return '<li>' + s + '</li>'; }).join('') + '</ul></div>';
   }

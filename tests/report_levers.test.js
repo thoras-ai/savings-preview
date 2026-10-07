@@ -89,7 +89,7 @@ test('instance prices divide the hourly price by vCPUs and GiB, scaled by region
   const p = prices.lookup('aws', 'us-east-1', 'm5.xlarge');
   assert.deepStrictEqual([p.cores, p.gib, p.hourly, p.perCore, p.perGiB, p.scaled], [4, 16, 0.192, 0.048, 0.012, false]);
   const eu = prices.lookup('gcp', 'europe-west1', 'n2-standard-4');
-  assert.ok(close(eu.hourly, 0.194236 * 1.1));
+  assert.ok(close(eu.hourly, 0.218756 * 1.1));
   assert.strictEqual(eu.scaled, true);
   assert.strictEqual(prices.lookup('aws', 'mars-1', 'm5.xlarge'), null);
   assert.strictEqual(prices.lookup('azure', 'eastus', 'm5.xlarge'), null);
@@ -110,7 +110,21 @@ test('every catalog entry has positive specs and every region a factor of at lea
   assert.ok(Object.keys(prices.CLOUDS.azure.types).length >= 20);
 });
 
-test('the catalog agrees with the default AWS us-east-1 node pricing', () => {
+test('a type picked in its cloud\'s reference region costs what the default pricing charges for it', () => {
+  ['aws', 'gcp', 'azure'].forEach(c => {
+    const cloud = prices.CLOUDS[c];
+    assert.strictEqual(cloud.ref, model.priceTable[c].region);
+    assert.strictEqual(Object.keys(cloud.types).length, Object.keys(model.priceTable[c].types).length);
+    prices.types(c).forEach(t => {
+      const p = prices.lookup(c, cloud.ref, t), d = model.priceNode({ hostType: t, provider: c, capacity: 'on_demand', region: cloud.ref });
+      assert.ok(!d.reason && p.hourly === d.hourly && p.cores === d.cores && p.gib === d.gib, c + ' ' + t);
+    });
+  });
+  assert.strictEqual(prices.lookup('aws', 'us-east-1', 'constructor'), null);
+  assert.strictEqual(prices.parseKey('aws/constructor/m5.large'), null);
+});
+
+test('in the reference region the suggested rates are the default pricing', () => {
   const nodes = ['m5.xlarge', 'c5.2xlarge', 'r5.large', 't3.medium'].map(t => {
     const s = prices.CLOUDS.aws.types[t];
     return { hostType: t, region: 'us-east-1', capacity: 'on_demand', cores: s[0], gib: s[1] };
@@ -129,7 +143,8 @@ test('nodes on other clouds and regions are priced by their own type and region'
   const r = prices.fromNodes(nodes);
   assert.strictEqual(r.priced, 3);
   assert.strictEqual(r.unknownRegion, 1);
-  assert.ok(close(r.perCore, (2 * 0.194236 * 1.1 + 0.192) / 12));
+  // n2-standard-4 and Standard_D4s_v5 from the product table, europe-west1 at its catalog factor.
+  assert.ok(close(r.perCore, (2 * 0.218756 * 1.1 + 0.192) / 12));
   assert.deepStrictEqual(prices.guess(nodes), { cloud: 'gcp', region: 'europe-west1' });
   assert.strictEqual(prices.guess([{ hostType: 'x9.unknown' }]), null);
   assert.strictEqual(prices.fromNodes([]), null);

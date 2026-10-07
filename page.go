@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/thoras-ai/savings-preview/internal/savings"
 )
 
 //go:embed src/index.html src/js/*.js src/styles/*.css src/fonts/*.woff2 design/*.css design/assets/thoras-wordmark.svg
@@ -81,7 +83,9 @@ func ReportPage() (string, error) {
 		}
 		js = append(js, s)
 	}
-	script := strings.Join(js, "\n")
+	// The node price table goes first, for model.js to read.
+	table := "(self.SP = self.SP || {}).nodePriceTable = " + strings.TrimSpace(string(savings.NodePricesJSON)) + ";"
+	script := strings.Join(append([]string{table}, js...), "\n")
 	if strings.Contains(strings.ToLower(script), "</script") {
 		return "", errors.New("script text contains a closing script tag")
 	}

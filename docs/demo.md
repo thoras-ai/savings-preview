@@ -34,8 +34,8 @@ The figures below are at the default settings. They hold as long as the generato
 Show: the headline, today against Thoras, the gap chart and the three workloads.
 
 - "This is a 60-workload production cluster. The CLI read 14 days of usage from the Prometheus it already runs, and the figures were computed on the laptop. Nothing was installed, and nothing was uploaded."
-- Read the headline: "Thoras would cut this cluster's compute spend by $41,053 a year, 56%."
-- Point at the two cards: "Today it pays $72,778 a year for 149 cores and 465 GiB of requests at 36% utilization. Right-sized, it is $31,725 for 46 cores and 255 GiB at 89%."
+- Read the headline: "Thoras would cut this cluster's compute spend by $36,426 a year, 57%."
+- Point at the two cards: "Today it pays $63,693 a year for 149 cores and 465 GiB of requests at 36% utilization. Right-sized, it is $27,267 for 46 cores and 255 GiB at 89%."
 - Point at the gap chart: the hatched waste between requested today and with Thoras is widest at night and at weekends, when traffic drops and the requests do not.
 - Point at the three workloads: "`storefront` runs all day and saves the most of the always-on services. `nightly-etl` runs for a few hours and holds its request all day. `postgres-orders` is already right-sized, and the page says so instead of inventing savings."
 - Type 5 into Clusters like this one, then open Details for engineers for the rest.
@@ -67,9 +67,9 @@ If there is time, `users-api` shows a request someone cut by hand on day 10: the
 
 Open Assumptions.
 
-- Raise headroom to 20% and the peak window to 1 hour: "A more conservative target still saves about $37,700, 52%. The figure does not depend on cutting it fine."
-- Set a 30% spot or committed-use discount: "Your prices, not list prices. Spend and savings drop by the same share; the percentage stays at 56%."
-- Untick batch under Namespaces: "Leave out what you do not want counted. Without batch it is about $30,000."
+- Raise headroom to 20% and the peak window to 1 hour: "A more conservative target still saves about $33,500, 53%. The figure does not depend on cutting it fine."
+- Set a 30% spot or committed-use discount: "Your prices, not list prices. Spend and savings drop by the same share; the percentage stays at 57%."
+- Untick batch under Namespaces: "Leave out what you do not want counted. Without batch it is about $26,700."
 - "Every setting is in the link. Copy link shares this exact view." Reset to defaults before moving on.
 
 ## 5. Print (30 seconds)

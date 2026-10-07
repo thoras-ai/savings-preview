@@ -45,7 +45,8 @@
     nodes.forEach(function (n) {
       var type = n.hostType === 'unknown' ? '' : n.hostType, key = type + '|' + n.capacity;
       if (!groups[key]) {
-        groups[key] = { type: type, capacity: CAPACITY[n.capacity] || '', count: 0, cores: 0, gib: 0, hourly: model.nodePrices[n.hostType] };
+        var p = model.priceNode(n);
+        groups[key] = { type: type, capacity: CAPACITY[n.capacity] || '', count: 0, cores: 0, gib: 0, hourly: p.reason ? undefined : p.hourly };
         order.push(key);
       }
       var g = groups[key];
@@ -85,6 +86,8 @@
     var types = {};
     nodes.forEach(function (n) { if (n.hostType && n.hostType !== 'unknown') types[n.hostType] = true; });
     var counted = t.counted > 0;
+    var prices = nodes.map(model.priceNode), priced = prices.filter(function (p) { return !p.reason; });
+    var clouds = ['aws', 'gcp', 'azure'].filter(function (c) { return priced.some(function (p) { return p.cloud === c; }); });
     return {
       nodes: nodes.length, types: Object.keys(types).length, priced: (r.basePricing || data.pricing).priced,
       alloc: alloc,
@@ -96,8 +99,11 @@
         return p.status === 'excluded' && (!st.namespaces || st.namespaces.indexOf(p.ns) >= 0) && (!st.onlyClusters || !data.multi || st.onlyClusters.indexOf(p.cluster) >= 0);
       }).length,
       filtered: !!st.namespaces, ranged: !!st.range,
-      spot: nodes.some(function (n) { return n.capacity === 'spot' && model.nodePrices[n.hostType] !== undefined; }),
-      regions: nodes.some(function (n) { return n.region && n.region !== 'us-east-1' && model.nodePrices[n.hostType] !== undefined; }),
+      spot: priced.some(function (p) { return p.spot; }),
+      spotLeftOut: prices.some(function (p) { return p.reason === 'spot'; }),
+      azureSpot: priced.some(function (p) { return p.azureSpot; }),
+      regions: priced.some(function (p) { return p.otherRegion; }),
+      clouds: clouds.map(function (c) { return model.cloudNames[c] + ' ' + model.priceTable[c].region; }),
       customRates: !!r.pricing.custom
     };
   }
@@ -193,8 +199,10 @@
     } else {
       if (!s.priced) notes.push('No instance type in the file has a known list price, so requests are priced with the default node (4 cores, 16 GiB, $0.192 per hour).');
       else if (s.priced < s.nodes) notes.push('Nodes without a known list price are left out of the per-core and per-GiB rates.');
-      if (s.spot) notes.push('Spot nodes are priced at the on-demand list price.');
-      if (s.regions) notes.push('Prices are AWS us-east-1 list prices; nodes in other regions are priced as if they were in it.');
+      if (s.spot) notes.push('Spot nodes are priced at the spot list price.');
+      if (s.spotLeftOut) notes.push('Spot nodes of a type with no spot list price are left out of the rates.');
+      if (s.azureSpot) notes.push('Azure spot nodes are priced at the on-demand list price.');
+      if (s.regions) notes.push('Prices are list prices in one region per cloud (' + s.clouds.join(', ') + '); nodes in other regions are priced as if they were in ' + (s.clouds.length === 1 ? 'it' : 'those') + '.');
     }
     if (s.customRates) notes.push('The figures in this report use the rates set under Assumptions, not these prices.');
     var rows = s.mix.map(function (g) {

@@ -12,16 +12,12 @@
   // A file that holds several clusters, or a cluster that could not be read.
   var FLEET_VERSION = '1.4.0';
 
-  // On-demand Linux list prices in USD per hour, AWS us-east-1.
-  var NODE_PRICES = {
-    't3.medium': 0.0416, 't3.large': 0.0832, 't3.xlarge': 0.1664, 't3.2xlarge': 0.3328,
-    'm5.large': 0.096, 'm5.xlarge': 0.192, 'm5.2xlarge': 0.384, 'm5.4xlarge': 0.768, 'm5.8xlarge': 1.536,
-    'm6i.large': 0.096, 'm6i.xlarge': 0.192, 'm6i.2xlarge': 0.384, 'm6i.4xlarge': 0.768, 'm6i.8xlarge': 1.536,
-    'c5.large': 0.085, 'c5.xlarge': 0.17, 'c5.2xlarge': 0.34, 'c5.4xlarge': 0.68, 'c5.9xlarge': 1.53,
-    'c6i.large': 0.085, 'c6i.xlarge': 0.17, 'c6i.2xlarge': 0.34, 'c6i.4xlarge': 0.68,
-    'r5.large': 0.126, 'r5.xlarge': 0.252, 'r5.2xlarge': 0.504, 'r5.4xlarge': 1.008, 'r5.8xlarge': 2.016,
-    'r6i.large': 0.126, 'r6i.xlarge': 0.252, 'r6i.2xlarge': 0.504, 'r6i.4xlarge': 1.008
-  };
+  // The Thoras product's node price table, imported from its SQL migrations by
+  // scripts/import_node_prices.py. The page builders inline it before this script.
+  var PRICES = typeof module !== 'undefined' && module.exports ? require('../../internal/savings/node_prices.json') : self.SP.nodePriceTable;
+  var CLOUD_ORDER = ['aws', 'gcp', 'azure'];
+  var CLOUD_NAMES = { aws: 'AWS', gcp: 'Google Cloud', azure: 'Azure' };
+  var CUSTOM_SIZE = /-custom-(\d+)-(\d+)(-ext)?$/;
 
   var M = {
     cpuUse: 'container.cpu.usage',
@@ -137,7 +133,7 @@
       };
       if (a['k8s.node.name']) {
         nodes.push(Object.assign(base, {
-          name: a['k8s.node.name'], hostType: a['host.type'] || '', region: a['cloud.region'] || '', capacity: a['thoras.node.capacity_type'] || 'unknown',
+          name: a['k8s.node.name'], hostType: a['host.type'] || '', provider: a['cloud.provider'] || '', region: a['cloud.region'] || '', capacity: a['thoras.node.capacity_type'] || 'unknown',
           cores: levelMean(base, M.cpuAlloc),
           gib: levelMean(base, M.memAlloc) / GIB
         }));
@@ -168,9 +164,72 @@
     return { cluster: cluster, clusters: clusters, failed: failed, contract: contract, containers: containers, workloads: workloads, nodes: nodes };
   }
 
+  function customFor(table, type) {
+    for (var i = 0; i < table.custom.length; i++) if (type.indexOf(table.custom[i][0]) === 0) return table.custom[i];
+    return null;
+  }
+
+  // How one node is priced, the way the product's average node query does:
+  // the cloud's table by instance type, else a custom family's per-unit
+  // prices, and the spot price for a spot node. The product detects no Azure
+  // spot nodes, so they are priced at on-demand. reason is empty when the node
+  // is priced, or says why it is left out: type, cloud, size or spot.
+  // internal/savings priceNode is the Go port.
+  function priceNode(n) {
+    var p = { cloud: n.provider || '', cores: 0, gib: 0, hourly: 0, spot: false, custom: false, inferred: false, azureSpot: false, otherRegion: false, reason: '' };
+    var type = n.hostType;
+    if (!type || type === 'unknown') { p.reason = 'type'; return p; }
+    if (CLOUD_ORDER.indexOf(p.cloud) < 0) {
+      if (p.cloud && p.cloud !== 'unknown') { p.reason = 'cloud'; return p; }
+      p.cloud = ''; p.inferred = true;
+      for (var i = 0; i < CLOUD_ORDER.length; i++) {
+        var c = PRICES[CLOUD_ORDER[i]];
+        if (Object.prototype.hasOwnProperty.call(c.types, type) || customFor(c, type)) { p.cloud = CLOUD_ORDER[i]; break; }
+      }
+      if (!p.cloud) { p.reason = 'type'; return p; }
+    }
+    var t = PRICES[p.cloud];
+    p.spot = n.capacity === 'spot';
+    if (p.spot && p.cloud === 'azure') { p.spot = false; p.azureSpot = true; }
+    p.otherRegion = !!n.region && n.region !== 'unknown' && n.region !== t.region;
+    if (Object.prototype.hasOwnProperty.call(t.types, type)) {
+      var row = t.types[type], price = p.spot ? row[3] : row[2];
+      p.cores = row[0]; p.gib = row[1] / 1024;
+      if (price === null) { p.reason = 'spot'; return p; }
+      p.hourly = price;
+      return p;
+    }
+    var cu = customFor(t, type);
+    if (!cu) { p.reason = 'type'; return p; }
+    p.custom = true;
+    var m = CUSTOM_SIZE.exec(type);
+    p.cores = m ? Number(m[1]) : n.cores;
+    p.gib = m ? Number(m[2]) / 1024 : n.gib;
+    if (!(p.cores > 0) || !(p.gib > 0)) { p.reason = 'size'; return p; }
+    var vcpu = p.spot ? cu[3] : cu[1], gib = p.spot ? cu[4] : cu[2];
+    if (vcpu === null || gib === null) { p.reason = 'spot'; return p; }
+    p.hourly = p.cores * vcpu + p.gib * gib;
+    return p;
+  }
+
+  function listJoin(items) {
+    return items.length < 2 ? items.join('') : items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
+  }
+
+  // The rates the product would set from these nodes: the average priced
+  // node's hourly cost over its vCPUs, and over its GiB. With no node priced
+  // it falls back to the product's default node.
   function pricing(nodes) {
-    var priced = nodes.filter(function (n) { return NODE_PRICES[n.hostType] !== undefined && n.cores > 0 && n.gib > 0; });
-    if (!priced.length) {
+    var priced = 0, cost = 0, cores = 0, gib = 0, clouds = {}, spot = false, azureSpot = false, regions = false;
+    nodes.forEach(function (n) {
+      var p = priceNode(n);
+      if (p.reason) return;
+      priced++;
+      cost += p.hourly; cores += p.cores; gib += p.gib;
+      clouds[p.cloud] = true;
+      spot = spot || p.spot; azureSpot = azureSpot || p.azureSpot; regions = regions || p.otherRegion;
+    });
+    if (!priced) {
       return {
         perCore: DEFAULT_NODE.hourly / DEFAULT_NODE.cores,
         perGiB: DEFAULT_NODE.hourly / DEFAULT_NODE.gib,
@@ -178,16 +237,12 @@
         priced: 0, nodes: nodes.length
       };
     }
-    var cost = 0, cores = 0, gib = 0;
-    var spot = priced.some(function (n) { return n.capacity === 'spot'; });
-    var regions = priced.some(function (n) { return n.region && n.region !== 'us-east-1'; });
-    var caveat = (spot ? '; spot nodes are priced at on-demand' : '') + (regions ? '; nodes outside us-east-1 are priced as if in it' : '');
-    priced.forEach(function (n) { cost += NODE_PRICES[n.hostType]; cores += n.cores; gib += n.gib; });
-    return {
-      perCore: cost / cores, perGiB: cost / gib,
-      basis: priced.length + ' of ' + nodes.length + ' nodes at AWS us-east-1 on-demand list prices' + caveat,
-      priced: priced.length, nodes: nodes.length
-    };
+    var used = CLOUD_ORDER.filter(function (c) { return clouds[c]; });
+    var where = used.map(function (c) { return CLOUD_NAMES[c] + ' ' + PRICES[c].region; });
+    var basis = priced + ' of ' + nodes.length + ' nodes at ' + listJoin(where) + ' ' + (spot ? 'on-demand and spot' : 'on-demand') + ' list prices';
+    if (azureSpot) basis += '; Azure spot nodes are priced at on-demand';
+    if (regions) basis += used.length === 1 ? '; nodes outside ' + PRICES[used[0]].region + ' are priced as if in it' : '; nodes outside those regions are priced as if in them';
+    return { perCore: cost / cores, perGiB: cost / gib, basis: basis, priced: priced, nodes: nodes.length };
   }
 
   // Mean of a level series over the time it covers. A held series weights each
@@ -737,7 +792,7 @@
   }
 
   var api = {
-    analyze: analyze, prepare: prepare, mergeFidelity: mergeFidelity, nodePrices: NODE_PRICES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
+    analyze: analyze, prepare: prepare, mergeFidelity: mergeFidelity, priceNode: priceNode, priceTable: PRICES, cloudNames: CLOUD_NAMES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
     lowerBound: lowerBound, upperBound: upperBound, mean: mean,
     fidelityLabel: fidelityLabel, formatSpan: formatSpan, formatStep: formatStep, notes: NOTES, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
   };
