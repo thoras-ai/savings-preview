@@ -110,6 +110,9 @@ func TestConnectCurrentContextMissing(t *testing.T) {
 	if ce.Kind != UnknownContext || !ce.Current || !strings.Contains(ce.Error(), `current context "gone" does not exist`) {
 		t.Fatalf("kind %q: %v", ce.Kind, ce)
 	}
+	if want := `the kubeconfig's current context "gone" does not exist`; ce.Short() != want {
+		t.Errorf("short %q, want %q", ce.Short(), want)
+	}
 }
 
 func TestConnectNoKubeconfig(t *testing.T) {

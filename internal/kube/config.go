@@ -109,6 +109,9 @@ func (e *ConfigError) Short() string {
 	case NoCurrentContext:
 		return "the kubeconfig sets no current context and --context is not given"
 	case UnknownContext:
+		if e.Current {
+			return fmt.Sprintf("the kubeconfig's current context %q does not exist", e.Context)
+		}
 		return fmt.Sprintf("the kubeconfig has no context %q", e.Context)
 	}
 	return "cannot read the kubeconfig"
