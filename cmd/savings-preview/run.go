@@ -104,6 +104,12 @@ A zip with a summary and a self-contained copy of the report, which carries
 the compact copy, is written next to the contract file; the full file stays on
 disk. Everything is read-only; nothing is uploaded.
 
+With --context given more than once, --contexts-file or --all-contexts, the
+run reads each of those clusters, a few at a time, and writes one file, one
+report and one zip holding all of them. Clusters that poll poll together. A
+cluster that cannot be read is reported and left out; the run fails only when
+none can be read.
+
 `)
 		fs.PrintDefaults()
 	}
