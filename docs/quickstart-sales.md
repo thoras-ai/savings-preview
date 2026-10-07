@@ -103,7 +103,7 @@ Then have them paste these two commands in the folder where they saved it, with 
     xattr -c savings-preview_*.tar.gz 2>/dev/null; tar -xzf savings-preview_*.tar.gz && cd savings-preview_*/
     ./savings-preview --context <their context>
 
-The report opens on their screen; ask them to share it. Afterwards, ask them to send you `savings-preview.zip`.
+The report opens on their screen; ask them to share it. If it says it is polling, see the note on polling in step 3. Afterwards, ask them to send you `savings-preview.zip`.
 
 Access they need: read access to the cluster through their own `kubectl` login. With Prometheus in the cluster, it lists services to find it and queries it through the services proxy. Without one, it lists pods, deployments, statefulsets, replicasets and nodes, and reads metrics-server. It never reads secrets, config maps or logs. If their security team wants the full list, send [security.md](security.md).
 
