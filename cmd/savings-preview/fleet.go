@@ -170,6 +170,9 @@ func runFleet(ctx context.Context, o *runOptions, w io.Writer) (*builtReport, er
 	// Stores are read a few clusters at a time. A cluster without a usable
 	// store waits, so that every cluster that polls polls in one window.
 	each(members, fleetConcurrency, func(m *member) {
+		if m.err != nil {
+			return
+		}
 		s, err := memberSources(&m.opts, m.log)
 		if err != nil {
 			m.err = err
