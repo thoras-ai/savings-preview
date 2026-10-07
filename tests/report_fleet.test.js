@@ -135,3 +135,17 @@ test('page one leads with the fleet total and lists the clusters', () => {
   assert.match(h1, /Show all 2 clusters/);
   assert.strictEqual(state.serialize(one), 'cluster=alpha');
 });
+
+test('page one counts only the clusters with a workload in the figures', () => {
+  const nodesOnly = named(poll, 'delta', '1.4.0').resourceMetrics.filter(rm => rm.resource.attributes.some(x => x.key === 'k8s.node.name'));
+  const data = model.prepare({ resourceMetrics: fleetDoc.resourceMetrics.concat(nodesOnly) }), st = state.parse('');
+  assert.strictEqual(data.clusters.length, 3);
+  const r = model.compute(data, state.levers(st));
+  const html = summary.markup(data, r, st);
+  assert.match(html, /across your 2 clusters/);
+  assert.match(html, /2 clusters, about/);
+  assert.strictEqual((html.match(/data-cluster="/g) || []).length, 2);
+  // With one counted cluster left in scope, page one is that cluster's.
+  const one = state.parse('#cluster=alpha,delta');
+  assert.strictEqual(model.compute(data, state.levers(one)).fleet, false);
+});

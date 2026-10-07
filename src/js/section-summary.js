@@ -5,6 +5,9 @@
 (function () {
   'use strict';
 
+  // Clusters on page one: those with a workload in the figures.
+  function counted(r) { return r.clusters.filter(function (c) { return c.counted; }).length; }
+
   var node = typeof module !== 'undefined' && module.exports;
   var model = node ? require('./model.js') : SP.model;
   var ui = node ? require('./components.js') : SP.ui;
@@ -66,11 +69,11 @@
     // source step, kept as one step's mean and peak.
     if (f.snapshot && f.sourceStepSeconds) from = 'From a read of your cluster under ' + model.formatSpan(f.stepSeconds) + '.';
     else if (f.snapshot) from = 'From a single reading of your cluster.';
-    else if (polled(f)) from = 'From a ' + spanAdjective(span) + ' read of your ' + (r.fleet ? r.clusters.length + ' clusters.' : 'cluster.');
+    else if (polled(f)) from = 'From a ' + spanAdjective(span) + ' read of your ' + (r.fleet ? counted(r) + ' clusters.' : 'cluster.');
     else {
       var names = f.source ? f.source.split(', ').map(function (s) { return SOURCES[s] || s; }) : [];
       from = 'From ' + model.formatSpan(span) + ' of your ' + (names.length ? names.join(' and ') + ' data' : 'cluster’s metrics') +
-        (r.fleet ? ' across ' + r.clusters.length + ' clusters.' : '.');
+        (r.fleet ? ' across ' + counted(r) + ' clusters.' : '.');
     }
     return from + ' Computed on your laptop. Nothing installed, nothing uploaded.';
   }
@@ -168,7 +171,7 @@
   }
 
   function headline(fig, r) {
-    if (r && r.fleet) return 'Thoras would cut compute spend across your ' + r.clusters.length + ' clusters by ' + ui.money(fig.savings) + ' a year, ' + ui.pct(fig.share) + '.';
+    if (r && r.fleet) return 'Thoras would cut compute spend across your ' + counted(r) + ' clusters by ' + ui.money(fig.savings) + ' a year, ' + ui.pct(fig.share) + '.';
     return 'Thoras would cut this cluster’s compute spend by ' + ui.money(fig.savings) + ' a year, ' + ui.pct(fig.share) + '.';
   }
 
@@ -183,7 +186,7 @@
     var fig = figures(r);
     var lines = [
       'Savings preview: ' + (r.cluster || 'Unnamed cluster'),
-      'Thoras would cut compute spend' + (r.fleet ? ' across ' + r.clusters.length + ' clusters' : '') + ' by ' + ui.money(fig.savings) + ' a year, ' + ui.pct(fig.share) + '.',
+      'Thoras would cut compute spend' + (r.fleet ? ' across ' + counted(r) + ' clusters' : '') + ' by ' + ui.money(fig.savings) + ' a year, ' + ui.pct(fig.share) + '.',
       'Utilization: ' + ui.pct(fig.today.utilization) + ' today, ' + ui.pct(fig.thoras.utilization) + ' with Thoras.'
     ];
     if (r.fleet) {
@@ -272,7 +275,7 @@
     if (r.fleet) {
       return '<div class="card"><h2>Across your fleet</h2><div class="fleet"><div class="fleet-figures">' +
         '<div class="meaning-figure" data-fleet-total>' + esc(ui.money(fig.savings)) + ' a year</div>' +
-        '<div class="muted" data-fleet-people>' + esc(r.clusters.length + ' clusters, ' + engineers(fig.savings, st.engineerCost) + ', at ' + ui.money(st.engineerCost) + ' each') + '</div>' +
+        '<div class="muted" data-fleet-people>' + esc(counted(r) + ' clusters, ' + engineers(fig.savings, st.engineerCost) + ', at ' + ui.money(st.engineerCost) + ' each') + '</div>' +
         '</div></div></div>';
     }
     return '<div class="card"><h2>Across your fleet</h2><div class="fleet">' +

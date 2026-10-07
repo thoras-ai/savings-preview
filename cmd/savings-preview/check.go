@@ -140,7 +140,7 @@ func runCheck(args []string) int {
 	o, finish := addRunFlags(fs)
 	asJSON := fs.Bool("json", false, "print the result as JSON")
 	color := fs.String("color", "auto", "color the output: auto (when printing to a terminal and NO_COLOR is unset), always or never")
-	timeout := fs.Duration("timeout", time.Minute, "give up on the reads still running after this long")
+	timeout := fs.Duration("timeout", time.Minute, "give up on the reads still running after this long; with several contexts, for each cluster")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `usage: savings-preview check [flags]
 
@@ -177,11 +177,11 @@ change what run writes, such as --out and --no-open, are accepted and ignored.
 		fmt.Fprintln(os.Stderr, "error: --timeout must be positive")
 		return checkBlocked
 	}
+	if o.fleet {
+		return checkFleet(context.Background(), o, *timeout, *asJSON, useColor(*color, os.Stdout), os.Stdout)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
-	if o.fleet {
-		return checkFleet(ctx, o, *asJSON, useColor(*color, os.Stdout), os.Stdout)
-	}
 	r := check(ctx, o, newCheckEnv(o), time.Now())
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)

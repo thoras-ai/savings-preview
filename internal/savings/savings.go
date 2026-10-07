@@ -134,6 +134,7 @@ type span struct{ start, end, step float64 }
 
 // resource is a container (id and kind set) or a workload.
 type resource struct {
+	seq              int // position in the file
 	step, tier       float64
 	spans            []span
 	coarseStep       float64
@@ -144,6 +145,7 @@ type resource struct {
 }
 
 type node struct {
+	seq                        int
 	hostType, region, capacity string
 	cores, gib                 float64
 }
@@ -171,11 +173,13 @@ func AnalyzeReader(rd io.Reader) (*Summary, error) {
 		}
 		return cd
 	}
-	// Resources without a cluster name belong to the first cluster, as they
-	// did when a file held one.
+	// Resources without a cluster name belong to the first cluster named in
+	// the file, as they did when a file held one, wherever they come.
 	first := ""
 	named := false
+	seq := 0
 	n, err := eachResource(rd, func(rm *otlpResource) {
+		seq++
 		strs, nums := map[string]string{}, map[string]float64{}
 		// Array entries without a stringValue stay nil, the JS undefined.
 		lists := map[string][]*string{}
@@ -214,7 +218,7 @@ func AnalyzeReader(rd io.Reader) (*Summary, error) {
 				cd.notes = append(cd.notes, *x)
 			}
 		}
-		r := &resource{step: nums["thoras.step_seconds"], tier: nums["thoras.fidelity_tier"], source: strs["thoras.source"],
+		r := &resource{seq: seq, step: nums["thoras.step_seconds"], tier: nums["thoras.fidelity_tier"], source: strs["thoras.source"],
 			series: map[string]series{}, held: map[string]bool{}}
 		for _, x := range lists["thoras.held_metrics"] {
 			if x != nil {
@@ -247,7 +251,7 @@ func AnalyzeReader(rd io.Reader) (*Summary, error) {
 		}
 		switch {
 		case strs["k8s.node.name"] != "":
-			cd.nodes = append(cd.nodes, node{hostType: strs["host.type"], region: strs["cloud.region"], capacity: strs["thoras.node.capacity_type"],
+			cd.nodes = append(cd.nodes, node{seq: seq, hostType: strs["host.type"], region: strs["cloud.region"], capacity: strs["thoras.node.capacity_type"],
 				cores: r.levelMean("k8s.node.cpu.allocatable"), gib: r.levelMean("k8s.node.memory.allocatable") / gib})
 		case r.kind != "":
 			r.id = strs["k8s.namespace.name"] + "/" + r.kind + "/" + strs["k8s."+r.kind+".name"]
@@ -263,6 +267,21 @@ func AnalyzeReader(rd io.Reader) (*Summary, error) {
 	}
 	if n == 0 {
 		return nil, errors.New("No resourceMetrics found. This is not a Savings Preview file.")
+	}
+	if pre := byName[""]; pre != nil && named {
+		into := byName[first]
+		into.resources += pre.resources
+		into.containers = append(pre.containers, into.containers...)
+		into.nodes = append(pre.nodes, into.nodes...)
+		into.notes = append(into.notes, pre.notes...)
+		for id, w := range pre.workloads {
+			if into.workloads[id] == nil {
+				into.workloads[id] = w
+			}
+		}
+		slices.SortStableFunc(into.containers, func(a, b *resource) int { return a.seq - b.seq })
+		slices.SortStableFunc(into.nodes, func(a, b node) int { return a.seq - b.seq })
+		clusters = slices.DeleteFunc(clusters, func(c *clusterData) bool { return c == pre })
 	}
 	if len(clusters) == 1 && clusters[0].err == "" {
 		return clusters[0].summary()

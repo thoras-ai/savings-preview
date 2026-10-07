@@ -205,7 +205,7 @@ func TestCheckFleet(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if code := checkFleet(context.Background(), o, false, false, &out); code != checkBlocked {
+	if code := checkFleet(context.Background(), o, time.Minute, false, false, &out); code != checkBlocked {
 		t.Errorf("exit %d", code)
 	}
 	for _, s := range []string{"context  cluster  source", "a                 none", "context a is broken", "Fleet: 0 of 2 clusters can run"} {
@@ -214,7 +214,7 @@ func TestCheckFleet(t *testing.T) {
 		}
 	}
 	out.Reset()
-	if code := checkFleet(context.Background(), o, true, false, &out); code != checkBlocked {
+	if code := checkFleet(context.Background(), o, time.Minute, true, false, &out); code != checkBlocked {
 		t.Errorf("exit %d", code)
 	}
 	var fc fleetCheck
@@ -249,3 +249,41 @@ func readZipEntry(t *testing.T, path, name string) []byte {
 }
 
 func same(a, b float64) bool { return math.Abs(a-b) <= 1e-9*math.Max(1, math.Abs(b)) }
+
+func TestCheckFleetTimeoutIsPerCluster(t *testing.T) {
+	old := newFleetCheckEnv
+	t.Cleanup(func() { newFleetCheckEnv = old })
+	// Each cluster's checks take most of the timeout, so a deadline shared
+	// by the fleet would run out for the clusters checked last.
+	slow := func(ctx context.Context) error {
+		select {
+		case <-time.After(150 * time.Millisecond):
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	newFleetCheckEnv = func(o *runOptions) checkEnv {
+		return checkEnv{
+			conn:    &kube.Conn{Context: o.context, ClusterName: o.context},
+			whoami:  func(ctx context.Context) (*kube.Identity, error) { return &kube.Identity{User: "u"}, slow(ctx) },
+			canI:    func(ctx context.Context, a kube.Access) (bool, string, error) { return true, "", nil },
+			metrics: func(ctx context.Context) (int, error) { return 3, slow(ctx) },
+		}
+	}
+	o, err := runFlags([]string{"--context", "a", "--context", "b", "--context", "c", "--context", "d", "--context", "e", "--context", "f", "--context", "g", "--source", "poll"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	checkFleet(context.Background(), o, 500*time.Millisecond, true, false, &out)
+	var fc fleetCheck
+	if err := json.Unmarshal(out.Bytes(), &fc); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range fc.Clusters {
+		if c.Report.ExitCode == checkBlocked || c.Report.Kubernetes.IdentityError != "" {
+			t.Errorf("%s ran out of time: %s", c.Context, c.Report.Summary)
+		}
+	}
+}

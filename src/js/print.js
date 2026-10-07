@@ -4,6 +4,9 @@
 (function () {
   'use strict';
 
+  // Clusters on page one: those with a workload in the figures.
+  function counted(r) { return r.clusters.filter(function (c) { return c.counted; }).length; }
+
   var ui = SP.ui, esc = ui.esc, summary = SP.summary;
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -59,7 +62,7 @@
   function fleet(fig, st, r) {
     if (r.fleet) {
       return '<div class="print-box"><h2>Across your fleet</h2><div class="print-meaning">' + esc(ui.money(fig.savings) + ' a year') + '</div>' +
-        '<div class="print-muted">' + esc(r.clusters.length + ' clusters; ' + summary.engineers(fig.savings, st.engineerCost) + ', at ' + ui.money(st.engineerCost) + ' each') + '</div></div>';
+        '<div class="print-muted">' + esc(counted(r) + ' clusters; ' + summary.engineers(fig.savings, st.engineerCost) + ', at ' + ui.money(st.engineerCost) + ' each') + '</div></div>';
     }
     var total = fig.savings * st.clusters;
     return '<div class="print-box"><h2>Across your fleet</h2><div class="print-meaning">' + esc(ui.money(total) + ' a year') + '</div>' +

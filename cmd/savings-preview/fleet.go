@@ -142,7 +142,8 @@ func runFleet(ctx context.Context, o *runOptions, w io.Writer) (*builtReport, er
 	var mu sync.Mutex
 	members := make([]*member, len(names))
 	for i, n := range names {
-		m := &member{context: n, log: &prefixWriter{mu: &mu, w: w, prefix: "[" + n + "] "}}
+		pw := &prefixWriter{mu: &mu, w: w, prefix: "[" + n + "] "}
+		m := &member{context: n, log: pw}
 		members[i] = m
 		if m.conn, m.err = connectFleet(o.kubeconfig, n); m.err == nil {
 			m.cluster = m.conn.ClusterName
@@ -217,6 +218,9 @@ func runFleet(ctx context.Context, o *runOptions, w io.Writer) (*builtReport, er
 			continue
 		}
 		fulls, compacts = append(fulls, m.out), append(compacts, compactName(m.out))
+	}
+	for _, m := range members {
+		m.log.(*prefixWriter).Flush()
 	}
 	if len(fulls) == 0 {
 		return nil, fmt.Errorf("none of the %d clusters could be read", len(members))
@@ -318,7 +322,8 @@ func plural(n int, one, many string) string {
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // prefixWriter writes whole lines to w, each but blank ones after prefix.
-// Writers that share mu do not interleave within a line.
+// Writers that share mu do not interleave within a line. Flush writes a
+// last line that has no newline.
 type prefixWriter struct {
 	mu     *sync.Mutex
 	w      io.Writer
@@ -364,10 +369,11 @@ type clusterCheck struct {
 // newFleetCheckEnv is newCheckEnv; tests replace it.
 var newFleetCheckEnv = newCheckEnv
 
-// checkFleet checks each context as check does one, a few at a time, and
-// prints a line per cluster and one for the fleet. It exits 0 when every
-// cluster is ready, 2 when none can run, and 1 otherwise.
-func checkFleet(ctx context.Context, o *runOptions, asJSON, color bool, w io.Writer) int {
+// checkFleet checks each context as check does one, a few at a time, each
+// with its own timeout, and prints a line per cluster and one for the fleet.
+// It exits 0 when every cluster is ready, 2 when none can run, and 1
+// otherwise.
+func checkFleet(ctx context.Context, o *runOptions, timeout time.Duration, asJSON, color bool, w io.Writer) int {
 	names, err := fleetContexts(o)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -384,7 +390,9 @@ func checkFleet(ctx context.Context, o *runOptions, asJSON, color bool, w io.Wri
 		oc := *o
 		oc.context, oc.contexts, oc.allContexts, oc.contextsFile, oc.fleet = m.context, nil, false, "", false
 		i := slices.Index(names, m.context)
-		fc.Clusters[i].Report = check(ctx, &oc, newFleetCheckEnv(&oc), now)
+		cctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		fc.Clusters[i].Report = check(cctx, &oc, newFleetCheckEnv(&oc), now)
 	})
 	counts := map[int]int{}
 	for _, c := range fc.Clusters {
@@ -472,4 +480,10 @@ func sourceHistory(r *checkReport) string {
 		}
 	}
 	return ""
+}
+
+func (p *prefixWriter) Flush() {
+	if len(p.buf) > 0 {
+		p.Write([]byte("\n"))
+	}
 }

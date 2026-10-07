@@ -197,7 +197,7 @@ The run writes the same files as a single-cluster run, holding every cluster: `s
 
 Datadog, `--url`, `--cluster-name` and `--source datadog` name one cluster, so they work only with one context. To read clusters that live in Datadog or in one shared store, run once per cluster with `--selector`, and open the files together on the report page.
 
-`check` with several contexts prints one line per cluster (its source, how much history the store holds, the tier and any problem) and a line for the fleet. It exits 0 when every cluster is ready, 2 when none can run, and 1 otherwise. `--json` prints each cluster's full check.
+`check` with several contexts prints one line per cluster (its source, how much history the store holds, the tier and any problem) and a line for the fleet. It exits 0 when every cluster is ready, 2 when none can run, and 1 otherwise. `--timeout` applies to each cluster on its own. `--json` prints each cluster's full check.
 
 The report page also opens several files at once: choose or drop the `.json`, `.zip` or `report.html` files from runs of one cluster each, and the page shows them as one fleet. A cluster that appears in more than one file is counted once, from the file whose data ends latest, and Data and method says which file was left out.
 
@@ -210,9 +210,9 @@ The report opens on one page:
 - **The gap chart**: requested spend today against spend with Thoras over the window, with usage under them and the waste hatched.
 - **Three workloads, before and after**: monthly spend today and with Thoras for the biggest saver that runs all day, a job that runs in bursts, and one that is already right-sized. Select one to open its drill-down.
 - **Across your fleet**: the saving times the number of clusters like this one, in dollars and in loaded engineers.
+- **Next step**: Book a demo, and Copy summary, which copies a few plain lines for chat or email, with a line per cluster in a report of several. With less than 7 days of data it also suggests a week-long run.
 
-A report of several clusters opens on the fleet: the headline and Today and with Thoras add up every cluster, each priced from its own nodes, the gap chart sums them over the window, a table lists each cluster's spend today and with Thoras, the biggest saving first, and Across your fleet counts the clusters in the report. Select a cluster to see page one for it alone; Show all clusters goes back. Under Assumptions, Clusters includes or excludes clusters from every figure, and the link keeps the choice. Namespaces are named `cluster/namespace`, since clusters often share namespace names.
-- **Next step**: Book a demo, and Copy summary, which copies four plain lines for chat or email. With less than 7 days of data it also suggests a week-long run.
+A report of several clusters opens on the fleet: the headline and Today and with Thoras add up every cluster, each priced from its own nodes, the gap chart sums them over the window, a table lists each cluster's spend today and with Thoras, the biggest saving first, and Across your fleet counts the clusters that have workloads in the figures. Select a cluster to see page one for it alone; Show all clusters goes back. Under Assumptions, Clusters includes or excludes clusters from every figure, and the link keeps the choice. Namespaces are named `cluster/namespace`, since clusters often share namespace names.
 
 The target for each workload is 1.1 times its highest use in any 15 minutes. Waste is the request above the target. Prices come from AWS on-demand list prices (us-east-1) for known instance types, and from a 4-core, 16 GiB, $0.192 per hour node otherwise.
 

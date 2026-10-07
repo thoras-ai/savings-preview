@@ -720,7 +720,7 @@
     return {
       cluster: one ? (data.multi ? inScope[0].name : data.cluster) : inScope.length + ' clusters',
       fidelity: data.multi && one ? inScope[0].fidelity : data.fidelity, pricing: rates, basePricing: base, namespaces: data.namespaces,
-      nodes: one ? inScope[0].nodes : data.nodes, clusters: byCluster, fleet: data.multi && inScope.length > 1,
+      nodes: one ? inScope[0].nodes : data.nodes, clusters: byCluster, fleet: data.multi && byCluster.filter(function (c) { return c.counted; }).length > 1,
       levers: lv, workloads: workloads, totals: totals, series: series
     };
   }

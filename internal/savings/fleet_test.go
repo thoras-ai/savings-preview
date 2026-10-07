@@ -3,6 +3,8 @@ package savings
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 )
 
@@ -115,5 +117,118 @@ func TestFleetWithNoClusterRead(t *testing.T) {
 	doc := `{"resourceMetrics":[{"resource":{"attributes":[{"key":"k8s.cluster.name","value":{"stringValue":"gamma"}},{"key":"thoras.cluster.error","value":{"stringValue":"expired"}}]}}]}`
 	if _, err := Analyze([]byte(doc)); err == nil || err.Error() != "no cluster in the file has data to analyze (gamma: expired)" {
 		t.Errorf("got %v", err)
+	}
+}
+
+func TestUnnamedResourcesJoinTheFirstNamedCluster(t *testing.T) {
+	rms := renamed(t, "../../fixtures/savings-preview.otlp.json", "c")
+	want := analyzeAll(t, rms)
+	// Nodes first, without a cluster name.
+	var nodes, rest []any
+	for _, rm := range rms {
+		attrs := rm.(map[string]any)["resource"].(map[string]any)
+		var kept []any
+		isNode := false
+		for _, a := range attrs["attributes"].([]any) {
+			switch a.(map[string]any)["key"] {
+			case "k8s.node.name":
+				isNode = true
+			}
+		}
+		for _, a := range attrs["attributes"].([]any) {
+			if !isNode || a.(map[string]any)["key"] != "k8s.cluster.name" {
+				kept = append(kept, a)
+			}
+		}
+		attrs["attributes"] = kept
+		if isNode {
+			nodes = append(nodes, rm)
+		} else {
+			rest = append(rest, rm)
+		}
+	}
+	got := analyzeAll(t, append(nodes, rest...))
+	if got.Clusters != nil || got.Cluster != "c" || got.Pricing != want.Pricing || got.Totals != want.Totals {
+		t.Errorf("got %q %q %+v, want %q %+v", got.Cluster, got.Pricing, got.Totals, want.Pricing, want.Totals)
+	}
+}
+
+const fleetParityScript = `
+const model = require(process.argv[2]);
+const doc = JSON.parse(require('fs').readFileSync(process.argv[3], 'utf8'));
+const r = model.analyze(doc);
+console.log(JSON.stringify({ totals: r.totals, clusters: r.clusters.map(c => ({ name: c.name, spend: c.spend, savings: c.savings, counted: c.counted, workloads: c.workloads })) }));
+`
+
+func TestFleetParityWithModelJS(t *testing.T) {
+	nodeBin, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not on PATH")
+	}
+	modelJS, err := filepath.Abs("../../src/js/model.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rms := append(renamed(t, "../../fixtures/savings-preview.otlp.json", "alpha"), renamed(t, "../../fixtures/intermittent.otlp.json", "beta")...)
+	b, err := json.Marshal(map[string]any{"resourceMetrics": rms})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	docPath, script := filepath.Join(dir, "fleet.json"), filepath.Join(dir, "fleet.js")
+	if err := os.WriteFile(docPath, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(script, []byte(fleetParityScript), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(nodeBin, script, modelJS, docPath).Output()
+	if err != nil {
+		t.Fatalf("node: %v", err)
+	}
+	var js struct {
+		Totals   map[string]float64
+		Clusters []struct {
+			Name                               string
+			Spend, Savings, Counted, Workloads float64
+		}
+	}
+	if err := json.Unmarshal(out, &js); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Analyze(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name      string
+		got, want float64
+	}{
+		{"spend", got.Totals.AnnualSpend, js.Totals["spend"]},
+		{"savings", got.Totals.AnnualSavings, js.Totals["savings"]},
+		{"waste cores", got.Totals.WasteCores, js.Totals["cores"]},
+		{"waste GiB", got.Totals.WasteGiB, js.Totals["gib"]},
+		{"requested cores", got.Totals.RequestedCores, js.Totals["reqCores"]},
+		{"requested GiB", got.Totals.RequestedGiB, js.Totals["reqGiB"]},
+		{"counted", float64(got.Totals.Counted), js.Totals["counted"]},
+		{"workloads", float64(got.Totals.Workloads), js.Totals["workloads"]},
+	} {
+		if !same(c.got, c.want) {
+			t.Errorf("%s: go %v, js %v", c.name, c.got, c.want)
+		}
+	}
+	byName := map[string]ClusterSummary{}
+	for _, c := range got.Clusters {
+		byName[c.Cluster] = c
+	}
+	if len(js.Clusters) != 2 {
+		t.Fatalf("js clusters: %+v", js.Clusters)
+	}
+	for _, c := range js.Clusters {
+		g := byName[c.Name]
+		if g.Summary == nil || !same(g.Totals.AnnualSpend, c.Spend) || !same(g.Totals.AnnualSavings, c.Savings) ||
+			float64(g.Totals.Counted) != c.Counted || float64(g.Totals.Workloads) != c.Workloads {
+			t.Errorf("%s: go %+v, js %+v", c.Name, g.Summary, c)
+		}
 	}
 }
