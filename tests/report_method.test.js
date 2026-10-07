@@ -168,3 +168,16 @@ test('data and method and the printed summary render 1,000 workloads within the 
   assert.strictEqual((html.match(/<li>/g) || []).length, 41 + 6 + 4);
   assert.ok(text(printed).includes('Thoras would cut this cluster’s compute spend by'));
 });
+
+test('in a fleet the method prices each cluster from its own nodes', () => {
+  const named = name => {
+    const doc = fixture();
+    doc.resourceMetrics.forEach(rm => rm.resource.attributes.forEach(a => { if (a.key === 'k8s.cluster.name') a.value = { stringValue: name }; }));
+    return doc.resourceMetrics;
+  };
+  const data = model.prepare({ resourceMetrics: named('east').concat(named('west')) });
+  const out = text(method(context(data)));
+  assert.ok(out.includes('Price a core-hour and a GiB-hour for each cluster from its own nodes'), out.slice(0, 200));
+  const one = text(method(context(model.prepare(fixture()))));
+  assert.ok(one.includes('Here that is $'));
+});

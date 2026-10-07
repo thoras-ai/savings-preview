@@ -121,6 +121,7 @@ test('a type picked in its cloud\'s reference region costs what the default pric
     });
   });
   assert.strictEqual(prices.lookup('aws', 'us-east-1', 'constructor'), null);
+  assert.strictEqual(prices.parseKey('aws/constructor/m5.large'), null);
 });
 
 test('in the reference region the suggested rates are the default pricing', () => {

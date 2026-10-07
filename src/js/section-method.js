@@ -188,6 +188,7 @@
     var f = r.fidelity, p = r.pricing, d = model.constants.DEFAULT_NODE;
     var target = ui.num(1 + st.headroom, 2);
     var pricing = p.custom ? 'Price a core-hour and a GiB-hour at the rates set under Assumptions: ' + esc(rates(p)) + '.' :
+      r.clusters && r.clusters.length > 1 ? 'Price a core-hour and a GiB-hour for each cluster from its own nodes: the priced nodes’ total list price divided by their total listed vCPUs, and by their total listed GiB, or the default node, ' + d.cores + ' cores, ' + d.gib + ' GiB, $' + d.hourly + ' per hour, for a cluster with no node of a known list price. Spot nodes count at their spot list price.' :
       p.priced ? 'Price a core-hour and a GiB-hour from the node inventory: the priced nodes’ total list price divided by their total listed vCPUs, and by their total listed GiB. Spot nodes count at their spot list price. Here that is ' + esc(rates(p)) + '.' :
         'Price a core-hour and a GiB-hour from the default node, ' + d.cores + ' cores, ' + d.gib + ' GiB, $' + d.hourly + ' per hour, since the file has no node with a known list price: ' + esc(rates(p)) + '.';
     var steps = [

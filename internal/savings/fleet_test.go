@@ -214,8 +214,10 @@ func TestFleetClustersArePricedFromTheirOwnCloud(t *testing.T) {
 		t.Errorf("gke rates: %+v", r)
 	}
 	alone := analyzeAll(t, onGKE(renamed(t, "../../fixtures/savings-preview.otlp.json", "gke"), "n2-standard-4", "n2d-custom-8-32768"))
-	if f.Clusters[1].Totals != alone.Totals {
-		t.Errorf("gke in the fleet %+v, alone %+v", f.Clusters[1].Totals, alone.Totals)
+	for _, c := range f.Clusters {
+		if c.Cluster == "gke" && c.Totals != alone.Totals {
+			t.Errorf("gke in the fleet %+v, alone %+v", c.Totals, alone.Totals)
+		}
 	}
 }
 

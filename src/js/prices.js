@@ -45,7 +45,10 @@
       var row = table.types[t];
       types[t] = [row[0], row[1] / 1024, row[2]];
     });
+    var regions = Object.create(null);
+    Object.keys(CLOUDS[c].regions).forEach(function (r) { regions[r] = CLOUDS[c].regions[r]; });
     CLOUDS[c].ref = table.region;
+    CLOUDS[c].regions = regions;
     CLOUDS[c].types = types;
   });
 

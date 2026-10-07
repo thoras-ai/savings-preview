@@ -632,6 +632,10 @@ func TestCapacityTypeLabels(t *testing.T) {
 	for labels, want := range map[[2]string]string{
 		{"eks.amazonaws.com/capacityType", "SPOT"}:        "spot",
 		{"karpenter.sh/capacity-type", "on-demand"}:       "on_demand",
+		{"karpenter.sh/capacity-type", "preemptible"}:     "spot",
+		{"karpenter.sh/capacity-type", "Spot-Instance"}:   "spot",
+		{"karpenter.sh/capacity-type", "reserved"}:        "unknown",
+		{"cloud.google.com/gke-spot", "TRUE"}:             "spot",
 		{"cloud.google.com/gke-spot", "true"}:             "spot",
 		{"cloud.google.com/gke-preemptible", "true"}:      "spot",
 		{"cloud.google.com/gke-preemptible", "false"}:     "unknown",
