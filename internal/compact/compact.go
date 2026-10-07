@@ -5,6 +5,7 @@
 package compact
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -84,6 +85,11 @@ func Compact(r io.Reader, w io.Writer, step int) (Stats, error) {
 			res, err := c.resource(&rm)
 			if err != nil {
 				return st, fmt.Errorf("resource %d: %w", i, err)
+			}
+			// Each resource keeps the contract version it was read with.
+			cw.Version = ""
+			for _, sm := range rm.ScopeMetrics {
+				cw.Version = cmp.Or(cw.Version, sm.Scope.Version)
 			}
 			if err := cw.Resource(res); err != nil {
 				return st, fmt.Errorf("resource %d: %w", i, err)
@@ -172,9 +178,13 @@ func (c *compactor) resource(rm *resourceIn) (contract.Resource, error) {
 	}
 	in := map[string][]contract.Point{}
 	var names []string
+	if res.Error != "" {
+		return res, nil
+	}
 	for _, sm := range rm.ScopeMetrics {
-		if v := sm.Scope.Version; v != "" && v != contract.ScopeVersion {
-			return res, fmt.Errorf("the file is contract version %q and this release reads only %s; collect the data again with this release", v, contract.ScopeVersion)
+		if v := sm.Scope.Version; v != "" && !contract.KnownVersion(v) {
+			return res, fmt.Errorf("the file is contract version %q and this release reads only %s and %s; collect the data again with this release",
+				v, contract.ScopeVersion, contract.FleetScopeVersion)
 		}
 		for _, m := range sm.Metrics {
 			body := m.Gauge
@@ -442,6 +452,8 @@ func readAttrs(rm *resourceIn) (contract.Resource, []contract.StepSpan, error) {
 		switch a.Key {
 		case "k8s.cluster.name":
 			res.Cluster = s
+		case "thoras.cluster.error":
+			res.Error = s
 		case "thoras.source":
 			res.Source = s
 		case "thoras.step_seconds":
@@ -484,7 +496,7 @@ func readAttrs(rm *resourceIn) (contract.Resource, []contract.StepSpan, error) {
 			node.CapacityType = s
 		}
 	}
-	if res.StepSeconds <= 0 {
+	if res.StepSeconds <= 0 && res.Error == "" {
 		return res, nil, errors.New("thoras.step_seconds must be a positive integer")
 	}
 	return res, spans, nil

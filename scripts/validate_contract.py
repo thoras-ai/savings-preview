@@ -11,6 +11,8 @@ import sys
 SCHEMA_URL = "https://opentelemetry.io/schemas/1.44.0"
 SCOPE_NAME = "thoras.savings_preview"
 CONTRACT_VERSION = "1.0.0"
+# A file that holds several clusters, or a cluster that could not be read.
+FLEET_VERSION = "1.4.0"
 TIERS = (1, 2, 3)
 DAY = 86400
 
@@ -199,8 +201,10 @@ def validate(doc):
         return ["resourceMetrics is empty"]
 
     clusters = set()
+    versions = set()
+    read, failed = set(), set()  # clusters with data, and those recorded as not read
     seen = set()
-    workloads = {}       # (ns, kind, name) -> has workload resource
+    workloads = {}       # (cluster, ns, kind, name) -> has workload resource
     container_wl = set()  # workloads that have container resources
 
     for ri, rm in enumerate(doc["resourceMetrics"]):
@@ -212,6 +216,20 @@ def validate(doc):
         where = "resource %d" % ri
         if rm.get("schemaUrl") != SCHEMA_URL:
             errors.append("%s: schemaUrl must be %s" % (where, SCHEMA_URL))
+        cluster = attrs.get("k8s.cluster.name")
+        if "thoras.cluster.error" in attrs and not any(
+                attrs.get(k) for k in ("k8s.node.name", "k8s.deployment.name", "k8s.statefulset.name", "k8s.container.name")):
+            _check_failed(where, attrs, rm, errors)
+            if ("cluster", cluster) in seen:
+                errors.append("%s: duplicate resource %s" % (where, cluster))
+            seen.add(("cluster", cluster))
+            clusters.add(cluster)
+            failed.add(cluster)
+            for sm in rm.get("scopeMetrics") or []:
+                v = (sm.get("scope") or {}).get("version")
+                if isinstance(v, str):
+                    versions.add(v)
+            continue
 
         for k in COMMON_ATTRS:
             if k not in attrs:
@@ -239,7 +257,8 @@ def validate(doc):
         if not isinstance(attrs.get("thoras.source", ""), str) or not attrs.get("thoras.source"):
             errors.append("%s: thoras.source must be a non-empty string" % where)
         if "k8s.cluster.name" in attrs:
-            clusters.add(attrs["k8s.cluster.name"])
+            clusters.add(cluster)
+        read.add(cluster)
 
         dep, sts = attrs.get("k8s.deployment.name"), attrs.get("k8s.statefulset.name")
         container = attrs.get("k8s.container.name")
@@ -250,7 +269,7 @@ def validate(doc):
                     errors.append("%s: node resource missing attribute %s" % (where, k))
             if attrs.get("thoras.node.capacity_type") not in CAPACITY_TYPES:
                 errors.append("%s: thoras.node.capacity_type must be one of %s" % (where, CAPACITY_TYPES))
-            ident = ("node", attrs["k8s.node.name"])
+            ident = ("node", cluster, attrs["k8s.node.name"])
         else:
             if bool(dep) == bool(sts):
                 errors.append("%s: set exactly one of k8s.deployment.name or k8s.statefulset.name" % where)
@@ -261,17 +280,17 @@ def validate(doc):
             wl = (attrs.get("k8s.namespace.name"), wkind, dep or sts)
             if container:
                 kind, specs = "container", CONTAINER_METRICS
-                ident = ("container",) + wl + (container,)
-                container_wl.add(wl)
+                ident = ("container", cluster) + wl + (container,)
+                container_wl.add((cluster,) + wl)
             else:
                 kind = "workload"
                 specs = DEPLOYMENT_METRICS if dep else STATEFULSET_METRICS
-                ident = ("workload",) + wl
-                workloads[wl] = True
+                ident = ("workload", cluster) + wl
+                workloads[(cluster,) + wl] = True
         if ident in seen:
-            errors.append("%s: duplicate resource %s" % (where, "/".join(map(str, ident[1:]))))
+            errors.append("%s: duplicate resource %s" % (where, "/".join(map(str, ident[2:]))))
         seen.add(ident)
-        where = "%s (%s)" % (where, "/".join(str(x) for x in ident[1:]))
+        where = "%s (%s)" % (where, "/".join(str(x) for x in ident[2:]))
 
         missing = attrs.get("thoras.missing_metrics", [])
         if not isinstance(missing, list) or not all(isinstance(m, str) for m in missing):
@@ -301,8 +320,10 @@ def validate(doc):
             sc = sm.get("scope") or {}
             if sc.get("name") != SCOPE_NAME:
                 errors.append("%s: scope name must be %s" % (where, SCOPE_NAME))
-            if sc.get("version") != CONTRACT_VERSION:
-                errors.append("%s: scope version must be %s" % (where, CONTRACT_VERSION))
+            if sc.get("version") in (CONTRACT_VERSION, FLEET_VERSION):
+                versions.add(sc["version"])
+            else:
+                errors.append("%s: scope version must be %s or %s" % (where, CONTRACT_VERSION, FLEET_VERSION))
             if sm.get("schemaUrl") != SCHEMA_URL:
                 errors.append("%s: scope schemaUrl must be %s" % (where, SCHEMA_URL))
             for metric in sm.get("metrics") or []:
@@ -340,11 +361,37 @@ def validate(doc):
                 errors.append("%s: fidelity tier %d claims more than step %ds over %.1f days supports (best is %d)"
                               % (where, tier, judged, span / DAY, floor))
 
-    if len(clusters) > 1:
+    if len(versions) > 1:
+        errors.append("file mixes contract versions: %s" % sorted(versions))
+    if len(clusters) > 1 and FLEET_VERSION not in versions:
         errors.append("file mixes clusters: %s" % sorted(clusters))
+    for c in sorted(failed & read, key=str):
+        errors.append("cluster %r has data and a thoras.cluster.error resource" % (c,))
     for wl in sorted(container_wl - set(workloads), key=str):
-        errors.append("workload %s/%s/%s has containers but no workload resource carrying its replica count" % wl)
+        errors.append("workload %s/%s/%s has containers but no workload resource carrying its replica count" % wl[1:])
     return errors
+
+
+def _check_failed(where, attrs, rm, errors):
+    """A cluster that could not be read: the reason in thoras.cluster.error and no metrics."""
+    if not attrs.get("k8s.cluster.name"):
+        errors.append("%s: missing attribute k8s.cluster.name" % where)
+    if not isinstance(attrs.get("thoras.cluster.error"), str) or not attrs.get("thoras.cluster.error"):
+        errors.append("%s: thoras.cluster.error must be a non-empty string" % where)
+    where = "%s (%s)" % (where, attrs.get("k8s.cluster.name"))
+    scopes = rm.get("scopeMetrics") or []
+    if not scopes:
+        errors.append("%s: no scopeMetrics" % where)
+    for sm in scopes:
+        sc = sm.get("scope") or {}
+        if sc.get("name") != SCOPE_NAME:
+            errors.append("%s: scope name must be %s" % (where, SCOPE_NAME))
+        if sc.get("version") != FLEET_VERSION:
+            errors.append("%s: a cluster that could not be read needs scope version %s" % (where, FLEET_VERSION))
+        if sm.get("schemaUrl") != SCHEMA_URL:
+            errors.append("%s: scope schemaUrl must be %s" % (where, SCHEMA_URL))
+        if sm.get("metrics"):
+            errors.append("%s: a cluster that could not be read has no metrics" % where)
 
 
 def main(argv):

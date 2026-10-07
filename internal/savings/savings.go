@@ -71,6 +71,19 @@ type Summary struct {
 	Totals             Totals    `json:"totals"`
 	// FidelityNotes is every thoras.fidelity_notes value in the file, sorted.
 	FidelityNotes []string `json:"fidelity_notes,omitempty"`
+	// Clusters is set for a file with several clusters, or with a cluster
+	// that could not be read. The figures above are then the fleet's: totals
+	// summed over the clusters read, the worst tier, the coarsest step and
+	// the earliest start to the latest end.
+	Clusters []ClusterSummary `json:"clusters,omitempty"`
+}
+
+// ClusterSummary is one cluster of a fleet: its own summary, or why it has
+// none.
+type ClusterSummary struct {
+	Cluster string `json:"cluster"`
+	Error   string `json:"error,omitempty"`
+	*Summary
 }
 
 // Totals are the cluster figures summed over the workloads that could be priced.
@@ -142,12 +155,26 @@ func Analyze(doc []byte) (*Summary, error) {
 
 // AnalyzeReader is Analyze for a file read from r. It decodes one resource at
 // a time and keeps only the numbers of each series.
+//
+// A file with several clusters, or with a cluster that could not be read,
+// gets a Summary of the fleet: each cluster is priced from its own nodes and
+// listed in Clusters, and the top-level figures cover all of them.
 func AnalyzeReader(rd io.Reader) (*Summary, error) {
-	cluster := ""
-	var containers []*resource
-	var nodes []node
-	workloads := map[string]*resource{}
-	var notes []string
+	byName := map[string]*clusterData{}
+	var clusters []*clusterData
+	get := func(name string) *clusterData {
+		cd := byName[name]
+		if cd == nil {
+			cd = &clusterData{name: name, workloads: map[string]*resource{}}
+			byName[name] = cd
+			clusters = append(clusters, cd)
+		}
+		return cd
+	}
+	// Resources without a cluster name belong to the first cluster, as they
+	// did when a file held one.
+	first := ""
+	named := false
 	n, err := eachResource(rd, func(rm *otlpResource) {
 		strs, nums := map[string]string{}, map[string]float64{}
 		// Array entries without a stringValue stay nil, the JS undefined.
@@ -168,12 +195,23 @@ func AnalyzeReader(rd io.Reader) (*Summary, error) {
 				lists[a.Key] = l
 			}
 		}
-		if cluster == "" {
-			cluster = strs["k8s.cluster.name"]
+		name := strs["k8s.cluster.name"]
+		if !named && name != "" {
+			first, named = name, true
 		}
+		if name == "" {
+			name = first
+		}
+		cd := get(name)
+		if e := strs["thoras.cluster.error"]; e != "" && strs["k8s.node.name"] == "" && strs["k8s.container.name"] == "" &&
+			strs["k8s.deployment.name"] == "" && strs["k8s.statefulset.name"] == "" {
+			cd.err = e
+			return
+		}
+		cd.resources++
 		for _, x := range lists["thoras.fidelity_notes"] {
 			if x != nil {
-				notes = append(notes, *x)
+				cd.notes = append(cd.notes, *x)
 			}
 		}
 		r := &resource{step: nums["thoras.step_seconds"], tier: nums["thoras.fidelity_tier"], source: strs["thoras.source"],
@@ -209,14 +247,14 @@ func AnalyzeReader(rd io.Reader) (*Summary, error) {
 		}
 		switch {
 		case strs["k8s.node.name"] != "":
-			nodes = append(nodes, node{hostType: strs["host.type"], region: strs["cloud.region"], capacity: strs["thoras.node.capacity_type"],
+			cd.nodes = append(cd.nodes, node{hostType: strs["host.type"], region: strs["cloud.region"], capacity: strs["thoras.node.capacity_type"],
 				cores: r.levelMean("k8s.node.cpu.allocatable"), gib: r.levelMean("k8s.node.memory.allocatable") / gib})
 		case r.kind != "":
 			r.id = strs["k8s.namespace.name"] + "/" + r.kind + "/" + strs["k8s."+r.kind+".name"]
 			if strs["k8s.container.name"] != "" {
-				containers = append(containers, r)
+				cd.containers = append(cd.containers, r)
 			} else {
-				workloads[r.id] = r
+				cd.workloads[r.id] = r
 			}
 		}
 	})
@@ -226,6 +264,25 @@ func AnalyzeReader(rd io.Reader) (*Summary, error) {
 	if n == 0 {
 		return nil, errors.New("No resourceMetrics found. This is not a Savings Preview file.")
 	}
+	if len(clusters) == 1 && clusters[0].err == "" {
+		return clusters[0].summary()
+	}
+	return fleet(clusters)
+}
+
+// clusterData is what AnalyzeReader keeps of one cluster's resources.
+type clusterData struct {
+	name       string
+	err        string // thoras.cluster.error: the cluster could not be read
+	resources  int
+	containers []*resource
+	nodes      []node
+	workloads  map[string]*resource
+	notes      []string
+}
+
+func (cd *clusterData) summary() (*Summary, error) {
+	containers, nodes, workloads, notes := cd.containers, cd.nodes, cd.workloads, cd.notes
 	if len(containers) == 0 {
 		return nil, errors.New("The file has no container series, so there is nothing to analyze.")
 	}
@@ -255,7 +312,7 @@ func AnalyzeReader(rd io.Reader) (*Summary, error) {
 	// Fidelity: worst tier and coarsest step, span from the first to one step
 	// past the last usage point.
 	slices.Sort(notes)
-	s := &Summary{Cluster: cluster, Pricing: rates.basis, Totals: t, FidelityNotes: slices.Compact(notes)}
+	s := &Summary{Cluster: cd.name, Pricing: rates.basis, Totals: t, FidelityNotes: slices.Compact(notes)}
 	tier, step, sourceStep := 1.0, 0.0, 0.0
 	t0, t1 := math.Inf(1), math.Inf(-1)
 	var sources []string
@@ -282,6 +339,82 @@ func AnalyzeReader(rd io.Reader) (*Summary, error) {
 	if sourceStep < step {
 		s.StepSeconds, s.CompactStepSeconds = int(sourceStep), int(step)
 	}
+	return s, nil
+}
+
+// fleet sums the clusters' summaries. A cluster that could not be read, or
+// whose data has nothing to price, is listed with the reason and adds nothing.
+func fleet(clusters []*clusterData) (*Summary, error) {
+	s := &Summary{}
+	var names, sources, pricing, notes []string
+	read := 0
+	for _, cd := range clusters {
+		cs := ClusterSummary{Cluster: cd.name, Error: cd.err}
+		if cd.err == "" {
+			sum, err := cd.summary()
+			if err != nil {
+				cs.Error = err.Error()
+			} else {
+				cs.Summary = sum
+			}
+		}
+		s.Clusters = append(s.Clusters, cs)
+		if cs.Summary == nil {
+			continue
+		}
+		c := cs.Summary
+		read++
+		names = append(names, cd.name)
+		for _, src := range strings.Split(c.Source, ", ") {
+			if src != "" && !slices.Contains(sources, src) {
+				sources = append(sources, src)
+			}
+		}
+		if !slices.Contains(pricing, c.Pricing) {
+			pricing = append(pricing, c.Pricing)
+		}
+		notes = append(notes, c.FidelityNotes...)
+		t := &s.Totals
+		t.AnnualSpend += c.Totals.AnnualSpend
+		t.AnnualSavings += c.Totals.AnnualSavings
+		t.WasteCores += c.Totals.WasteCores
+		t.WasteGiB += c.Totals.WasteGiB
+		t.RequestedCores += c.Totals.RequestedCores
+		t.RequestedGiB += c.Totals.RequestedGiB
+		t.Workloads += c.Totals.Workloads
+		t.Counted += c.Totals.Counted
+		s.Tier = max(s.Tier, c.Tier)
+		s.StepSeconds = max(s.StepSeconds, c.StepSeconds)
+		s.CompactStepSeconds = max(s.CompactStepSeconds, c.CompactStepSeconds)
+		if !c.Start.IsZero() && (s.Start.IsZero() || c.Start.Before(s.Start)) {
+			s.Start = c.Start
+		}
+		if c.End.After(s.End) {
+			s.End = c.End
+		}
+	}
+	if read == 0 {
+		var why []string
+		for _, c := range s.Clusters {
+			why = append(why, c.Cluster+": "+c.Error)
+		}
+		return nil, fmt.Errorf("no cluster in the file has data to analyze (%s)", strings.Join(why, "; "))
+	}
+	s.Cluster, s.Source = strings.Join(names, ", "), strings.Join(sources, ", ")
+	s.Pricing = pricing[0]
+	if len(pricing) > 1 {
+		s.Pricing = "each cluster priced from its own nodes, see clusters"
+	}
+	if !s.Start.IsZero() {
+		s.SpanSeconds = int64(s.End.Sub(s.Start) / time.Second)
+	}
+	step := s.StepSeconds
+	if s.CompactStepSeconds > 0 {
+		step = s.CompactStepSeconds
+	}
+	s.Snapshot = step <= 0 || s.SpanSeconds <= int64(step)
+	slices.Sort(notes)
+	s.FidelityNotes = slices.Compact(notes)
 	return s, nil
 }
 

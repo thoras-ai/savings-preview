@@ -15,8 +15,14 @@ const (
 	SchemaURL    = "https://opentelemetry.io/schemas/1.44.0"
 	ScopeName    = "thoras.savings_preview"
 	ScopeVersion = "1.0.0"
-	day          = 86400
+	// FleetScopeVersion is the contract of a file that holds several
+	// clusters, or a cluster that could not be read.
+	FleetScopeVersion = "1.4.0"
+	day               = 86400
 )
+
+// KnownVersion reports whether this release reads files of contract version v.
+func KnownVersion(v string) bool { return v == ScopeVersion || v == FleetScopeVersion }
 
 // Instrument is how a metric is encoded in OTLP.
 type Instrument int
@@ -117,9 +123,12 @@ type StepSpan struct {
 
 // Resource is one container, workload or node. Set Node for a node; otherwise
 // set Namespace, Kind ("deployment" or "statefulset") and Workload, and also
-// Container for a container resource.
+// Container for a container resource. A resource with Error set instead
+// records a cluster that could not be read; it has only Cluster and no
+// metrics.
 type Resource struct {
 	Common
+	Error     string // thoras.cluster.error
 	Namespace string
 	Kind      string
 	Workload  string
@@ -139,7 +148,8 @@ type Resource struct {
 	Metrics []Series
 }
 
-// File is one cluster's data.
+// File is one cluster's data, or with FleetScopeVersion resources several
+// clusters'.
 type File struct {
 	Resources []Resource
 }
@@ -173,6 +183,9 @@ func strs(k string, vs []string) attr {
 }
 
 func (r *Resource) attrs() []attr {
+	if r.Error != "" {
+		return []attr{str("k8s.cluster.name", r.Cluster), str("thoras.cluster.error", r.Error)}
+	}
 	a := []attr{
 		str("k8s.cluster.name", r.Cluster),
 		str("thoras.source", r.Source),
@@ -222,6 +235,9 @@ func (r *Resource) attrs() []attr {
 }
 
 func (r *Resource) sortKey() string {
+	if r.Error != "" {
+		return "0/" + r.Cluster
+	}
 	if r.Node != nil {
 		return "3/" + r.Node.Name
 	}
@@ -307,6 +323,14 @@ type resourceMetrics struct {
 }
 
 func (r *Resource) encode() (resourceMetrics, error) {
+	version := ScopeVersion
+	if r.Error != "" {
+		version = FleetScopeVersion
+	}
+	return r.encodeAs(version)
+}
+
+func (r *Resource) encodeAs(version string) (resourceMetrics, error) {
 	ser := append([]Series(nil), r.Metrics...)
 	sort.SliceStable(ser, func(a, b int) bool { return ser[a].Name < ser[b].Name })
 	ms := make([]metric, 0, len(ser))
@@ -324,11 +348,22 @@ func (r *Resource) encode() (resourceMetrics, error) {
 		Resource:  resourceAttrs{Attributes: r.attrs()},
 		SchemaURL: SchemaURL,
 		ScopeMetrics: []scopeMetrics{{
-			Scope:     scope{ScopeName, ScopeVersion},
+			Scope:     scope{ScopeName, version},
 			SchemaURL: SchemaURL,
 			Metrics:   ms,
 		}},
 	}, nil
+}
+
+// Version is the contract version f is written with: FleetScopeVersion when
+// it holds more than one cluster or a cluster that could not be read.
+func (f *File) Version() string {
+	for _, r := range f.Resources {
+		if r.Error != "" || r.Cluster != f.Resources[0].Cluster {
+			return FleetScopeVersion
+		}
+	}
+	return ScopeVersion
 }
 
 // Write encodes f as OTLP JSON. Resources and metrics come out in a stable order.
@@ -339,8 +374,9 @@ func (f *File) Write(w io.Writer) error {
 		ResourceMetrics []resourceMetrics `json:"resourceMetrics"`
 	}
 	out.ResourceMetrics = []resourceMetrics{}
+	version := f.Version()
 	for i := range res {
-		rm, err := res[i].encode()
+		rm, err := res[i].encodeAs(version)
 		if err != nil {
 			return err
 		}

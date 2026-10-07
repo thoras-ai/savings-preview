@@ -179,6 +179,9 @@ change what run writes, such as --out and --no-open, are accepted and ignored.
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
+	if o.fleet {
+		return checkFleet(ctx, o, *asJSON, useColor(*color, os.Stdout), os.Stdout)
+	}
 	r := check(ctx, o, newCheckEnv(o), time.Now())
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)

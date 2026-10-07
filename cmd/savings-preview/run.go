@@ -31,21 +31,29 @@ import (
 
 type runOptions struct {
 	kubeconfig, context, cluster string
-	out                          string
-	source                       string
-	target                       *prometheus.Candidate
-	direct                       *directFlags
-	datadog                      *datadog.Flags
-	useDatadog                   bool // read from Datadog before anything else
-	selector                     string
-	promSelector                 string
-	ddFilters                    []string
-	days                         int
-	step                         time.Duration
-	duration, interval           time.Duration
-	writeEvery, keepRaw, rollup  time.Duration
-	noOpen                       bool
-	now                          time.Time // end of the history pulled; zero is now
+	// contexts, allContexts and contextsFile name several clusters to read
+	// in one run; see fleet.go.
+	contexts                    contextList
+	allContexts                 bool
+	contextsFile                string
+	fleet                       bool      // several clusters were asked for
+	member                      bool      // reading one cluster of several: access is printed once for all
+	log                         io.Writer // where progress goes; nil is stderr
+	out                         string
+	source                      string
+	target                      *prometheus.Candidate
+	direct                      *directFlags
+	datadog                     *datadog.Flags
+	useDatadog                  bool // read from Datadog before anything else
+	selector                    string
+	promSelector                string
+	ddFilters                   []string
+	days                        int
+	step                        time.Duration
+	duration, interval          time.Duration
+	writeEvery, keepRaw, rollup time.Duration
+	noOpen                      bool
+	now                         time.Time // end of the history pulled; zero is now
 }
 
 // addRunFlags registers run's flags on fs. finish checks them after fs is
@@ -53,7 +61,9 @@ type runOptions struct {
 func addRunFlags(fs *flag.FlagSet) (o *runOptions, finish func() error) {
 	o = &runOptions{}
 	fs.StringVar(&o.kubeconfig, "kubeconfig", "", "path to the kubeconfig (default: KUBECONFIG or ~/.kube/config)")
-	fs.StringVar(&o.context, "context", "", "kubeconfig context (default: the current context)")
+	fs.Var(&o.contexts, "context", "kubeconfig context (default: the current context); give it more than once to read several clusters in one run")
+	fs.BoolVar(&o.allContexts, "all-contexts", false, "read every context in the kubeconfig, one cluster each")
+	fs.StringVar(&o.contextsFile, "contexts-file", "", "read the contexts named in this file, one per line; # starts a comment")
 	fs.StringVar(&o.cluster, "cluster-name", "", "cluster name recorded in the file (default: the kubeconfig cluster name, or for Datadog the cluster tag of the series)")
 	fs.StringVar(&o.out, "out", report.DataName, "contract file to write; the zip is written next to it")
 	fs.StringVar(&o.out, "o", report.DataName, "same as --out")
@@ -109,6 +119,15 @@ disk. Everything is read-only; nothing is uploaded.
 // check validates the parsed flags and derives the options that follow from
 // them. target is the value of --target.
 func (o *runOptions) check(target string) error {
+	if len(o.contexts) == 1 {
+		o.context = o.contexts[0]
+	}
+	o.fleet = len(o.contexts) > 1 || o.allContexts || o.contextsFile != ""
+	if o.fleet {
+		if err := o.checkFleet(target); err != nil {
+			return err
+		}
+	}
 	switch o.source {
 	case "auto", "prometheus", "datadog", "poll":
 	default:
@@ -121,7 +140,7 @@ func (o *runOptions) check(target string) error {
 	if named && (o.source == "datadog" || o.source == "poll") {
 		return fmt.Errorf("--url and --target name a Prometheus-compatible store; they do not apply with --source %s", o.source)
 	}
-	o.useDatadog = o.source == "datadog" || (o.source == "auto" && !named && o.datadog.KeysGiven())
+	o.useDatadog = o.source == "datadog" || (o.source == "auto" && !named && !o.fleet && o.datadog.KeysGiven())
 	if o.useDatadog {
 		filters, err := datadog.ParseSelector(o.selector)
 		if err != nil {
@@ -173,6 +192,14 @@ func runRun(args []string) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if o.fleet {
+		b, err := runFleet(ctx, o, os.Stderr)
+		if err != nil {
+			return err
+		}
+		stop()
+		return serve(b.page, b.compact, !o.noOpen)
+	}
 	s, err := newSources(o, os.Stderr)
 	if err != nil {
 		return err
@@ -210,20 +237,41 @@ type builtReport struct {
 // email. Every step reads its file as a stream, so memory does not grow with
 // the size of the cluster or the length of the history.
 func buildReport(out string) (*builtReport, error) {
-	b := &builtReport{compact: compactName(out)}
-	start := time.Now()
-	st, err := compactFile(out, b.compact)
-	if err != nil {
+	if err := compactChecked(out, os.Stderr); err != nil {
 		return nil, err
 	}
-	fmt.Fprintln(os.Stderr, compactReport(out, b.compact, st, time.Since(start)))
-	if errs := withFile(b.compact, validate.ValidateReader); len(errs) > 0 {
-		for _, e := range errs {
-			fmt.Fprintln(os.Stderr, "  "+e)
-		}
-		return nil, fmt.Errorf("%s does not follow the contract (%d problems)", b.compact, len(errs))
+	return finishReport(out)
+}
+
+// compactChecked writes the compact copy of the contract file at out and
+// checks it against the contract.
+func compactChecked(out string, w io.Writer) error {
+	compacted := compactName(out)
+	start := time.Now()
+	st, err := compactFile(out, compacted)
+	if err != nil {
+		return err
 	}
-	fmt.Fprintf(os.Stderr, "%s passes the contract checks\n", b.compact)
+	fmt.Fprintln(w, compactReport(out, compacted, st, time.Since(start)))
+	return checkContract(compacted, w)
+}
+
+func checkContract(path string, w io.Writer) error {
+	if errs := withFile(path, validate.ValidateReader); len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Fprintln(w, "  "+e)
+		}
+		return fmt.Errorf("%s does not follow the contract (%d problems)", path, len(errs))
+	}
+	fmt.Fprintf(w, "%s passes the contract checks\n", path)
+	return nil
+}
+
+// finishReport computes the totals from the checked compact copy of out and
+// writes the zip.
+func finishReport(out string) (*builtReport, error) {
+	b := &builtReport{compact: compactName(out)}
+	var err error
 	if b.full, err = fullDataOf(out); err != nil {
 		return nil, err
 	}
@@ -335,7 +383,9 @@ func newSources(o *runOptions, w io.Writer) (sources, error) {
 			fmt.Fprintf(w, "Cannot read the kubeconfig; only Datadog can be read.\n%s\n", indent(err.Error(), "  "))
 		}
 	}
-	printAccess(w, o)
+	if !o.member {
+		printAccess(w, o)
+	}
 
 	if o.direct.url != "" {
 		s.direct = func(ctx context.Context) (*pulled, error) { return pullDirect(ctx, o, cluster, w) }
@@ -548,15 +598,16 @@ func printAccess(w io.Writer, o *runOptions) {
 // pollWithProgress polls until o.duration passes or the user presses Ctrl-C,
 // printing what the result will support and how far along it is.
 func pollWithProgress(ctx context.Context, conn *kube.Conn, cluster string, o *runOptions) error {
+	logw := o.logWriter()
 	if o.duration > 0 {
 		tier := contract.TierFor(int(pollStep(o)/time.Second), int64(o.duration/time.Second))
-		fmt.Fprintf(os.Stderr, "Polling every %s for %s (Ctrl-C stops early and builds the report from what was read).\n", shortDur(o.interval), shortDur(o.duration))
-		fmt.Fprintf(os.Stderr, "Accuracy: %s of readings gives tier %d (%s).\n", spanText(o.duration), tier, tierText(tier))
+		fmt.Fprintf(logw, "Polling every %s for %s (Ctrl-C stops early and builds the report from what was read).\n", shortDur(o.interval), shortDur(o.duration))
+		fmt.Fprintf(logw, "Accuracy: %s of readings gives tier %d (%s).\n", spanText(o.duration), tier, tierText(tier))
 	} else {
-		fmt.Fprintf(os.Stderr, "Polling every %s until Ctrl-C, which stops and builds the report.\n", shortDur(o.interval))
-		fmt.Fprintln(os.Stderr, "Accuracy: under 7 days of readings gives tier 3 (limited history); 7 days with --rollup of 5m or less gives tier 2.")
+		fmt.Fprintf(logw, "Polling every %s until Ctrl-C, which stops and builds the report.\n", shortDur(o.interval))
+		fmt.Fprintln(logw, "Accuracy: under 7 days of readings gives tier 3 (limited history); 7 days with --rollup of 5m or less gives tier 2.")
 	}
-	fmt.Fprintln(os.Stderr, "Longer runs capture more peaks, so the target and the savings come out more reliable.")
+	fmt.Fprintln(logw, "Longer runs capture more peaks, so the target and the savings come out more reliable.")
 
 	before, statErr := os.Stat(o.out)
 	start := time.Now()
@@ -574,15 +625,15 @@ func pollWithProgress(ctx context.Context, conn *kube.Conn, cluster string, o *r
 			case now := <-t.C:
 				el := now.Sub(start).Truncate(time.Second)
 				if o.duration > 0 {
-					fmt.Fprintf(os.Stderr, "polling: %s of %s\n", shortDur(el), shortDur(o.duration))
+					fmt.Fprintf(logw, "polling: %s of %s\n", shortDur(el), shortDur(o.duration))
 				} else {
-					fmt.Fprintf(os.Stderr, "polling: %s so far\n", shortDur(el))
+					fmt.Fprintf(logw, "polling: %s so far\n", shortDur(el))
 				}
 			}
 		}
 	}()
 	err := poll(ctx, conn, pollOptions{Cluster: cluster, Out: o.out, Interval: o.interval, Duration: o.duration,
-		WriteEvery: o.writeEvery, KeepRaw: o.keepRaw, Rollup: o.rollup}, os.Stderr)
+		WriteEvery: o.writeEvery, KeepRaw: o.keepRaw, Rollup: o.rollup}, logw)
 	if err != nil && ctx.Err() == nil {
 		return err
 	}
@@ -595,6 +646,13 @@ func pollWithProgress(ctx context.Context, conn *kube.Conn, cluster string, o *r
 		return fmt.Errorf("polling stopped before it wrote %s", o.out)
 	}
 	return nil
+}
+
+func (o *runOptions) logWriter() io.Writer {
+	if o.log != nil {
+		return o.log
+	}
+	return os.Stderr
 }
 
 // pollStep is the coarsest step the polled file will have: readings older

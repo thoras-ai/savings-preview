@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -119,4 +120,23 @@ func (s *ServiceProxy) Get(ctx context.Context, path string, params url.Values) 
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 256<<20))
 	return body, resp.StatusCode, err
+}
+
+// Contexts lists the context names in the kubeconfig, sorted. An empty path
+// uses the standard loading rules.
+func Contexts(kubeconfig string) ([]string, error) {
+	rules := clientcmd.NewDefaultClientConfigLoadingRules()
+	if kubeconfig != "" {
+		rules.ExplicitPath = kubeconfig
+	}
+	raw, err := rules.Load()
+	if err != nil {
+		return nil, fmt.Errorf("load kubeconfig: %w", err)
+	}
+	names := make([]string, 0, len(raw.Contexts))
+	for n := range raw.Contexts {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names, nil
 }
