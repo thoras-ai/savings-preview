@@ -274,7 +274,7 @@ func TestRunReadsDatadog(t *testing.T) {
 		t.Fatalf("%v\n%s", err, log.String())
 	}
 	// Without a kubeconfig the run still reads Datadog.
-	if !strings.Contains(log.String(), "Cannot read the kubeconfig") || !strings.Contains(log.String(), "query the Datadog metrics API") ||
+	if !strings.Contains(log.String(), "Cannot read the kubeconfig; only Datadog can be read.\n  no kubeconfig found: ") || !strings.Contains(log.String(), "query the Datadog metrics API") ||
 		!strings.Contains(log.String(), "from Datadog:") {
 		t.Errorf("log:\n%s", log.String())
 	}

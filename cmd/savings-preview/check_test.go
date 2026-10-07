@@ -353,6 +353,33 @@ func TestCheckOrderWithTargetLeavesDatadogOut(t *testing.T) {
 	}
 }
 
+func TestCheckOutputSaysTheKubeconfigProblemOnce(t *testing.T) {
+	connErr := &kube.ConfigError{Kind: kube.NoCurrentContext, Files: []string{"/home/me/.kube/config"},
+		Contexts: []string{"dev", "prod"}, Command: "savings-preview check"}
+	r := runCheckWith(t, &fakeCheck{connErr: connErr})
+	if r.ExitCode != checkBlocked {
+		t.Errorf("exit %d", r.ExitCode)
+	}
+	var b bytes.Buffer
+	printCheck(&b, r, false)
+	out := b.String()
+	if n := strings.Count(out, "Contexts in /home/me/.kube/config: dev, prod."); n != 1 {
+		t.Errorf("context list printed %d times:\n%s", n, out)
+	}
+	if !strings.Contains(out, "Kubernetes\n  the kubeconfig sets no current context") ||
+		!strings.Contains(out, "\n  For example: savings-preview check --context dev\n") {
+		t.Errorf("Kubernetes section:\n%s", out)
+	}
+	if len(r.Order) != 3 {
+		t.Fatalf("order %+v", r.Order)
+	}
+	for _, s := range r.Order[1:] {
+		if s.Note != "the kubeconfig sets no current context and --context is not given (see Kubernetes)" {
+			t.Errorf("%s: %q", s.Source, s.Note)
+		}
+	}
+}
+
 func TestCheckOutputSaysACommonErrorOnce(t *testing.T) {
 	r := runCheckWith(t, &fakeCheck{metricPods: 1})
 	for i := range r.Access {

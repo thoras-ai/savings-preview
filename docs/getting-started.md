@@ -211,6 +211,11 @@ The full-resolution file, `savings-preview.otlp.json`, stays on your machine and
 
 | What you see | What to do |
 | --- | --- |
+| `the kubeconfig sets no current context` | Your kubeconfig has contexts but none is selected. Pass one of the listed contexts with `--context`, as the message shows, or select one with `kubectl config use-context`. |
+| `the kubeconfig has no context "NAME"` | The context given with `--context` is not in the kubeconfig. Use one of the listed names. |
+| `the kubeconfig's current context "NAME" does not exist` | The kubeconfig selects a context it does not define. Pass one of the listed contexts with `--context`, or select one with `kubectl config use-context`. |
+| `the kubeconfig (PATH) has no contexts` | The file holds no cluster access. Pass another file with `--kubeconfig`, or set up access to the cluster first. |
+| `no kubeconfig found` | No file at `--kubeconfig`, at the paths in `KUBECONFIG`, or at `~/.kube/config`. Pass the file with `--kubeconfig`, or set up access to the cluster first, so that `kubectl get nodes` works. |
 | `Not using a metrics store: ...` and polling starts when you have a store | The reason follows the colon. Name the store with `--target namespace/service:port`, or `--url` for one outside the cluster. |
 | `list services: ... forbidden` | Your identity cannot list services. Name the store with `--target`, or use a role from [deploy/rbac/](../deploy/rbac/). |
 | `the store holds N clusters` or `the organization reports N clusters` | Pass one of the listed values with `--selector`, as the message shows. |

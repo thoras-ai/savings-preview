@@ -51,6 +51,9 @@ type kubeCheck struct {
 	Identity      string   `json:"identity,omitempty"` // the user the API server sees
 	Groups        []string `json:"groups,omitempty"`
 	IdentityError string   `json:"identity_error,omitempty"`
+
+	short     string // Error in a few words, for the source lines
+	explained bool   // Error says what is wrong with the kubeconfig and what to do
 }
 
 type accessCheck struct {
@@ -193,6 +196,7 @@ change what run writes, such as --out and --no-open, are accepted and ignored.
 func newCheckEnv(o *runOptions) checkEnv {
 	var e checkEnv
 	e.conn, e.connErr = kube.Connect(o.kubeconfig, o.context)
+	e.connErr = kube.WithCommand(e.connErr, "savings-preview check")
 	if e.conn != nil {
 		cs := e.conn.Clientset
 		e.whoami = func(ctx context.Context) (*kube.Identity, error) { return kube.WhoAmI(ctx, cs) }
@@ -300,7 +304,9 @@ func check(ctx context.Context, o *runOptions, e checkEnv, now time.Time) *check
 	// Kubernetes
 	r.Kubernetes = &kubeCheck{Needed: useStore || usePoll}
 	if e.connErr != nil {
-		r.Kubernetes.Error = e.connErr.Error()
+		r.Kubernetes.Error, r.Kubernetes.short = e.connErr.Error(), kubeShort(e.connErr)
+		var ce *kube.ConfigError
+		r.Kubernetes.explained = errors.As(e.connErr, &ce) && ce.Kind != ""
 	} else if e.conn != nil {
 		k := r.Kubernetes
 		k.Context, k.Cluster, k.KubeUser = e.conn.Context, e.conn.ClusterName, e.conn.User
@@ -408,7 +414,7 @@ func canI(ctx context.Context, e checkEnv, mode string, a kube.Access, optional 
 func checkDirect(ctx context.Context, o *runOptions, e checkEnv, now time.Time) storeCheck {
 	if o.cluster == "" && e.connErr != nil {
 		return storeCheck{Store: "store at " + prometheus.RedactURL(o.direct.url), FoundBy: "--url",
-			Error: "--cluster-name is required with --url when the kubeconfig cannot be read: " + e.connErr.Error()}
+			Error: "--cluster-name is required with --url when the kubeconfig cannot be used: " + kubeShort(e.connErr) + " (see Kubernetes)"}
 	}
 	name, answer, probe, err := e.direct(ctx)
 	if err != nil {
@@ -506,7 +512,7 @@ func decide(r *checkReport, o *runOptions, usePoll bool) {
 		final := o.source == "prometheus" || o.target != nil
 		switch {
 		case r.Kubernetes.Error != "":
-			add("a store in the cluster", false, "cannot read the kubeconfig: "+r.Kubernetes.Error, final)
+			add("a store in the cluster", false, r.Kubernetes.short+" (see Kubernetes)", final)
 		case r.StoreSearch != "":
 			add("a store in the cluster", false, r.StoreSearch, final)
 		}
@@ -552,7 +558,7 @@ func decide(r *checkReport, o *runOptions, usePoll bool) {
 
 func pollReady(r *checkReport) (bool, string) {
 	if r.Kubernetes.Error != "" {
-		return false, "cannot read the kubeconfig: " + r.Kubernetes.Error
+		return false, r.Kubernetes.short + " (see Kubernetes)"
 	}
 	var denied []string
 	for _, a := range r.Access {
@@ -664,7 +670,17 @@ func printCheck(w io.Writer, r *checkReport, color bool) {
 	fmt.Fprintln(w, p.bold("Kubernetes"))
 	switch {
 	case k.Error != "" && k.Needed:
-		fmt.Fprintf(w, "  %s %s\n", p.bad("cannot read the kubeconfig:"), k.Error)
+		first, rest, _ := strings.Cut(k.Error, "\n")
+		if k.explained {
+			fmt.Fprintf(w, "  %s\n", p.bad(first))
+		} else {
+			fmt.Fprintf(w, "  %s %s\n", p.bad("cannot read the kubeconfig:"), first)
+		}
+		if rest != "" {
+			fmt.Fprintln(w, indent(rest, "  "))
+		}
+	case k.Error != "" && k.explained:
+		fmt.Fprintf(w, "  not needed; %s\n", strings.ReplaceAll(k.Error, "\n", "\n  "))
 	case k.Error != "":
 		fmt.Fprintf(w, "  not needed; cannot read the kubeconfig (%s)\n", k.Error)
 	default:
@@ -793,4 +809,18 @@ func printCheck(w io.Writer, r *checkReport, color bool) {
 	fmt.Fprintln(w)
 	status := map[int]func(string) string{checkReady: p.good, checkLimited: p.warn, checkBlocked: p.bad}[r.ExitCode]
 	fmt.Fprintf(w, "%s: %s\n", status(r.Status), r.Summary)
+}
+
+// kubeShort is the kubeconfig error in a few words.
+func kubeShort(err error) string {
+	var ce *kube.ConfigError
+	if errors.As(err, &ce) {
+		return ce.Short()
+	}
+	return "cannot read the kubeconfig"
+}
+
+// indent prefixes each line of s.
+func indent(s, prefix string) string {
+	return prefix + strings.ReplaceAll(s, "\n", "\n"+prefix)
 }

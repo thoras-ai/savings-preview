@@ -295,7 +295,9 @@ func newSources(o *runOptions, w io.Writer) (sources, error) {
 	var connErr error
 	connect := func() (*kube.Conn, error) {
 		if conn == nil && connErr == nil {
-			if conn, connErr = kube.Connect(o.kubeconfig, o.context); connErr == nil {
+			conn, connErr = kube.Connect(o.kubeconfig, o.context)
+			connErr = kube.WithCommand(connErr, "savings-preview")
+			if connErr == nil {
 				fmt.Fprintf(w, "Context %s (cluster %s, API server %s)\n", conn.Context, conn.ClusterName, conn.Config.Host)
 			}
 		}
@@ -330,7 +332,7 @@ func newSources(o *runOptions, w io.Writer) (sources, error) {
 		// The cluster is read only if Datadog fails, so a kubeconfig that
 		// cannot be read stops the run only then.
 		if _, err := connect(); err != nil {
-			fmt.Fprintf(w, "Cannot read the kubeconfig (%v); only Datadog can be read.\n", err)
+			fmt.Fprintf(w, "Cannot read the kubeconfig; only Datadog can be read.\n%s\n", indent(err.Error(), "  "))
 		}
 	}
 	printAccess(w, o)
