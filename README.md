@@ -21,7 +21,7 @@ With Homebrew, on macOS or Linux:
 
 `brew tap` clones over HTTPS, so git needs GitHub credentials; `gh auth setup-git` configures them. Pass the token again on `brew upgrade savings-preview`. Without it, the download fails with a 404.
 
-With npx, which needs Node.js 18 or later:
+With npx, which needs Node.js 20 or later:
 
     npx @thoras/savings-preview check --context my-cluster
 

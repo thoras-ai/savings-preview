@@ -25,7 +25,7 @@ On macOS or Linux:
 
 ### npx
 
-With Node.js 18 or later, run the CLI without installing it:
+With Node.js 20 or later, run the CLI without installing it:
 
     npx @thoras/savings-preview check --context my-cluster
 
@@ -35,6 +35,7 @@ The first run downloads the release binary of the package's version for your mac
 | --- | --- |
 | `GITHUB_TOKEN` or `GH_TOKEN` | Token to download with. It needs read access to the repository's contents. |
 | `SAVINGS_PREVIEW_CACHE` | Directory to keep the binaries in. |
+| `NODE_USE_ENV_PROXY` | Set to `1` to download through the proxy in `HTTPS_PROXY`. Node.js ignores the proxy variables without it, and reads it from version 22.21 and 24. |
 
 ### Install script
 

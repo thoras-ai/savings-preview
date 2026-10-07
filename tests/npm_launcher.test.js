@@ -145,7 +145,7 @@ test('installs nothing when the checksum does not match', async (t) => {
   const root = path.join(dir, 'cache');
 
   await assert.rejects(launcher.ensureBinary('1.2.3', { ...r.opts, root, tok: '' }), /checksum mismatch/);
-  assert.ok(!fs.existsSync(path.join(root, TAG)));
+  assert.deepStrictEqual(fs.readdirSync(path.join(root, TAG)), []);
 });
 
 test('installs nothing when checksums.txt does not list the archive', async (t) => {
@@ -181,4 +181,23 @@ test('the command runs the cached binary and passes on its exit code', (t) => {
   });
   assert.strictEqual(r.stdout, 'ran --version\n');
   assert.strictEqual(r.status, 3);
+});
+
+test('reports a download that cannot connect as an error, not a crash', async () => {
+  const { server, url } = await listen(() => {});
+  server.close();
+  await assert.rejects(launcher.fetchAssets(TAG, [ARCHIVE], { web: url, tok: '' }),
+    (e) => e instanceof launcher.LaunchError && /^fetching http:\/\/127\.0\.0\.1:\d+\/.*: fetch failed \(ECONNREFUSED\)$/.test(e.message));
+});
+
+test('the command reports a cache it cannot write without a stack trace', (t) => {
+  const dir = tmpdir(t);
+  fs.writeFileSync(path.join(dir, 'file'), '');
+  const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'packaging', 'npm', 'bin', 'savings-preview.js'), '--version'], {
+    encoding: 'utf8',
+    env: { ...process.env, SAVINGS_PREVIEW_CACHE: path.join(dir, 'file', 'cache'), GITHUB_TOKEN: '', GH_TOKEN: '', PATH: path.dirname(process.execPath) },
+  });
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stderr, /^savings-preview: .*ENOTDIR/m);
+  assert.doesNotMatch(r.stderr, /\n\s+at /);
 });

@@ -67,7 +67,14 @@ function token(env = process.env) {
 // storage host a release asset redirects to.
 async function get(url, headers) {
   for (let i = 0; i < 5; i++) {
-    const res = await fetch(url, { headers, redirect: 'manual' });
+    let res;
+    try {
+      res = await fetch(url, { headers, redirect: 'manual' });
+    } catch (e) {
+      // fetch reports DNS, connection and TLS failures as "fetch failed" with the reason in cause.
+      const cause = e.cause && (e.cause.code || e.cause.message);
+      throw new LaunchError(`fetching ${new URL(url).origin}${new URL(url).pathname}: ${e.message}${cause ? ` (${cause})` : ''}`);
+    }
     if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
       const next = new URL(res.headers.get('location'), url);
       if (next.origin !== new URL(url).origin) {
@@ -123,6 +130,7 @@ async function ensureBinary(version, { root = cacheRoot(), plat = platform(), lo
   const bin = path.join(dir, BINARY);
   if (fs.existsSync(bin)) return bin;
 
+  fs.mkdirSync(path.dirname(dir), { recursive: true });
   const archive = archiveName(tag, plat);
   log(`Downloading ${BINARY} ${tag} for ${plat}`);
   const tok = 'tok' in opts ? opts.tok : token();
@@ -132,7 +140,6 @@ async function ensureBinary(version, { root = cacheRoot(), plat = platform(), lo
   if (got !== want) throw new LaunchError(`checksum mismatch for ${archive}: expected ${want}, got ${got}`);
   log('Checksum verified');
 
-  fs.mkdirSync(path.dirname(dir), { recursive: true });
   const tmp = fs.mkdtempSync(path.join(path.dirname(dir), `.${plat}-`));
   try {
     fs.writeFileSync(path.join(tmp, archive), files[archive]);
@@ -183,7 +190,6 @@ async function main(args) {
     const bin = await ensureBinary(version, { log: (m) => process.stderr.write(`${m}\n`) });
     run(bin, args);
   } catch (e) {
-    if (!(e instanceof LaunchError)) throw e;
     process.stderr.write(`savings-preview: ${e.message}\n`);
     process.exit(1);
   }
