@@ -30,8 +30,10 @@ jobs:
           go-version: "1.26"
           check-latest: true
           cache: false
-      - name: Generate the demo cluster sample
-        run: go run ./scripts/gen_demo
+      - name: Generate the demo cluster and fleet samples
+        run: |
+          go run ./scripts/gen_demo
+          go run ./scripts/gen_demo -fleet
       - name: Build the page with the sample files
         run: python3 scripts/build_report.py --site _site
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0

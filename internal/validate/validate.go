@@ -22,6 +22,7 @@ const (
 	schemaURL    = "https://opentelemetry.io/schemas/1.44.0"
 	scopeName    = "thoras.savings_preview"
 	scopeVersion = "1.0.0"
+	fleetVersion = "1.4.0"
 	day          = 86400
 )
 
@@ -238,9 +239,14 @@ func newChecker() checker {
 	var errs []string
 	add := func(format string, args ...any) { errs = append(errs, fmt.Sprintf(format, args...)) }
 	clusters := map[string]bool{}
+	versions := map[string]bool{}
+	// Clusters with data, and those recorded as not read.
+	read, failed := map[string]bool{}, map[string]bool{}
+	// Keys are the cluster and the identity, so two clusters may hold the
+	// same workload.
 	seen := map[string]bool{}
-	workloads := map[string]bool{}
-	containerWL := map[string]bool{}
+	workloads := map[[2]string]bool{}
+	containerWL := map[[2]string]bool{}
 
 	check := func(ri int, rmv any) {
 		rm := asMap(rmv)
@@ -252,6 +258,26 @@ func newChecker() checker {
 		where := fmt.Sprintf("resource %d", ri)
 		if rm["schemaUrl"] != schemaURL {
 			add("%s: schemaUrl must be %s", where, schemaURL)
+		}
+		cluster := ""
+		if c, ok := at["k8s.cluster.name"]; ok {
+			cluster = pyStr(c)
+		}
+		if _, ok := at["thoras.cluster.error"]; ok && str(at, "k8s.node.name") == "" && str(at, "k8s.deployment.name") == "" &&
+			str(at, "k8s.statefulset.name") == "" && str(at, "k8s.container.name") == "" {
+			checkFailed(where, at, rm, add)
+			if key := "cluster/" + cluster; seen[key] {
+				add("%s: duplicate resource %s", where, cluster)
+			} else {
+				seen[key] = true
+			}
+			clusters[cluster], failed[cluster] = true, true
+			for _, smv := range asList(rm["scopeMetrics"]) {
+				if v, ok := asMap(asMap(smv)["scope"])["version"].(string); ok {
+					versions[v] = true
+				}
+			}
+			return
 		}
 
 		for _, k := range commonAttrs {
@@ -290,9 +316,10 @@ func newChecker() checker {
 		if str(at, "thoras.source") == "" {
 			add("%s: thoras.source must be a non-empty string", where)
 		}
-		if c, ok := at["k8s.cluster.name"]; ok {
-			clusters[pyStr(c)] = true
+		if _, ok := at["k8s.cluster.name"]; ok {
+			clusters[cluster] = true
 		}
+		read[cluster] = true
 
 		dep, sts, container := str(at, "k8s.deployment.name"), str(at, "k8s.statefulset.name"), str(at, "k8s.container.name")
 		var kind string
@@ -327,18 +354,18 @@ func newChecker() checker {
 			if container != "" {
 				kind, specs = "container", containerSpecs
 				ident = []any{wl, container}
-				containerWL[wl] = true
+				containerWL[[2]string{cluster, wl}] = true
 			} else {
 				kind, specs = "workload", statefulsetSpecs
 				if dep != "" {
 					specs = deploymentSpecs
 				}
 				ident = []any{wl}
-				workloads[wl] = true
+				workloads[[2]string{cluster, wl}] = true
 			}
 		}
 		id := join(ident)
-		if key := kind + "/" + id; seen[key] {
+		if key := kind + "/" + cluster + "\x00" + id; seen[key] {
 			add("%s: duplicate resource %s", where, id)
 		} else {
 			seen[key] = true
@@ -388,8 +415,10 @@ func newChecker() checker {
 			if sc["name"] != scopeName {
 				add("%s: scope name must be %s", where, scopeName)
 			}
-			if sc["version"] != scopeVersion {
-				add("%s: scope version must be %s", where, scopeVersion)
+			if v, _ := sc["version"].(string); v == scopeVersion || v == fleetVersion {
+				versions[v] = true
+			} else {
+				add("%s: scope version must be %s or %s", where, scopeVersion, fleetVersion)
 			}
 			if sm["schemaUrl"] != schemaURL {
 				add("%s: scope schemaUrl must be %s", where, schemaURL)
@@ -458,29 +487,73 @@ func newChecker() checker {
 		}
 	}
 	finish := func() []string {
-		if len(clusters) > 1 {
-			names := slices.Sorted(maps.Keys(clusters))
+		quoted := func(set map[string]bool) string {
+			names := slices.Sorted(maps.Keys(set))
 			for i, c := range names {
 				names[i] = quote(c)
 			}
-			add("file mixes clusters: [%s]", strings.Join(names, ", "))
+			return strings.Join(names, ", ")
 		}
-		var orphans []string
+		if len(versions) > 1 {
+			add("file mixes contract versions: [%s]", quoted(versions))
+		}
+		if len(clusters) > 1 && !versions[fleetVersion] {
+			add("file mixes clusters: [%s]", quoted(clusters))
+		}
+		for _, c := range slices.Sorted(maps.Keys(failed)) {
+			if read[c] {
+				add("cluster %s has data and a thoras.cluster.error resource", quote(c))
+			}
+		}
+		var orphans [][2]string
 		for wl := range containerWL {
 			if !workloads[wl] {
 				orphans = append(orphans, wl)
 			}
 		}
-		// Python sorts the (ns, kind, name) tuples by their repr, where a quote
-		// ends each field; swapping the separator for one keeps that order.
-		tupleKey := func(wl string) string { return strings.ReplaceAll(wl, "/", "'") }
+		// Python sorts the (cluster, ns, kind, name) tuples by their repr,
+		// where a quote ends each field; swapping the separator for one keeps
+		// that order.
+		tupleKey := func(wl [2]string) string { return wl[0] + "'" + strings.ReplaceAll(wl[1], "/", "'") }
 		sort.Slice(orphans, func(i, j int) bool { return tupleKey(orphans[i]) < tupleKey(orphans[j]) })
 		for _, wl := range orphans {
-			add("workload %s has containers but no workload resource carrying its replica count", wl)
+			add("workload %s has containers but no workload resource carrying its replica count", wl[1])
 		}
 		return errs
 	}
 	return checker{check, finish}
+}
+
+// checkFailed checks a cluster resource: a cluster that could not be read,
+// with the reason in thoras.cluster.error and no metrics.
+func checkFailed(where string, at map[string]any, rm map[string]any, add func(string, ...any)) {
+	if str(at, "k8s.cluster.name") == "" {
+		add("%s: missing attribute k8s.cluster.name", where)
+	}
+	if str(at, "thoras.cluster.error") == "" {
+		add("%s: thoras.cluster.error must be a non-empty string", where)
+	}
+	where = fmt.Sprintf("%s (%s)", where, pyStr(at["k8s.cluster.name"]))
+	scopes := asList(rm["scopeMetrics"])
+	if len(scopes) == 0 {
+		add("%s: no scopeMetrics", where)
+	}
+	for _, smv := range scopes {
+		sm := asMap(smv)
+		sc := asMap(sm["scope"])
+		if sc["name"] != scopeName {
+			add("%s: scope name must be %s", where, scopeName)
+		}
+		if sc["version"] != fleetVersion {
+			add("%s: a cluster that could not be read needs scope version %s", where, fleetVersion)
+		}
+		if sm["schemaUrl"] != schemaURL {
+			add("%s: scope schemaUrl must be %s", where, schemaURL)
+		}
+		if len(asList(sm["metrics"])) > 0 {
+			add("%s: a cluster that could not be read has no metrics", where)
+		}
+	}
 }
 
 func tierFloor(step, span int64) int64 {

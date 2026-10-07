@@ -4,3 +4,4 @@ __pycache__/
 dist/
 _site/
 /fixtures/demo-cluster.compact.otlp.json
+/fixtures/fleet.compact.otlp.json

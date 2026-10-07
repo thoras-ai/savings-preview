@@ -54,6 +54,12 @@ SAMPLES = [
         "detail": "60 workloads in 8 namespaces, 14 days at 5-minute steps, generated",
     },
     {
+        "id": "fleet",
+        "file": "fixtures/fleet.compact.otlp.json",
+        "name": "Fleet of clusters",
+        "detail": "Three clusters in two regions and one that could not be read, generated",
+    },
+    {
         "id": "synthetic",
         "file": "fixtures/savings-preview.otlp.json",
         "name": "Synthetic cluster",
@@ -100,7 +106,7 @@ def build_site(out):
     for s in SAMPLES:
         name = os.path.basename(s["file"])
         if not os.path.isfile(os.path.join(ROOT, s["file"])):
-            raise SystemExit("%s is missing; generate it with go run ./scripts/gen_demo" % s["file"])
+            raise SystemExit("%s is missing; generate it with go run ./scripts/gen_demo, and with -fleet for the fleet sample" % s["file"])
         shutil.copyfile(os.path.join(ROOT, s["file"]), os.path.join(out, "samples", name))
         listed.append({"id": s["id"], "url": "samples/" + name, "name": s["name"], "detail": s["detail"]})
     attr = html.escape(json.dumps(listed), quote=True)

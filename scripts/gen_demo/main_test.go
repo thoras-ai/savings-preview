@@ -5,9 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
+	"github.com/thoras-ai/savings-preview/internal/savings"
 	"github.com/thoras-ai/savings-preview/internal/validate"
 )
 
@@ -123,5 +125,36 @@ func TestClusterShape(t *testing.T) {
 		if alive > pools[2].count {
 			t.Errorf("%d spot nodes at once, want at most %d", alive, pools[2].count)
 		}
+	}
+}
+
+func TestFleetSample(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "fleet.json")
+	if err := runFleet(out); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if errs := validate.Validate(b); len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	sum, err := savings.Analyze(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, c := range sum.Clusters {
+		names = append(names, c.Cluster)
+		if (c.Error == "") != (c.Summary != nil) {
+			t.Errorf("%s: error %q with summary %v", c.Cluster, c.Error, c.Summary != nil)
+		}
+	}
+	if want := "prod-us-east-1 prod-eu-west-1 staging-us-east-1 dev-us-west-2"; strings.Join(names, " ") != want {
+		t.Errorf("clusters %q, want %q", names, want)
+	}
+	if sum.Totals.AnnualSavings <= 0 || sum.Tier != 2 {
+		t.Errorf("totals %+v, tier %d", sum.Totals, sum.Tier)
 	}
 }

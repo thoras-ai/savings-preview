@@ -5,17 +5,17 @@
 
   var esc = SP.ui.esc;
 
-  // opts: samples (list of {id, url, name, detail} or null), open(file), openSample(sample)
+  // opts: samples (list of {id, url, name, detail} or null), open(files), openSample(sample)
   function render(host, opts) {
     host.innerHTML =
       '<div class="start">' +
       '<h1>See what Thoras would have saved</h1>' +
-      '<p class="lead">Open the metrics file the Savings Preview CLI wrote, or the zip it packed. Everything is computed in this browser tab. Nothing is uploaded.</p>' +
+      '<p class="lead">Open the metrics file the Savings Preview CLI wrote, or the zip it packed. Choose several to see a fleet of clusters together. Everything is computed in this browser tab. Nothing is uploaded.</p>' +
       '<div class="drop">' +
-      '<div class="drop-title">Drop the file here</div>' +
+      '<div class="drop-title">Drop the files here</div>' +
       '<div class="drop-detail"><code>savings-preview.otlp.json</code>, the <code>.zip</code> that contains it, or its <code>report.html</code></div>' +
       '<p class="error" role="alert" hidden></p>' +
-      '<label class="button">Choose a file<input class="visually-hidden" type="file" accept=".json,.zip,.html,application/json,application/zip,text/html"></label>' +
+      '<label class="button">Choose files<input class="visually-hidden" type="file" multiple accept=".json,.zip,.html,application/json,application/zip,text/html"></label>' +
       '</div>' +
       (opts.samples && opts.samples.length ? '<h2>Or try a sample</h2><ul class="samples">' + opts.samples.map(function (s) {
         return '<li><button type="button" class="sample" data-sample="' + esc(s.id) + '"><span class="sample-name">' + esc(s.name) +
@@ -25,7 +25,7 @@
       '</div>';
 
     var input = host.querySelector('input[type=file]');
-    input.addEventListener('change', function () { if (input.files[0]) opts.open(input.files[0]); });
+    input.addEventListener('change', function () { if (input.files.length) opts.open(input.files); });
     var list = host.querySelector('.samples');
     if (list) list.addEventListener('click', function (e) {
       var b = e.target.closest('button[data-sample]');

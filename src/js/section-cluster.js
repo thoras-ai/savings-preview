@@ -65,7 +65,7 @@
   // used come from the model's totals; target is what the workloads would
   // request once right-sized, so requested minus target is the waste.
   function summarize(data, r, st) {
-    var t = r.totals, nodes = data.nodes;
+    var t = r.totals, nodes = r.nodes || data.nodes;
     var win = windowOf(r, st), alloc = null;
     if (nodes.length && win) {
       alloc = { cores: 0, gib: 0 };
@@ -86,13 +86,15 @@
     nodes.forEach(function (n) { if (n.hostType && n.hostType !== 'unknown') types[n.hostType] = true; });
     var counted = t.counted > 0;
     return {
-      nodes: nodes.length, types: Object.keys(types).length, priced: data.pricing.priced,
+      nodes: nodes.length, types: Object.keys(types).length, priced: (r.basePricing || data.pricing).priced,
       alloc: alloc,
       cpu: { req: counted ? t.reqCores : NaN, target: counted ? t.reqCores - t.cores : NaN, used: counted ? t.useCores : NaN, waste: t.cores },
       mem: { req: counted ? t.reqGiB : NaN, target: counted ? t.reqGiB - t.gib : NaN, used: counted ? t.useGiB : NaN, waste: t.gib },
       mix: mix(nodes),
       freed: { nodes: freed, cpu: cpuNodes, mem: memNodes, whole: Math.min(Math.floor(freed + 1e-9), nodes.length || Infinity), avg: avg },
-      left: data.workloads.filter(function (p) { return p.status === 'excluded' && (!st.namespaces || st.namespaces.indexOf(p.ns) >= 0); }).length,
+      left: data.workloads.filter(function (p) {
+        return p.status === 'excluded' && (!st.namespaces || st.namespaces.indexOf(p.ns) >= 0) && (!st.onlyClusters || !data.multi || st.onlyClusters.indexOf(p.cluster) >= 0);
+      }).length,
       filtered: !!st.namespaces, ranged: !!st.range,
       spot: nodes.some(function (n) { return n.capacity === 'spot' && model.nodePrices[n.hostType] !== undefined; }),
       regions: nodes.some(function (n) { return n.region && n.region !== 'us-east-1' && model.nodePrices[n.hostType] !== undefined; }),

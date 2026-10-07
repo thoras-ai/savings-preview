@@ -9,6 +9,8 @@
   var TARGET_HEADROOM = 1.1;
   var DEFAULT_NODE = { cores: 4, gib: 16, hourly: 0.192 };
   var CONTRACT_VERSION = '1.0.0';
+  // A file that holds several clusters, or a cluster that could not be read.
+  var FLEET_VERSION = '1.4.0';
 
   // On-demand Linux list prices in USD per hour, AWS us-east-1.
   var NODE_PRICES = {
@@ -90,10 +92,13 @@
     return step;
   }
 
+  // Resources without a cluster name belong to the first cluster named, as
+  // they did when a file held one.
   function parse(doc) {
     var rms = doc && doc.resourceMetrics;
     if (!Array.isArray(rms) || !rms.length) throw new Error('No resourceMetrics found. This is not a Savings Preview file.');
     var containers = [], workloads = {}, nodes = [], cluster = '', contract = { version: '', schemaUrl: '' };
+    var clusters = [], failed = [];
     rms.forEach(function (rm) {
       var a = attrMap(rm.resource);
       if (a['k8s.cluster.name'] && !cluster) cluster = a['k8s.cluster.name'];
@@ -101,17 +106,24 @@
       var series = {};
       (rm.scopeMetrics || []).forEach(function (sm) {
         var version = sm.scope && sm.scope.version ? String(sm.scope.version) : '';
-        if (version && version !== CONTRACT_VERSION) throw new Error('This file is contract version ' + version + ' and this page reads only ' + CONTRACT_VERSION + '. Collect the data again with the current savings-preview.');
-        if (version && !contract.version) contract.version = version;
+        if (version && version !== CONTRACT_VERSION && version !== FLEET_VERSION) throw new Error('This file is contract version ' + version + ' and this page reads only ' + CONTRACT_VERSION + ' and ' + FLEET_VERSION + '. Collect the data again with the current savings-preview.');
+        if (version && (!contract.version || version === FLEET_VERSION)) contract.version = version;
         (sm.metrics || []).forEach(function (m) { series[m.name] = readSeries(m); });
       });
       var kind = a['k8s.deployment.name'] ? 'deployment' : a['k8s.statefulset.name'] ? 'statefulset' : null;
+      if (a['thoras.cluster.error'] && !kind && !a['k8s.node.name'] && !a['k8s.container.name']) {
+        failed.push({ name: String(a['k8s.cluster.name'] || ''), reason: String(a['thoras.cluster.error']) });
+        return;
+      }
+      var name0 = a['k8s.cluster.name'] || '';
+      if (clusters.indexOf(name0) < 0) clusters.push(name0);
       var spans = parseSpans(a['thoras.step_spans']);
       var held = {};
       (Array.isArray(a['thoras.held_metrics']) ? a['thoras.held_metrics'] : []).forEach(function (n) { held[n] = true; });
       var coarseStep = spans ? Math.max.apply(null, spans.map(function (x) { return x.step; })) : (a['thoras.step_seconds'] || 0);
       var base = {
         attrs: a,
+        cluster: name0,
         step: a['thoras.step_seconds'] || 0,
         spans: spans,
         coarseStep: coarseStep,
@@ -135,12 +147,25 @@
         if (a['k8s.container.name']) {
           containers.push(Object.assign(base, { workloadId: id, ns: ns, kind: kind, workload: name, name: a['k8s.container.name'] }));
         } else {
-          workloads[id] = Object.assign(base, { id: id, ns: ns, kind: kind, name: name });
+          workloads[name0 + '\u0000' + id] = Object.assign(base, { id: id, ns: ns, kind: kind, name: name });
         }
       }
     });
-    if (!containers.length) throw new Error('The file has no container series, so there is nothing to analyze.');
-    return { cluster: cluster, contract: contract, containers: containers, workloads: workloads, nodes: nodes };
+    // Unnamed resources join the first named cluster.
+    var unnamed = clusters.indexOf('');
+    if (unnamed >= 0 && cluster) {
+      clusters.splice(unnamed, 1);
+      containers.concat(nodes).forEach(function (r) { if (!r.cluster) r.cluster = cluster; });
+      Object.keys(workloads).forEach(function (k) {
+        var w = workloads[k];
+        if (!w.cluster) { delete workloads[k]; w.cluster = cluster; workloads[cluster + '\u0000' + w.id] = w; }
+      });
+    }
+    if (!containers.length) {
+      if (failed.length) throw new Error('No cluster in this file could be read: ' + failed.map(function (f) { return f.name + ' (' + f.reason + ')'; }).join('; ') + '.');
+      throw new Error('The file has no container series, so there is nothing to analyze.');
+    }
+    return { cluster: cluster, clusters: clusters, failed: failed, contract: contract, containers: containers, workloads: workloads, nodes: nodes };
   }
 
   function pricing(nodes) {
@@ -344,7 +369,7 @@
   // next call.
   function computeWorkload(p, rates, lv) {
     var res = {
-      id: p.id, ns: p.ns, kind: p.kind, name: p.name, containers: p.containers, notes: p.notes,
+      id: p.id, cluster: p.cluster, ns: p.ns, kind: p.kind, name: p.name, containers: p.containers, notes: p.notes,
       status: p.status, reason: p.reason, series: null,
       annualSpend: 0, annualSavings: 0, savingsPct: 0, wasteCores: 0, wasteGiB: 0, reqCores: 0, reqGiB: 0, useCores: 0, useGiB: 0
     };
@@ -548,35 +573,98 @@
     return formatSpan(span) + ' at ' + formatStep(step) + ' resolution';
   }
 
+  // Fidelity of several clusters together: the worst tier, the coarsest
+  // step, the earliest start to the latest end.
+  function mergeFidelity(list) {
+    if (list.length === 1) return list[0];
+    var tier = 1, step = 0, sourceStep = 0, t0 = Infinity, t1 = -Infinity, sources = [], notes = [];
+    list.forEach(function (f) {
+      tier = Math.max(tier, f.tier);
+      step = Math.max(step, f.stepSeconds);
+      sourceStep = Math.max(sourceStep, f.sourceStepSeconds);
+      if (f.start !== null) { t0 = Math.min(t0, f.start); t1 = Math.max(t1, f.end); }
+      f.source.split(', ').forEach(function (x) { if (x && sources.indexOf(x) < 0) sources.push(x); });
+      (f.notes || []).forEach(function (n) { if (notes.indexOf(n) < 0) notes.push(n); });
+    });
+    var span = isFinite(t0) ? t1 - t0 : 0;
+    var points = step > 0 ? span / step : 0;
+    if (!(sourceStep < step)) sourceStep = 0;
+    return {
+      tier: tier, stepSeconds: step, sourceStepSeconds: sourceStep, spanSeconds: span, snapshot: points <= 1,
+      start: isFinite(t0) ? t0 : null, end: isFinite(t0) ? t1 : null,
+      source: sources.join(', '), label: fidelityLabel(step, span, points <= 1, sourceStep), notes: notes
+    };
+  }
+
+  // Rates for a fleet's page-wide figures: the clusters' priced nodes pooled.
+  // Each workload is priced with its own cluster's rates.
+  function fleetPricing(clusters, nodes) {
+    var p = pricing(nodes);
+    var bases = [];
+    clusters.forEach(function (c) { if (bases.indexOf(c.pricing.basis) < 0) bases.push(c.pricing.basis); });
+    if (bases.length > 1) p.basis = 'each cluster priced from its own nodes';
+    else p.basis = bases[0];
+    return p;
+  }
+
   // Reads a file once: parses it, prices its nodes and lines up each
   // workload's series. compute() turns the result into figures.
-  function prepare(doc) {
+  //
+  // In a file with several clusters each cluster is priced from its own
+  // nodes, workload ids start with the cluster's name, and namespaces are
+  // named cluster/namespace, since two clusters can have the same ones.
+  //   opts.dropped  [{cluster, kept, dropped}]: clusters read from more than
+  //                 one file, and which file's data is used (files.combine)
+  function prepare(doc, opts) {
     var data = parse(doc);
+    var multi = data.clusters.length > 1;
     var byWorkload = {}, order = [];
     data.containers.forEach(function (c) {
-      if (!byWorkload[c.workloadId]) { byWorkload[c.workloadId] = []; order.push(c.workloadId); }
-      byWorkload[c.workloadId].push(c);
+      var key = c.cluster + '\u0000' + c.workloadId;
+      if (!byWorkload[key]) { byWorkload[key] = []; order.push(key); }
+      byWorkload[key].push(c);
     });
-    var workloads = order.map(function (id) {
-      var first = byWorkload[id][0];
-      var info = { ns: first.ns, kind: first.kind, name: first.workload, workload: data.workloads[id] };
-      var p = prepareWorkload(id, info, byWorkload[id]);
-      p.notes = workloadNotes(byWorkload[id]);
+    var workloads = order.map(function (key) {
+      var first = byWorkload[key][0];
+      var info = { ns: first.ns, kind: first.kind, name: first.workload, workload: data.workloads[key] };
+      var p = prepareWorkload(multi ? first.cluster + '/' + first.workloadId : first.workloadId, info, byWorkload[key]);
+      p.cluster = first.cluster;
+      if (multi) p.ns = first.cluster + '/' + first.ns;
+      p.notes = workloadNotes(byWorkload[key]);
       return p;
     });
     var namespaces = [];
     workloads.forEach(function (w) { if (namespaces.indexOf(w.ns) < 0) namespaces.push(w.ns); });
-    var fid = fidelity(data.containers);
+    var clusters = data.clusters.map(function (name) {
+      var mine = function (r) { return r.cluster === name; };
+      var own = workloads.filter(mine);
+      var cs = data.containers.filter(mine);
+      var f = cs.length ? fidelity(cs) : fidelity([]);
+      f.notes = noteSummaries(own);
+      var nodes = data.nodes.filter(mine);
+      return { name: name, pricing: pricing(nodes), nodes: nodes, fidelity: f, workloads: own.length };
+    });
+    var fid = multi ? mergeFidelity(clusters.map(function (c) { return c.fidelity; })) : fidelity(data.containers);
     fid.notes = noteSummaries(workloads);
     return {
-      cluster: data.cluster, contract: data.contract, fidelity: fid, pricing: pricing(data.nodes), nodes: data.nodes,
-      namespaces: namespaces.sort(), workloads: workloads
+      cluster: multi ? clusters.length + ' clusters' : data.cluster, contract: data.contract, fidelity: fid,
+      pricing: multi ? fleetPricing(clusters, data.nodes) : clusters[0].pricing, nodes: data.nodes,
+      namespaces: namespaces.sort(), workloads: workloads,
+      clusters: clusters, failed: data.failed, dropped: (opts && opts.dropped) || [], multi: multi
     };
   }
 
-  var DEFAULT_LEVERS = { rates: null, discount: 0, headroom: TARGET_HEADROOM, peakWindow: PEAK_WINDOW_SECONDS, namespaces: null, range: null };
+  var DEFAULT_LEVERS = { rates: null, discount: 0, headroom: TARGET_HEADROOM, peakWindow: PEAK_WINDOW_SECONDS, namespaces: null, clusters: null, range: null };
 
   function fmtRate(v) { return '$' + Number(v.toPrecision(4)); }
+
+  function discounted(rates, discount) {
+    if (!(discount > 0)) return rates;
+    return Object.assign({}, rates, {
+      perCore: rates.perCore * (1 - discount), perGiB: rates.perGiB * (1 - discount), discount: discount,
+      basis: rates.basis + '; ' + Number((discount * 100).toPrecision(4)) + '% discount applied'
+    });
+  }
 
   // The one place totals are computed. With DEFAULT_LEVERS it matches
   // internal/savings, which the parity tests check.
@@ -585,40 +673,54 @@
   //   headroom    target as a multiple of the peak (1.1)
   //   peakWindow  seconds the rolling peak looks back (900)
   //   namespaces  namespaces to count, or null for all
+  //   clusters    clusters to count, or null for all
   //   range       [from, to] in Unix seconds, or null for the whole file
   function compute(data, levers) {
     var lv = Object.assign({}, DEFAULT_LEVERS, levers);
-    var rates = data.pricing;
+    var clusters = data.clusters || [{ name: data.cluster, pricing: data.pricing, nodes: data.nodes, fidelity: data.fidelity }];
+    var inScope = lv.clusters ? clusters.filter(function (c) { return lv.clusters.indexOf(c.name) >= 0; }) : clusters;
+    if (!inScope.length) inScope = clusters;
+    var one = inScope.length === 1;
+    var base = one ? inScope[0].pricing : data.pricing;
+    var custom = null;
     if (lv.rates) {
-      rates = Object.assign({}, data.pricing, {
+      custom = Object.assign({}, base, {
         perCore: lv.rates.perCore, perGiB: lv.rates.perGiB, custom: true,
         basis: fmtRate(lv.rates.perCore) + ' per core-hour and ' + fmtRate(lv.rates.perGiB) + ' per GiB-hour'
       });
     }
-    if (lv.discount > 0) {
-      rates = Object.assign({}, rates, {
-        perCore: rates.perCore * (1 - lv.discount), perGiB: rates.perGiB * (1 - lv.discount), discount: lv.discount,
-        basis: rates.basis + '; ' + Number((lv.discount * 100).toPrecision(4)) + '% discount applied'
-      });
-    }
+    var rates = discounted(custom || base, lv.discount);
+    var own = {};
+    inScope.forEach(function (c) { own[c.name] = discounted(custom || c.pricing, lv.discount); });
     var scope = null;
     if (lv.namespaces) { scope = {}; lv.namespaces.forEach(function (n) { scope[n] = true; }); }
     var workloads = [];
     data.workloads.forEach(function (p) {
-      if (!scope || scope[p.ns]) workloads.push(computeWorkload(p, rates, lv));
+      var r = data.multi ? own[p.cluster] : rates;
+      if (r && (!scope || scope[p.ns])) workloads.push(computeWorkload(p, r, lv));
     });
     var counted = workloads.filter(function (w) { return w.series; });
     var totals = { spend: 0, savings: 0, cores: 0, gib: 0, reqCores: 0, reqGiB: 0, useCores: 0, useGiB: 0, workloads: workloads.length, counted: counted.length };
-    counted.forEach(function (w) {
+    var perCluster = {};
+    inScope.forEach(function (c) { perCluster[c.name] = { name: c.name, spend: 0, savings: 0, workloads: 0, counted: 0, fidelity: c.fidelity }; });
+    workloads.forEach(function (w) {
+      var pc = perCluster[w.cluster];
+      if (pc) pc.workloads++;
+      if (!w.series) return;
       totals.spend += w.annualSpend; totals.savings += w.annualSavings;
       totals.cores += w.wasteCores; totals.gib += w.wasteGiB;
       totals.reqCores += w.reqCores; totals.reqGiB += w.reqGiB;
       totals.useCores += w.useCores; totals.useGiB += w.useGiB;
+      if (pc) { pc.counted++; pc.spend += w.annualSpend; pc.savings += w.annualSavings; }
     });
     var series = counted.length ? combine(counted) : null;
     if (series && lv.range) series = clip(series, lv.range);
+    var byCluster = inScope.map(function (c) { return perCluster[c.name]; })
+      .sort(function (a, b) { return b.savings - a.savings || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
     return {
-      cluster: data.cluster, fidelity: data.fidelity, pricing: rates, namespaces: data.namespaces,
+      cluster: one ? (data.multi ? inScope[0].name : data.cluster) : inScope.length + ' clusters',
+      fidelity: data.multi && one ? inScope[0].fidelity : data.fidelity, pricing: rates, basePricing: base, namespaces: data.namespaces,
+      nodes: one ? inScope[0].nodes : data.nodes, clusters: byCluster, fleet: data.multi && byCluster.filter(function (c) { return c.counted; }).length > 1,
       levers: lv, workloads: workloads, totals: totals, series: series
     };
   }
@@ -635,7 +737,7 @@
   }
 
   var api = {
-    analyze: analyze, prepare: prepare, nodePrices: NODE_PRICES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
+    analyze: analyze, prepare: prepare, mergeFidelity: mergeFidelity, nodePrices: NODE_PRICES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
     lowerBound: lowerBound, upperBound: upperBound, mean: mean,
     fidelityLabel: fidelityLabel, formatSpan: formatSpan, formatStep: formatStep, notes: NOTES, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
   };

@@ -487,6 +487,60 @@ func mutations() []mutation {
 			}
 			doc["resourceMetrics"] = kept
 		}, ""},
+		{"fleet of two clusters", func(t *testing.T, doc, app, worker obj) {
+			// The same workloads in a second cluster are not duplicates.
+			copied := decodeOrFatal(t, encode(t, doc))
+			for _, r := range resources(copied) {
+				valueOf(r.(obj), "k8s.cluster.name")["stringValue"] = "second"
+			}
+			doc["resourceMetrics"] = append(resources(doc), resources(copied)...)
+			setVersion(doc, "1.4.0")
+		}, ""},
+		{"two clusters at 1.0.0", func(t *testing.T, doc, app, worker obj) {
+			valueOf(app, "k8s.cluster.name")["stringValue"] = "other"
+		}, "file mixes clusters"},
+		{"mixed contract versions", func(t *testing.T, doc, app, worker obj) {
+			app["scopeMetrics"].([]any)[0].(obj)["scope"].(obj)["version"] = "1.4.0"
+		}, "file mixes contract versions"},
+		{"cluster not read", func(t *testing.T, doc, app, worker obj) {
+			doc["resourceMetrics"] = append(resources(doc), notRead("gone", "1.4.0"))
+			setVersion(doc, "1.4.0")
+		}, ""},
+		{"cluster not read at 1.0.0", func(t *testing.T, doc, app, worker obj) {
+			doc["resourceMetrics"] = append(resources(doc), notRead("gone", "1.0.0"))
+		}, "needs scope version 1.4.0"},
+		{"cluster not read and read", func(t *testing.T, doc, app, worker obj) {
+			cluster := valueOf(app, "k8s.cluster.name")["stringValue"].(string)
+			doc["resourceMetrics"] = append(resources(doc), notRead(cluster, "1.4.0"))
+			setVersion(doc, "1.4.0")
+		}, "has data and a thoras.cluster.error resource"},
+		{"cluster not read with metrics and no reason", func(t *testing.T, doc, app, worker obj) {
+			rm := notRead("gone", "1.4.0")
+			valueOf(rm, "thoras.cluster.error")["stringValue"] = ""
+			rm["scopeMetrics"].([]any)[0].(obj)["metrics"] = []any{metrics(app)[0]}
+			doc["resourceMetrics"] = append(resources(doc), rm, notRead("gone", "1.4.0"))
+			setVersion(doc, "1.4.0")
+		}, "has no metrics"},
+	}
+}
+
+func setVersion(doc obj, v string) {
+	for _, r := range resources(doc) {
+		for _, sm := range r.(obj)["scopeMetrics"].([]any) {
+			sm.(obj)["scope"].(obj)["version"] = v
+		}
+	}
+}
+
+// notRead is the resource for a cluster that could not be read.
+func notRead(cluster, version string) obj {
+	return obj{
+		"resource": obj{"attributes": []any{
+			obj{"key": "k8s.cluster.name", "value": obj{"stringValue": cluster}},
+			obj{"key": "thoras.cluster.error", "value": obj{"stringValue": "list services: Unauthorized"}},
+		}},
+		"schemaUrl":    schemaURL,
+		"scopeMetrics": []any{obj{"scope": obj{"name": scopeName, "version": version}, "schemaUrl": schemaURL, "metrics": []any{}}},
 	}
 }
 

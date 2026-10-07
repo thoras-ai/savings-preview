@@ -10,9 +10,12 @@ import (
 // Writer encodes a contract file one resource at a time, so a caller never
 // holds every resource in memory. Resources come out in the order given.
 type Writer struct {
-	w      *bufio.Writer
-	n      int
-	closed bool
+	// Version is the contract version written on every resource; empty is
+	// ScopeVersion, or FleetScopeVersion for a resource with Error set.
+	Version string
+	w       *bufio.Writer
+	n       int
+	closed  bool
 }
 
 // NewWriter starts a file on w.
@@ -25,7 +28,11 @@ func (sw *Writer) Resource(r Resource) error {
 	if sw.closed {
 		return errors.New("contract writer is closed")
 	}
-	rm, err := r.encode()
+	encode := r.encode
+	if sw.Version != "" {
+		encode = func() (resourceMetrics, error) { return r.encodeAs(sw.Version) }
+	}
+	rm, err := encode()
 	if err != nil {
 		return err
 	}

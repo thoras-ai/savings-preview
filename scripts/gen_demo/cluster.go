@@ -11,13 +11,38 @@ import (
 )
 
 const (
-	start   = 1789516800 // 2026-09-16T00:00:00Z, a Wednesday
-	step    = 300
-	days    = 14
-	points  = days * 86400 / step
-	cluster = "prod-us-east-1"
-	gib     = 1 << 30
+	start  = 1789516800 // 2026-09-16T00:00:00Z, a Wednesday
+	step   = 300
+	days   = 14
+	points = days * 86400 / step
+	gib    = 1 << 30
 )
+
+// spec is one cluster to write: the demo cluster, or a smaller one of the
+// fleet sample built from some of its namespaces.
+type spec struct {
+	name, region string
+	namespaces   []string // nil for all
+	replicas     float64  // replica counts are scaled by this
+	pools        []pool
+	seed         uint64
+}
+
+var demo = spec{name: "prod-us-east-1", region: "us-east-1", replicas: 1, pools: pools}
+
+func (sp spec) has(ns string) bool {
+	if sp.namespaces == nil {
+		return true
+	}
+	for _, n := range sp.namespaces {
+		if n == ns {
+			return true
+		}
+	}
+	return false
+}
+
+func (sp spec) scale(n int) int { return max(1, int(math.Round(float64(n)*sp.replicas))) }
 
 // pattern is the shape of a workload's load over the window.
 type pattern int
@@ -230,17 +255,24 @@ func round(v float64, places int) float64 {
 }
 
 // write streams the demo cluster as a full-resolution contract file.
-func write(w io.Writer) error {
+func write(w io.Writer) error { return writeCluster(w, demo) }
+
+// writeCluster streams one cluster as a full-resolution contract file.
+func writeCluster(w io.Writer, sp spec) error {
 	cw := contract.NewWriter(w)
-	common := contract.Common{Cluster: cluster, Source: "prometheus", StepSeconds: step, Tier: contract.TierFor(step, days*86400)}
+	common := contract.Common{Cluster: sp.name, Source: "prometheus", StepSeconds: step, Tier: contract.TierFor(step, days*86400)}
 	for wi, wl := range workloads {
-		rng := rand.New(rand.NewPCG(uint64(wi), 1))
+		if !sp.has(wl.ns) {
+			continue
+		}
+		rng := rand.New(rand.NewPCG(uint64(wi)+sp.seed, 1))
 		bursts := burstsFor(rng)
 		replicas := make([]float64, points)
+		lo, hi := sp.scale(wl.replicas[0]), sp.scale(wl.replicas[1])
 		for i := range replicas {
-			n := float64(wl.replicas[0])
-			if wl.replicas[1] > wl.replicas[0] {
-				n = math.Round(lerp([2]float64{float64(wl.replicas[0]), float64(wl.replicas[1])}, load(wl.pattern, i, bursts)))
+			n := float64(lo)
+			if hi > lo {
+				n = math.Round(lerp([2]float64{float64(lo), float64(hi)}, load(wl.pattern, i, bursts)))
 			}
 			replicas[i] = n
 		}
@@ -263,9 +295,9 @@ func write(w io.Writer) error {
 			}
 		}
 	}
-	for _, p := range pools {
+	for _, p := range sp.pools {
 		for slot := range p.count {
-			for _, n := range nodeLives(p, slot) {
+			for _, n := range nodeLives(sp, p, slot) {
 				if err := cw.Resource(n); err != nil {
 					return err
 				}
@@ -339,7 +371,7 @@ func containerSeries(k container, p pattern, bursts []float64, rng *rand.Rand) [
 
 // nodeLives returns the node resources that held one slot of a pool over the
 // window: one node, or for a reclaimed spot node, it and its replacements.
-func nodeLives(p pool, slot int) []contract.Resource {
+func nodeLives(sp spec, p pool, slot int) []contract.Resource {
 	type life struct{ from, to int } // point indexes, to exclusive
 	lives := []life{{0, points}}
 	if p.capacity == "spot" {
@@ -361,12 +393,12 @@ func nodeLives(p pool, slot int) []contract.Resource {
 			mem = append(mem, contract.Point{T: at(i), V: math.Round(p.memGiB * gib)})
 		}
 		out = append(out, contract.Resource{
-			Common: contract.Common{Cluster: cluster, Source: "prometheus", StepSeconds: step, Tier: contract.TierFor(step, int64(l.to-l.from)*step)},
+			Common: contract.Common{Cluster: sp.name, Source: "prometheus", StepSeconds: step, Tier: contract.TierFor(step, int64(l.to-l.from)*step)},
 			Node: &contract.Node{
 				Name:         nodeName(p.subnet, slot, n),
 				InstanceType: p.instance,
 				Provider:     "aws",
-				Region:       "us-east-1",
+				Region:       sp.region,
 				CapacityType: p.capacity,
 			},
 			Metrics: []contract.Series{{Name: contract.NodeCPU, Points: cpu}, {Name: contract.NodeMemory, Points: mem}},

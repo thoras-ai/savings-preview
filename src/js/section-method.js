@@ -68,7 +68,14 @@
 
   function pricingText(r, data) {
     if (!r.pricing.custom) return esc(r.pricing.basis);
-    return esc(r.pricing.basis) + ', set under Assumptions. The file’s own pricing: ' + esc(data.pricing.basis) + '.';
+    return esc(r.pricing.basis) + ', set under Assumptions. The file’s own pricing: ' + esc((r.basePricing || data.pricing).basis) + '.';
+  }
+
+  function clustersText(r, data) {
+    var n = data.clusters.length, shown = r.clusters.length;
+    var text = shown < n ? ui.num(shown) + ' of ' + ui.num(n) + ' in the file, as set under Assumptions' : ui.num(n) + ' in the file';
+    if (data.failed.length) text += '; ' + ui.num(data.failed.length) + ' not read';
+    return text;
   }
 
   function contractText(c) {
@@ -85,9 +92,11 @@
       ['Resolution', esc(resolution(r.fidelity))],
       ['Fidelity', fidelityText(r.fidelity)],
       ['Workloads', esc(workloadsText(r, data, st))],
-      ['Nodes', esc(nodesText(data.pricing))],
+      ['Nodes', esc(nodesText(r.basePricing || data.pricing))],
       ['Pricing', pricingText(r, data)]
     ];
+    if (data.multi) rows[0] = ['Clusters', esc(clustersText(r, data))];
+    else if (data.failed && data.failed.length) rows.splice(1, 0, ['Clusters', esc(clustersText(r, data))]);
     var contract = contractText(data.contract);
     if (contract) rows.push(['Contract', esc(contract)]);
     return '<div class="card"><h2>The data</h2><dl class="facts">' +
@@ -153,7 +162,7 @@
 
   function missingCard(r, data) {
     var left = r.workloads.filter(function (w) { return !w.series || w.status === 'partial'; });
-    var items = left.map(workloadItem).concat(nodeItems(data.nodes, r.pricing.custom), r.fidelity.notes.map(esc));
+    var items = left.map(workloadItem).concat(nodeItems(r.nodes || data.nodes, r.pricing.custom), r.fidelity.notes.map(esc));
     var after = [];
     if (left.some(unread)) after.push('A workload’s cost is the larger of its CPU and memory cost, so it cannot be computed from one of them.');
     after.push((left.length ? 'Every other' : 'Every') + ' required series was present for every workload.');
@@ -179,10 +188,36 @@
       'Waste at each step is ' + code('max(0, requested − target)') + '. A request below the target is left alone; the report never adds.',
       pricing,
       'A workload’s hourly cost is ' + code('max(CPU cost, memory cost)') + ': whichever resource runs out first decides how many nodes it needs. Current cost uses the request; optimized cost uses ' + code('min(request, target)') + '.',
-      'Average over ' + (st.range ? 'the time range set under Assumptions' : 'the window') + ', weighting each point by its step, and multiply by 8,760 hours. Savings is current minus optimized. The cluster figure is the sum over counted workloads.'
+      'Average over ' + (st.range ? 'the time range set under Assumptions' : 'the window') + ', weighting each point by its step, and multiply by 8,760 hours. Savings is current minus optimized. The cluster figure is the sum over counted workloads' + (r.fleet ? ', and the fleet figure the sum over its clusters.' : '.')
     ];
     return '<div class="card"><h2>How the savings are computed</h2><div class="sub">Per workload, per step, for CPU and memory separately</div>' +
       '<ol class="method-steps">' + steps.map(function (s) { return '<li>' + s + '</li>'; }).join('') + '</ol></div>';
+  }
+
+  // Each cluster in the file: what was read and what it comes to, the
+  // clusters that could not be read and why, and the clusters that came from
+  // more than one file.
+  function fleetCard(r, data) {
+    var figures = {};
+    r.clusters.forEach(function (c) { figures[c.name] = c; });
+    var rows = data.clusters.map(function (c) {
+      var f = c.fidelity, x = figures[c.name];
+      return '<tr><td><span class="wl-name">' + esc(c.name) + '</span></td><td>' + esc(f.source || 'Not recorded') + '</td>' +
+        '<td>' + esc(f.label) + '</td><td class="num">' + f.tier + '</td>' +
+        '<td class="num">' + (x ? esc(ui.num(x.counted) + ' of ' + ui.num(x.workloads)) : 'excluded') + '</td>' +
+        '<td class="num">' + (x ? esc(ui.money(x.spend)) : '') + '</td><td class="num">' + (x ? esc(ui.money(x.savings)) : '') + '</td></tr>';
+    }).concat(data.failed.map(function (f) {
+      return '<tr><td><span class="wl-name">' + esc(f.name) + '</span></td><td colspan="6">Not read: ' + esc(f.reason) + '</td></tr>';
+    })).join('');
+    var notes = data.dropped.map(function (d) {
+      return 'Cluster <span class="wl-name">' + esc(d.cluster) + '</span> is in ' + esc(d.kept) + ' and ' + esc(d.dropped) +
+        '. The figures use ' + esc(d.kept) + ', whose data is newer, and leave out ' + esc(d.dropped) + ', so the cluster is counted once.';
+    });
+    if (data.failed.length) notes.push('A cluster that could not be read adds nothing to the figures. Run it again once the reason above is fixed, and open both files together.');
+    return '<div class="card"><h2>Clusters</h2><div class="sub">Each cluster is priced from its own nodes; the fleet figures are their sum</div>' +
+      '<div class="table-wrap"><table class="sum-table"><thead><tr><th scope="col">Cluster</th><th scope="col">Source</th><th scope="col">Data</th>' +
+      '<th scope="col" class="num">Tier</th><th scope="col" class="num">Workloads counted</th><th scope="col" class="num">Spend / yr</th><th scope="col" class="num">Saves / yr</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>' + (notes.length ? list(notes) : '') + '</div>';
   }
 
   function notCard() {
@@ -199,6 +234,7 @@
     var r = ctx.result, st = ctx.state;
     host.innerHTML = '<p class="section-lead">Where the numbers come from and how they are computed, so an engineer can check them.</p>' +
       '<div class="pair">' + dataCard(r, ctx.data, st) + missingCard(r, ctx.data) + '</div>' +
+      (ctx.data.multi || ctx.data.failed.length || ctx.data.dropped.length ? fleetCard(r, ctx.data) : '') +
       methodCard(r, st) + notCard();
   }
 
