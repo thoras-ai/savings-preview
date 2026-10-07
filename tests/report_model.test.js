@@ -282,7 +282,7 @@ test('intermittent containers and late series do not blank the cluster chart', (
 
 test('totals for the committed fixtures keep their golden values', () => {
   const want = {
-    'savings-preview.otlp.json': { spend: 6155.221709224345, savings: 2181.09021553841, reqCores: 14, reqGiB: 44, counted: 3 },
+    'savings-preview.otlp.json': { spend: 3375.052799999748, savings: 1210.4480350292247, reqCores: 14, reqGiB: 44, counted: 3 },
     'minikube-poll.otlp.json': { spend: 1595.0728125, savings: 1468.3183583557436, reqCores: 3.236, reqGiB: 8.78125, counted: 21 }
   };
   Object.entries(want).forEach(([name, w]) => {
@@ -314,17 +314,17 @@ test('a partial workload counts only its complete containers', () => {
 
 test('node prices set the rates and the basis names the caveats', () => {
   const node = (type, cap, region) => ({
-    resource: { attributes: [S('k8s.node.name', type), S('host.type', type), S('thoras.node.capacity_type', cap), S('cloud.region', region), I('thoras.step_seconds', 300)] },
+    resource: { attributes: [S('k8s.node.name', type), S('host.type', type), S('cloud.provider', 'aws'), S('thoras.node.capacity_type', cap), S('cloud.region', region), I('thoras.step_seconds', 300)] },
     scopeMetrics: [{ metrics: [
       series('k8s.node.cpu.allocatable', '{cpu}', [4, 4], 300),
       series('k8s.node.memory.allocatable', 'By', [16 * GIB, 16 * GIB], 300, { int: true })
     ] }]
   });
   const rates = model.pricing(model.parse(doc({ cpu: [1, 1], mem: [1, 1], nodes: [node('m5.xlarge', 'spot', 'eu-west-1')] })).nodes);
-  assert.ok(Math.abs(rates.perCore - 0.192 / 4) < 1e-9);
-  assert.match(rates.basis, /us-east-1/);
-  assert.match(rates.basis, /spot/);
-  assert.match(rates.basis, /outside us-east-1/);
+  // m5.xlarge spot: 0.192 at a 68% discount, over 4 vCPU and 16 GiB.
+  assert.ok(Math.abs(rates.perCore - 0.06144 / 4) < 1e-9);
+  assert.ok(Math.abs(rates.perGiB - 0.06144 / 16) < 1e-9);
+  assert.strictEqual(rates.basis, '1 of 1 nodes at AWS us-east-1 on-demand and spot list prices; nodes outside us-east-1 are priced as if in it');
 });
 
 // Two hours of one container: the first hour rolled up to 5-minute points, the
@@ -523,4 +523,32 @@ test('a range clips each workload series as well as the cluster series', () => {
     assert.strictEqual(w.series.t[0], t[10]);
     assert.strictEqual(w.series.t[w.series.t.length - 1], t[20]);
   }
+});
+
+test('nodes are priced from their own cloud table, spot and custom types the way the product prices them', () => {
+  const price = (hostType, provider, capacity, extra) => model.priceNode(Object.assign({ hostType, provider, capacity, region: '', cores: 3.9, gib: 14 }, extra));
+  const near = (a, b) => Math.abs(a - b) <= 1e-12;
+  let p = price('n2-standard-4', 'gcp', 'on_demand');
+  assert.deepStrictEqual([p.cloud, p.cores, p.gib, p.hourly, p.reason], ['gcp', 4, 16, 0.218756, '']);
+  p = price('e2-standard-4', 'gcp', 'spot');
+  assert.ok(p.spot && near(p.hourly, 0.07547082));
+  p = price('n2d-custom-16-32768', 'gcp', 'on_demand');
+  assert.ok(p.custom && p.cores === 16 && p.gib === 32 && near(p.hourly, 16 * 0.0325248 + 32 * 0.00435855));
+  p = price('n2d-custom-4-8192', 'gcp', 'spot');
+  assert.ok(near(p.hourly, 4 * 0.01015 + 8 * 0.001663));
+  p = price('Standard_D4s_v5', 'azure', 'spot');
+  assert.ok(!p.spot && p.azureSpot && p.hourly === 0.192);
+  p = price('m5.2xlarge', 'aws', 'spot', { region: 'us-west-2' });
+  assert.ok(p.spot && p.otherRegion && near(p.hourly, 0.13824));
+  assert.strictEqual(price('c8ib.large', 'aws', 'spot').reason, 'spot');
+  assert.strictEqual(price('x9.unknown', 'aws', 'on_demand').reason, 'type');
+  assert.strictEqual(price('VM.Standard.E4.Flex', 'oci', 'on_demand').reason, 'cloud');
+  p = price('c5.large', 'unknown', 'unknown');
+  assert.ok(p.inferred && p.cloud === 'aws' && p.hourly === 0.085);
+  const rates = model.pricing([
+    { hostType: 'n2-standard-4', provider: 'gcp', capacity: 'on_demand' },
+    { hostType: 'Standard_D4s_v5', provider: 'azure', capacity: 'on_demand', region: 'westeurope' }
+  ]);
+  assert.ok(near(rates.perCore, (0.218756 + 0.192) / 8) && near(rates.perGiB, (0.218756 + 0.192) / 32));
+  assert.strictEqual(rates.basis, '2 of 2 nodes at Google Cloud us-central1 and Azure eastus on-demand list prices; nodes outside those regions are priced as if in them');
 });

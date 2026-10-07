@@ -31,17 +31,6 @@ const (
 
 var defaultNode = struct{ cores, gib, hourly float64 }{4, 16, 0.192}
 
-// On-demand Linux list prices in USD per hour, AWS us-east-1.
-var nodePrices = map[string]float64{
-	"t3.medium": 0.0416, "t3.large": 0.0832, "t3.xlarge": 0.1664, "t3.2xlarge": 0.3328,
-	"m5.large": 0.096, "m5.xlarge": 0.192, "m5.2xlarge": 0.384, "m5.4xlarge": 0.768, "m5.8xlarge": 1.536,
-	"m6i.large": 0.096, "m6i.xlarge": 0.192, "m6i.2xlarge": 0.384, "m6i.4xlarge": 0.768, "m6i.8xlarge": 1.536,
-	"c5.large": 0.085, "c5.xlarge": 0.17, "c5.2xlarge": 0.34, "c5.4xlarge": 0.68, "c5.9xlarge": 1.53,
-	"c6i.large": 0.085, "c6i.xlarge": 0.17, "c6i.2xlarge": 0.34, "c6i.4xlarge": 0.68,
-	"r5.large": 0.126, "r5.xlarge": 0.252, "r5.2xlarge": 0.504, "r5.4xlarge": 1.008, "r5.8xlarge": 2.016,
-	"r6i.large": 0.126, "r6i.xlarge": 0.252, "r6i.2xlarge": 0.504, "r6i.4xlarge": 1.008,
-}
-
 const (
 	cpuUse  = "container.cpu.usage"
 	memUse  = "container.memory.working_set"
@@ -145,9 +134,9 @@ type resource struct {
 }
 
 type node struct {
-	seq                        int
-	hostType, region, capacity string
-	cores, gib                 float64
+	seq                                  int
+	hostType, provider, region, capacity string
+	cores, gib                           float64
 }
 
 // Analyze computes the summary of an OTLP-JSON Savings Preview file.
@@ -251,7 +240,7 @@ func AnalyzeReader(rd io.Reader) (*Summary, error) {
 		}
 		switch {
 		case strs["k8s.node.name"] != "":
-			cd.nodes = append(cd.nodes, node{seq: seq, hostType: strs["host.type"], region: strs["cloud.region"], capacity: strs["thoras.node.capacity_type"],
+			cd.nodes = append(cd.nodes, node{seq: seq, hostType: strs["host.type"], provider: strs["cloud.provider"], region: strs["cloud.region"], capacity: strs["thoras.node.capacity_type"],
 				cores: r.levelMean("k8s.node.cpu.allocatable"), gib: r.levelMean("k8s.node.memory.allocatable") / gib})
 		case r.kind != "":
 			r.id = strs["k8s.namespace.name"] + "/" + r.kind + "/" + strs["k8s."+r.kind+".name"]
@@ -584,28 +573,58 @@ type rates struct {
 	basis           string
 }
 
+// pricing gives the rates the product would set from these nodes: the
+// average priced node's hourly cost over its vCPUs, and over its GiB. With no
+// node priced it falls back to the product's default node.
 func pricing(nodes []node) rates {
 	var cost, cores, g float64
-	priced, caveat := 0, ""
-	spot, regions := false, false
+	priced := 0
+	clouds := map[string]bool{}
+	spot, azureSpot, regions := false, false, false
 	for _, n := range nodes {
-		if price, ok := nodePrices[n.hostType]; ok && n.cores > 0 && n.gib > 0 {
-			priced++
-			cost, cores, g = cost+price, cores+n.cores, g+n.gib
-			spot = spot || n.capacity == "spot"
-			regions = regions || (n.region != "" && n.region != "us-east-1")
+		p := priceNode(n)
+		if p.reason != "" {
+			continue
 		}
+		priced++
+		cost, cores, g = cost+p.hourly, cores+p.cores, g+p.gib
+		clouds[p.cloud] = true
+		spot = spot || p.spot
+		azureSpot = azureSpot || p.azureSpot
+		regions = regions || p.otherRegion
 	}
 	if priced == 0 {
 		return rates{defaultNode.hourly / defaultNode.cores, defaultNode.hourly / defaultNode.gib, "default node (4 cores, 16 GiB, $0.192 per hour)"}
 	}
+	var where, refs []string
+	for _, c := range cloudOrder {
+		if clouds[c] {
+			where = append(where, cloudNames[c]+" "+priceTable[c].Region)
+			refs = append(refs, priceTable[c].Region)
+		}
+	}
+	kind := "on-demand"
 	if spot {
-		caveat += "; spot nodes are priced at on-demand"
+		kind = "on-demand and spot"
 	}
-	if regions {
-		caveat += "; nodes outside us-east-1 are priced as if in it"
+	basis := fmt.Sprintf("%d of %d nodes at %s %s list prices", priced, len(nodes), listJoin(where), kind)
+	if azureSpot {
+		basis += "; Azure spot nodes are priced at on-demand"
 	}
-	return rates{cost / cores, cost / g, fmt.Sprintf("%d of %d nodes at AWS us-east-1 on-demand list prices%s", priced, len(nodes), caveat)}
+	if regions && len(refs) == 1 {
+		basis += "; nodes outside " + refs[0] + " are priced as if in it"
+	} else if regions {
+		basis += "; nodes outside those regions are priced as if in them"
+	}
+	return rates{cost / cores, cost / g, basis}
+}
+
+// listJoin joins "a", "a and b", "a, b and c".
+func listJoin(items []string) string {
+	if len(items) < 2 {
+		return strings.Join(items, "")
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
 
 func nans(n int) []float64 {

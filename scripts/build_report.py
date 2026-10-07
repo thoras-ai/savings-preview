@@ -37,6 +37,7 @@ SCRIPTS = [
     "src/js/print.js",
     "src/js/app.js",
 ]
+PRICE_TABLE = "internal/savings/node_prices.json"
 STYLES = ["design/zinc.css", "design/primitives.css", "design/semantic.css", "design/elevation.css", "src/styles/report.css"]
 WORDMARK = "design/assets/thoras-wordmark.svg"
 FONTS = [
@@ -93,7 +94,9 @@ def font_faces():
 
 def build():
     css = "\n".join(read(n) for n in STYLES).replace("/*{{FONTS}}*/", font_faces())
-    js = "\n".join(read(n) for n in SCRIPTS)
+    # The node price table goes first, for model.js to read.
+    table = "(self.SP = self.SP || {}).nodePriceTable = " + read(PRICE_TABLE).strip() + ";"
+    js = "\n".join([table] + [read(n) for n in SCRIPTS])
     if "</script" in js.lower():
         raise SystemExit("script text contains a closing script tag")
     page = read("src/index.html").replace("<!--{{WORDMARK}}-->", read(WORDMARK).strip(), 1)

@@ -129,7 +129,7 @@ func nodeInfo(n *corev1.Node) NodeInfo {
 	eks := strings.ToLower(l["eks.amazonaws.com/capacityType"])
 	gke := l["cloud.google.com/gke-spot"]
 	switch {
-	case karpenter == "spot" || eks == "spot" || gke == "true":
+	case karpenter == "spot" || eks == "spot" || gke == "true" || l["cloud.google.com/gke-preemptible"] == "true":
 		capacity = "spot"
 	case karpenter == "on-demand" || eks == "on_demand" || gke == "false":
 		capacity = "on_demand"

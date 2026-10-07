@@ -695,7 +695,8 @@ func capacityType(l map[string]string) string {
 	case "on_demand", "on-demand", "ondemand":
 		return "on_demand"
 	}
-	if firstLabel(l, "cloud.google.com/gke-spot") == "true" || firstLabel(l, "cloud.google.com/gke-provisioning") == "spot" ||
+	if firstLabel(l, "cloud.google.com/gke-spot") == "true" || firstLabel(l, "cloud.google.com/gke-preemptible") == "true" ||
+		firstLabel(l, "cloud.google.com/gke-provisioning") == "spot" ||
 		strings.EqualFold(firstLabel(l, "kubernetes.azure.com/scalesetpriority"), "spot") {
 		return "spot"
 	}

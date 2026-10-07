@@ -41,7 +41,7 @@ The progress line printed at each write says how long the readings cover and how
 | `k8s.container.cpu.request.desired`, `k8s.container.memory.request.desired` and limits | the pod spec of the workload's newest running pod; an unset request is 0 |
 | `k8s.deployment.pod.desired`, `k8s.statefulset.pod.desired` | `spec.replicas` |
 | `k8s.node.cpu.allocatable`, `k8s.node.memory.allocatable` | node `status.allocatable` |
-| node attributes | labels `node.kubernetes.io/instance-type`, `topology.kubernetes.io/region`, `karpenter.sh/capacity-type`, `eks.amazonaws.com/capacityType`, `cloud.google.com/gke-spot`, and the provider ID |
+| node attributes | labels `node.kubernetes.io/instance-type`, `topology.kubernetes.io/region`, `karpenter.sh/capacity-type`, `eks.amazonaws.com/capacityType`, `cloud.google.com/gke-spot`, `cloud.google.com/gke-preemptible`, and the provider ID |
 
 Pods belong to a Deployment through their ReplicaSet's owner reference, and to a StatefulSet directly. Pods owned by anything else are left out and counted in a note. Without metrics-server, the file has everything except usage, which is listed in `thoras.missing_metrics`.
 

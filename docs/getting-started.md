@@ -214,7 +214,7 @@ The report opens on one page:
 
 A report of several clusters opens on the fleet: the headline and Today and with Thoras add up every cluster, each priced from its own nodes, the gap chart sums them over the window, a table lists each cluster's spend today and with Thoras, the biggest saving first, and Across your fleet counts the clusters that have workloads in the figures. Select a cluster to see page one for it alone; Show all clusters goes back. Under Assumptions, Clusters includes or excludes clusters from every figure, and the link keeps the choice. Namespaces are named `cluster/namespace`, since clusters often share namespace names.
 
-The target for each workload is 1.1 times its highest use in any 15 minutes. Waste is the request above the target. Prices come from AWS on-demand list prices (us-east-1) for known instance types, and from a 4-core, 16 GiB, $0.192 per hour node otherwise.
+The target for each workload is 1.1 times its highest use in any 15 minutes. Waste is the request above the target. Nodes are priced the way the Thoras product prices them: by instance type from the list prices of the node's cloud (AWS us-east-1, Google Cloud us-central1 or Azure eastus), with spot nodes at the spot price. With no node priced, the report uses a 4-core, 16 GiB, $0.192 per hour node. See [Node prices](node-prices.md).
 
 Details for engineers, under page one, opens the other sections:
 

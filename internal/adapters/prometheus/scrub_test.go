@@ -41,7 +41,7 @@ func init() {
 	for _, k := range []string{"node.kubernetes.io/instance-type", "beta.kubernetes.io/instance-type",
 		"topology.kubernetes.io/region", "failure-domain.beta.kubernetes.io/region",
 		"eks.amazonaws.com/capacityType", "karpenter.sh/capacity-type", "node.kubernetes.io/capacity-type",
-		"cloud.google.com/gke-spot", "cloud.google.com/gke-provisioning", "kubernetes.azure.com/scalesetpriority"} {
+		"cloud.google.com/gke-spot", "cloud.google.com/gke-preemptible", "cloud.google.com/gke-provisioning", "kubernetes.azure.com/scalesetpriority"} {
 		keptNodeLabels[labelKey(k)] = true
 	}
 }

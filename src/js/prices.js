@@ -4,11 +4,14 @@
  * to the general-purpose types' ratio and are approximate for other families.
  * Plain script: runs in the browser (SP.prices) and under node.
  *
- * The default pricing in model.js keeps its own AWS us-east-1 table, which
- * the Go summary shares; this catalog only prices what the reader picks.
+ * The default pricing in model.js uses the product's node price table, which
+ * the Go summary shares; this catalog prices what the reader picks, and its
+ * region factors scale the default pricing in the suggested rates.
  */
 (function () {
   'use strict';
+
+  var model = typeof module !== 'undefined' && module.exports ? require('./model.js') : SP.model;
 
   // type: [vCPUs, GiB, USD per hour in the reference region]
   var CLOUDS = {
@@ -105,7 +108,7 @@
   function guess(nodes) {
     var counts = {}, best = null;
     (nodes || []).forEach(function (n) {
-      var c = cloudOf(n.hostType);
+      var p = model.priceNode(n), c = p.reason ? cloudOf(n.hostType) : p.cloud;
       if (!c) return;
       var region = CLOUDS[c].regions[n.region] ? n.region : CLOUDS[c].ref;
       var k = c + '/' + region;
@@ -117,18 +120,17 @@
     return { cloud: p[0], region: p[1] };
   }
 
-  // Rates from the nodes' own types and regions, the way model.pricing prices
-  // them but across every cloud here: total price over total allocatable.
-  // Nodes in a region the catalog lacks are priced at the reference region.
+  // Rates from the default pricing with each node's price scaled to its own
+  // region. Nodes in a region the catalog lacks keep the reference price.
   function fromNodes(nodes) {
     var cost = 0, cores = 0, gib = 0, priced = 0, unknownRegion = 0;
     (nodes || []).forEach(function (n) {
-      var c = cloudOf(n.hostType);
-      if (!c || !(n.cores > 0) || !(n.gib > 0)) return;
-      var known = !!CLOUDS[c].regions[n.region];
-      if (!known) unknownRegion++;
-      cost += lookup(c, known ? n.region : CLOUDS[c].ref, n.hostType).hourly;
-      cores += n.cores; gib += n.gib; priced++;
+      var p = model.priceNode(n);
+      if (p.reason) return;
+      var factor = CLOUDS[p.cloud].regions[n.region];
+      if (!factor) unknownRegion++;
+      cost += p.hourly * (factor || 1);
+      cores += p.cores; gib += p.gib; priced++;
     });
     if (!priced) return null;
     return { perCore: cost / cores, perGiB: cost / gib, priced: priced, nodes: (nodes || []).length, unknownRegion: unknownRegion };

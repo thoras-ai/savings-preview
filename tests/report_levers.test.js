@@ -110,7 +110,7 @@ test('every catalog entry has positive specs and every region a factor of at lea
   assert.ok(Object.keys(prices.CLOUDS.azure.types).length >= 20);
 });
 
-test('the catalog agrees with the default AWS us-east-1 node pricing', () => {
+test('in the reference region the suggested rates are the default pricing', () => {
   const nodes = ['m5.xlarge', 'c5.2xlarge', 'r5.large', 't3.medium'].map(t => {
     const s = prices.CLOUDS.aws.types[t];
     return { hostType: t, region: 'us-east-1', capacity: 'on_demand', cores: s[0], gib: s[1] };
@@ -129,7 +129,8 @@ test('nodes on other clouds and regions are priced by their own type and region'
   const r = prices.fromNodes(nodes);
   assert.strictEqual(r.priced, 3);
   assert.strictEqual(r.unknownRegion, 1);
-  assert.ok(close(r.perCore, (2 * 0.194236 * 1.1 + 0.192) / 12));
+  // n2-standard-4 and Standard_D4s_v5 from the product table, europe-west1 at its catalog factor.
+  assert.ok(close(r.perCore, (2 * 0.218756 * 1.1 + 0.192) / 12));
   assert.deepStrictEqual(prices.guess(nodes), { cloud: 'gcp', region: 'europe-west1' });
   assert.strictEqual(prices.guess([{ hostType: 'x9.unknown' }]), null);
   assert.strictEqual(prices.fromNodes([]), null);

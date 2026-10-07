@@ -87,7 +87,7 @@ test('mean usage is time weighted and summed over workloads', () => {
   close(s.cpu.used, 1.75);
 });
 
-test('the node mix lists list prices from the shared price table', () => {
+test('the node mix lists the product price table, spot nodes at the spot price', () => {
   const data = model.prepare(doc({
     workloads: [{ cpu: 1, mem: 1, cpuReq: 2, memReq: 2 }],
     nodes: [{ type: 'm5.xlarge', cores: 3.92, gib: 14.8 }, { type: 'm5.xlarge', cores: 3.92, gib: 14.8 },
@@ -95,16 +95,16 @@ test('the node mix lists list prices from the shared price table', () => {
   }));
   const { s } = figures(data);
   assert.deepStrictEqual(s.mix.map(g => [g.type, g.count, g.capacity, g.hourly]), [
-    ['m5.xlarge', 2, 'on-demand', model.nodePrices['m5.xlarge']],
-    ['m5.2xlarge', 1, 'spot', model.nodePrices['m5.2xlarge']],
+    ['m5.xlarge', 2, 'on-demand', 0.192],
+    ['m5.2xlarge', 1, 'spot', 0.13824],
     ['x9.custom', 1, 'on-demand', undefined]
   ]);
   assert.strictEqual(s.priced, 3);
   const html = cluster.markup(s, false);
   assert.match(html, /\$0\.192/);
-  assert.match(html, /\$0\.384/);
+  assert.match(html, /\$0\.138/);
   assert.match(html, /Not priced/);
-  assert.match(html, /Spot nodes are priced at the on-demand list price/);
+  assert.match(html, /Spot nodes are priced at the spot list price/);
   assert.match(html, /left out of the per-core and per-GiB rates/);
 });
 
