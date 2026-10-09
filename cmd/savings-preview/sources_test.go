@@ -298,7 +298,7 @@ func TestRunDatadogFailureFallsBackOnlyInAuto(t *testing.T) {
 		}
 		polled := false
 		s := sources{
-			datadog: func(ctx context.Context) (*pulled, error) { return pullDatadog(ctx, o, io.Discard) },
+			datadog: func(ctx context.Context) (*pulled, error) { return pullDatadog(ctx, o, nil, io.Discard) },
 			store:   (&fakeStore{disc: &prometheus.Discovery{}}).steps(),
 			poll:    func(context.Context) error { polled = true; return nil },
 		}

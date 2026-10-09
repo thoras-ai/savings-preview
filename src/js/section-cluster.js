@@ -90,7 +90,7 @@
     var prices = nodes.map(model.priceNode), priced = prices.filter(function (p) { return !p.reason; });
     var clouds = ['aws', 'gcp', 'azure'].filter(function (c) { return priced.some(function (p) { return p.cloud === c; }); });
     return {
-      nodes: nodes.length, types: Object.keys(types).length, priced: (r.basePricing || data.pricing).priced,
+      nodes: nodes.length, types: Object.keys(types).length, priced: (r.basePricing || data.pricing).priced, mixed: (r.basePricing || data.pricing).mixed || 0,
       alloc: alloc,
       cpu: { req: counted ? t.reqCores : NaN, target: counted ? t.reqCores - t.cores : NaN, used: counted ? t.useCores : NaN, waste: t.cores },
       mem: { req: counted ? t.reqGiB : NaN, target: counted ? t.reqGiB - t.gib : NaN, used: counted ? t.useGiB : NaN, waste: t.gib },
@@ -148,6 +148,7 @@
   function tiles(s, approx) {
     var edge = approx ? 'provisional' : 'default';
     var priced = s.priced === s.nodes ? (s.nodes === 1 ? 'priced' : 'all priced') : s.priced ? s.priced + ' priced' : 'none priced';
+    if (s.mixed) priced += ', ' + s.mixed + ' by the live mix';
     var nodesContext = !s.nodes ? 'The file lists no nodes' : s.types ? s.types + ' instance ' + ui.plural(s.types, 'type') + ', ' + priced : 'Instance type not stated';
     var over = s.ranged ? 'Across all nodes, averaged over the time range' : 'Across all nodes, averaged over the window';
     return '<div class="kpis">' +
@@ -209,7 +210,8 @@
       notes.push('The file lists no nodes. Requests are priced with the default node (4 cores, 16 GiB, $0.192 per hour).');
     } else {
       if (!s.priced) notes.push('No instance type in the file has a known list price, so requests are priced with the default node (4 cores, 16 GiB, $0.192 per hour).');
-      else if (s.priced < s.nodes) notes.push('Nodes without a known list price are left out of the per-core and per-GiB rates.');
+      if (s.priced && s.mixed) notes.push(s.mixed + ' ' + ui.plural(s.mixed, 'node') + ' gone from the cluster when it was read had no instance type and ' + (s.mixed === 1 ? 'is' : 'are') + ' priced by the live instance mix: each at the average list price, vCPUs and memory of the priced nodes in its pool, or of all priced nodes when its pool has none.');
+      if (s.priced && s.priced + s.mixed < s.nodes) notes.push('Nodes without a known list price are left out of the per-core and per-GiB rates.');
       if (s.spot) notes.push('Spot nodes are priced at the spot list price.');
       if (s.spotLeftOut) notes.push('Spot nodes of a type with no spot list price are left out of the rates.');
       if (s.azureSpot) notes.push('Azure spot nodes are priced at the on-demand list price.');

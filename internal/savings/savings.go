@@ -140,6 +140,7 @@ type resource struct {
 type node struct {
 	seq                                  int
 	hostType, provider, region, capacity string
+	pool, typeSource                     string
 	cores, gib                           float64
 }
 
@@ -245,7 +246,7 @@ func AnalyzeReader(rd io.Reader) (*Summary, error) {
 		switch {
 		case strs["k8s.node.name"] != "":
 			cd.nodes = append(cd.nodes, node{seq: seq, hostType: strs["host.type"], provider: strs["cloud.provider"], region: strs["cloud.region"], capacity: strs["thoras.node.capacity_type"],
-				cores: r.levelMean("k8s.node.cpu.allocatable"), gib: r.levelMean("k8s.node.memory.allocatable") / gib})
+				pool: strs["thoras.node.pool"], typeSource: strs["thoras.node.type_source"], cores: r.levelMean("k8s.node.cpu.allocatable"), gib: r.levelMean("k8s.node.memory.allocatable") / gib})
 		case r.kind != "":
 			r.id = strs["k8s.namespace.name"] + "/" + r.kind + "/" + strs["k8s."+r.kind+".name"]
 			if strs["k8s.container.name"] != "" {
@@ -583,27 +584,53 @@ type rates struct {
 }
 
 // pricing gives the rates the product would set from these nodes: the
-// average priced node's hourly cost over its vCPUs, and over its GiB. With no
+// average priced node's hourly cost over its vCPUs, and over its GiB. A node
+// that was gone from the cluster with no instance type counts as the average
+// priced node of its pool, or of the cluster when its pool has none. With no
 // node priced it falls back to the product's default node.
 func pricing(nodes []node) rates {
-	var cost, cores, g float64
-	priced := 0
+	type sum struct {
+		cost, cores, gib float64
+		n                int
+	}
+	var all sum
+	pools := map[string]*sum{}
+	var gone []node
 	clouds := map[string]bool{}
 	spot, azureSpot, regions := false, false, false
 	for _, n := range nodes {
+		if liveMix(n) {
+			gone = append(gone, n)
+			continue
+		}
 		p := priceNode(n)
 		if p.reason != "" {
 			continue
 		}
-		priced++
-		cost, cores, g = cost+p.hourly, cores+p.cores, g+p.gib
+		all = sum{all.cost + p.hourly, all.cores + p.cores, all.gib + p.gib, all.n + 1}
+		if n.pool != "" {
+			if pools[n.pool] == nil {
+				pools[n.pool] = &sum{}
+			}
+			ps := pools[n.pool]
+			*ps = sum{ps.cost + p.hourly, ps.cores + p.cores, ps.gib + p.gib, ps.n + 1}
+		}
 		clouds[p.cloud] = true
 		spot = spot || p.spot
 		azureSpot = azureSpot || p.azureSpot
 		regions = regions || p.otherRegion
 	}
+	priced := all.n
 	if priced == 0 {
 		return rates{defaultNode.hourly / defaultNode.cores, defaultNode.hourly / defaultNode.gib, "default node (4 cores, 16 GiB, $0.192 per hour)"}
+	}
+	cost, cores, g := all.cost, all.cores, all.gib
+	for _, n := range gone {
+		ref := all
+		if ps := pools[n.pool]; ps != nil {
+			ref = *ps
+		}
+		cost, cores, g = cost+ref.cost/float64(ref.n), cores+ref.cores/float64(ref.n), g+ref.gib/float64(ref.n)
 	}
 	var where, refs []string
 	for _, c := range cloudOrder {
@@ -617,6 +644,9 @@ func pricing(nodes []node) rates {
 		kind = "on-demand and spot"
 	}
 	basis := fmt.Sprintf("%d of %d nodes at %s %s list prices", priced, len(nodes), listJoin(where), kind)
+	if len(gone) > 0 {
+		basis += fmt.Sprintf(" and %d that were gone from the cluster at the live instance mix", len(gone))
+	}
 	if azureSpot {
 		basis += "; Azure spot nodes are priced at on-demand"
 	}
@@ -626,6 +656,12 @@ func pricing(nodes []node) rates {
 		basis += "; nodes outside those regions are priced as if in them"
 	}
 	return rates{cost / cores, cost / g, basis}
+}
+
+// liveMix reports whether a node is priced by the live instance mix: it has
+// no instance type and was gone from the cluster when the cluster was read.
+func liveMix(n node) bool {
+	return n.typeSource == "live_mix" && (n.hostType == "" || n.hostType == "unknown")
 }
 
 // listJoin joins "a", "a and b", "a, b and c".

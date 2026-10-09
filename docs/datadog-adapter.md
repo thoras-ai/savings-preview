@@ -185,7 +185,7 @@ The Agent sets `kube_cluster_name` from its configured cluster name, and OpenTel
 ## Not covered
 
 - **OOM kills.** The kubelet check has no OOM kill count, and the kube-state-metrics core check reports only the current termination reason, not kills over time, so `thoras.container.oom_kills` is left out.
-- **Node instance type, provider and capacity type** are not on the node metrics, so they are `unknown` and the report prices nodes with its default node size. The region comes from `kube_region` when the core check sets it.
+- **Node instance type, provider and capacity type** are not on the node metrics. When `run` reads Datadog and has also read the kubeconfig to fall back to the cluster (without `--source datadog`), it lists the cluster's nodes and fills them in as for a Prometheus store, provided most of the nodes reporting at the end of the data are in the cluster's list; see [Node prices](node-prices.md#where-the-node-attributes-come-from). Otherwise they are `unknown` and the report prices nodes with its default node size. The region comes from `kube_region` when the core check sets it.
 - **OpenTelemetry node metrics.** `k8s.node.allocatable_cpu` is off by default in the collector, and Datadog does not map `k8s.node.name` to a tag, so OpenTelemetry-only organizations get no node resources.
 
 ## Testing

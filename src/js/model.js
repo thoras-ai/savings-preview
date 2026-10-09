@@ -134,6 +134,7 @@
       if (a['k8s.node.name']) {
         nodes.push(Object.assign(base, {
           name: a['k8s.node.name'], hostType: a['host.type'] || '', provider: a['cloud.provider'] || '', region: a['cloud.region'] || '', capacity: a['thoras.node.capacity_type'] || 'unknown',
+          pool: a['thoras.node.pool'] || '', typeSource: a['thoras.node.type_source'] || '',
           cores: levelMean(base, M.cpuAlloc),
           gib: levelMean(base, M.memAlloc) / GIB
         }));
@@ -216,33 +217,56 @@
     return items.length < 2 ? items.join('') : items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
   }
 
+  // Whether a node is priced by the live instance mix: it has no instance
+  // type and was gone from the cluster when the cluster was read.
+  function liveMix(n) {
+    return n.typeSource === 'live_mix' && (!n.hostType || n.hostType === 'unknown');
+  }
+
   // The rates the product would set from these nodes: the average priced
-  // node's hourly cost over its vCPUs, and over its GiB. With no node priced
-  // it falls back to the product's default node.
+  // node's hourly cost over its vCPUs, and over its GiB. A node that was gone
+  // from the cluster with no instance type counts as the average priced node
+  // of its pool, or of the cluster when its pool has none. With no node
+  // priced it falls back to the product's default node. internal/savings
+  // pricing is the Go port.
   function pricing(nodes) {
-    var priced = 0, cost = 0, cores = 0, gib = 0, clouds = {}, spot = false, azureSpot = false, regions = false;
+    // Sums are kept per cluster, and per pool within it, so a fleet's gone
+    // nodes take their own cluster's mix.
+    var all = { cost: 0, cores: 0, gib: 0, n: 0 }, own = {}, gone = [], clouds = {}, spot = false, azureSpot = false, regions = false;
+    var sum = function (k) { return own[k] || (own[k] = { cost: 0, cores: 0, gib: 0, n: 0 }); };
+    var add = function (s, p) { s.cost += p.hourly; s.cores += p.cores; s.gib += p.gib; s.n++; };
     nodes.forEach(function (n) {
+      if (liveMix(n)) { gone.push(n); return; }
       var p = priceNode(n);
       if (p.reason) return;
-      priced++;
-      cost += p.hourly; cores += p.cores; gib += p.gib;
+      add(all, p);
+      add(sum('c\u0000' + (n.cluster || '')), p);
+      if (n.pool) add(sum('p\u0000' + (n.cluster || '') + '\u0000' + n.pool), p);
       clouds[p.cloud] = true;
       spot = spot || p.spot; azureSpot = azureSpot || p.azureSpot; regions = regions || p.otherRegion;
     });
+    var priced = all.n;
     if (!priced) {
       return {
         perCore: DEFAULT_NODE.hourly / DEFAULT_NODE.cores,
         perGiB: DEFAULT_NODE.hourly / DEFAULT_NODE.gib,
         basis: 'default node (4 cores, 16 GiB, $0.192 per hour)',
-        priced: 0, nodes: nodes.length
+        priced: 0, mixed: 0, nodes: nodes.length
       };
     }
+    var cost = all.cost, cores = all.cores, gib = all.gib, mixed = 0;
+    gone.forEach(function (n) {
+      var c = n.cluster || '', ref = own['p\u0000' + c + '\u0000' + n.pool] || own['c\u0000' + c];
+      if (!ref) return;
+      cost += ref.cost / ref.n; cores += ref.cores / ref.n; gib += ref.gib / ref.n; mixed++;
+    });
     var used = CLOUD_ORDER.filter(function (c) { return clouds[c]; });
     var where = used.map(function (c) { return CLOUD_NAMES[c] + ' ' + PRICES[c].region; });
     var basis = priced + ' of ' + nodes.length + ' nodes at ' + listJoin(where) + ' ' + (spot ? 'on-demand and spot' : 'on-demand') + ' list prices';
+    if (mixed) basis += ' and ' + mixed + ' that were gone from the cluster at the live instance mix';
     if (azureSpot) basis += '; Azure spot nodes are priced at on-demand';
     if (regions) basis += used.length === 1 ? '; nodes outside ' + PRICES[used[0]].region + ' are priced as if in it' : '; nodes outside those regions are priced as if in them';
-    return { perCore: cost / cores, perGiB: cost / gib, basis: basis, priced: priced, nodes: nodes.length };
+    return { perCore: cost / cores, perGiB: cost / gib, basis: basis, priced: priced, mixed: mixed, nodes: nodes.length };
   }
 
   // Mean of a level series over the time it covers. A held series weights each
@@ -927,7 +951,7 @@
   }
 
   var api = {
-    analyze: analyze, prepare: prepare, forCluster: forCluster, displayNames: displayNames, mergeFidelity: mergeFidelity, priceNode: priceNode, priceTable: PRICES, cloudNames: CLOUD_NAMES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
+    analyze: analyze, prepare: prepare, forCluster: forCluster, displayNames: displayNames, mergeFidelity: mergeFidelity, priceNode: priceNode, liveMix: liveMix, priceTable: PRICES, cloudNames: CLOUD_NAMES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
     lowerBound: lowerBound, upperBound: upperBound, mean: mean,
     fidelityLabel: fidelityLabel, formatSpan: formatSpan, formatStep: formatStep, notes: NOTES, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
   };

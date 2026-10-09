@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/thoras-ai/savings-preview/internal/contract"
+	"github.com/thoras-ai/savings-preview/internal/livenodes"
 )
 
 // Options configure one pull.
@@ -685,6 +686,7 @@ func nodeAttrs(name string, info, labels map[string]string) *contract.Node {
 		n.Provider = "azure"
 	}
 	n.CapacityType = capacityType(labels)
+	n.Pool = firstLabel(labels, livenodes.PoolLabels...)
 	return n
 }
 
@@ -704,6 +706,28 @@ func capacityType(l map[string]string) string {
 		return "spot"
 	}
 	return "unknown"
+}
+
+// NodeTypes counts the nodes kube-state-metrics reports now, and those of
+// them whose labels in the store carry an instance type.
+func NodeTypes(ctx context.Context, c *Client, now time.Time) (typed, total int, err error) {
+	ss, err := c.Query(ctx, "kube_node_labels", now)
+	if err != nil {
+		return 0, 0, err
+	}
+	seen := map[string]bool{}
+	for _, s := range ss {
+		n := s.Labels["node"]
+		if seen[n] {
+			continue
+		}
+		seen[n] = true
+		total++
+		if firstLabel(s.Labels, "node.kubernetes.io/instance-type", "beta.kubernetes.io/instance-type") != "" {
+			typed++
+		}
+	}
+	return typed, total, nil
 }
 
 // oneCluster fails when a cluster label has more than one value in any of the

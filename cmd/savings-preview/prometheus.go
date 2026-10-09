@@ -107,6 +107,9 @@ func runPrometheus(args []string) error {
 		}
 		return err
 	}
+	if direct.url == "" {
+		fillNodes(ctx, conn, f, os.Stderr)
+	}
 	if err := writeContract(*out, f); err != nil {
 		return err
 	}

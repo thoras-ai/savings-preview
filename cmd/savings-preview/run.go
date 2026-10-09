@@ -429,7 +429,9 @@ func newSources(o *runOptions, w io.Writer) (sources, error) {
 		return s, nil
 	}
 	if o.useDatadog {
-		s.datadog = func(ctx context.Context) (*pulled, error) { return pullDatadog(ctx, o, w) }
+		// Datadog's nodes are completed from the cluster only when the run
+		// has already read the kubeconfig to fall back to it.
+		s.datadog = func(ctx context.Context) (*pulled, error) { return pullDatadog(ctx, o, conn, w) }
 	}
 	if o.source == "datadog" {
 		return s, nil
@@ -460,8 +462,12 @@ func newSources(o *runOptions, w io.Writer) (sources, error) {
 				return nil, nil, err
 			}
 			fmt.Fprintf(w, "pulling %s of history from %s\n", days(o.days), c)
-			return prometheus.Run(ctx, prometheus.Options{Client: cl, Cluster: cluster, Days: o.days, Step: o.step, Concurrency: 2,
+			f, rep, err := prometheus.Run(ctx, prometheus.Options{Client: cl, Cluster: cluster, Days: o.days, Step: o.step, Concurrency: 2,
 				Log: func(string, ...any) {}})
+			if err == nil {
+				fillNodes(ctx, conn, f, w)
+			}
+			return f, rep, err
 		},
 	}
 	s.poll = func(ctx context.Context) error {
@@ -513,7 +519,7 @@ func pullDirect(ctx context.Context, o *runOptions, cluster string, w io.Writer)
 }
 
 // pullDatadog reads the history from the Datadog metrics query API.
-func pullDatadog(ctx context.Context, o *runOptions, w io.Writer) (*pulled, error) {
+func pullDatadog(ctx context.Context, o *runOptions, conn *kube.Conn, w io.Writer) (*pulled, error) {
 	c, err := o.datadog.Client()
 	if err != nil {
 		return nil, err
@@ -524,6 +530,7 @@ func pullDatadog(ctx context.Context, o *runOptions, w io.Writer) (*pulled, erro
 	if err != nil {
 		return nil, datadog.Hint(err)
 	}
+	fillNodes(ctx, conn, f, w)
 	if !anyPriced(f) {
 		return nil, fmt.Errorf("Datadog has no container with all of %s, so no savings can be computed from it",
 			strings.Join(contract.RequiredContainerMetrics, ", "))
@@ -627,6 +634,7 @@ func printReads(w io.Writer, o *runOptions) {
 			next = "  - "
 		}
 		fmt.Fprintln(w, next+"query that store through the API server's service proxy (GET requests only)")
+		fmt.Fprintln(w, "  - list Nodes if the store lacks their instance types, cloud or capacity types")
 	}
 	if o.source == "auto" && o.direct.url == "" || o.source == "poll" {
 		prefix := "  - "

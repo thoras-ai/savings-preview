@@ -15,6 +15,7 @@ Reads usage history from a Prometheus-compatible store (Prometheus, Thanos Query
 | core | `services` | `list`, all namespaces | Find the store. Skipped with `--target`. |
 | `monitoring.coreos.com` | `prometheuses`, `prometheusagents` | `list`, all namespaces | Optional. Ranks stores run by the Prometheus Operator and reports agent-mode instances. Without this access, or without the operator, discovery still works from service names. |
 | core | `services/proxy` | `get` | Send queries to the store. See below. |
+| core | `nodes` | `list` | Optional. Read the instance type, region, cloud and capacity type of nodes the store's labels do not give, in one paginated list. Without this access the nodes are priced from the store's labels only. |
 
 Through the proxy it calls only these read endpoints of the store: `/api/v1/query`, `/api/v1/query_range`, `/api/v1/status/buildinfo` and `/api/v1/status/config`. The last one is read only to report where an agent-mode Prometheus sends its data; the URLs are printed with credentials removed. The queries select kube-state-metrics and cAdvisor series: container CPU and memory usage, resource requests and limits, pod owners and phase, replica counts, node allocatable, restarts and OOM kills.
 
@@ -23,6 +24,8 @@ With `--project` (or a `monitoring.googleapis.com` URL) it reads Google Cloud Mo
 With an Azure Monitor workspace URL (`*.prometheus.monitor.azure.com`) it needs no Kubernetes access either. It uses a bearer token or `Authorization` header given as for any store, or else gets an Entra ID access token for `https://prometheus.monitor.azure.com`: from the login endpoint with an app registration's client secret, or by running `az account get-access-token`, which uses the Azure CLI's own login. It sends the token only to the workspace, where it calls `/api/v1/query`, `/api/v1/query_range` and `/api/v1/status/buildinfo`, and `/api/v1/status/config` after a 404 as for any store. The Monitoring Data Reader role on the workspace is enough; [prometheus-adapter.md](prometheus-adapter.md#azure-monitor-managed-prometheus) shows how to grant it. Neither the secret nor the token is printed or logged.
 
 With CloudWatch (`--backend cloudwatch`, or a `monitoring.REGION.amazonaws.com` URL) it needs no Kubernetes access either. It signs each request with SigV4 using AWS credentials from the standard chain (environment, shared config and credentials files, SSO, web identity, or the instance or container role), which may mean a request to AWS STS or SSO, and sends them only to `monitoring.REGION.amazonaws.com`. There it calls `/api/v1/query`, `/api/v1/query_range` and `/api/v1/status/buildinfo`, and `/api/v1/status/config` after a 404 as for any store. `cloudwatch:GetMetricData` and `cloudwatch:ListMetrics` are enough; [prometheus-adapter.md](prometheus-adapter.md#amazon-cloudwatch-promql-otel-container-insights) shows the policy. The credentials are not printed or logged.
+
+The `list` on nodes is the same request polling makes, so `poll.yaml` and `poll-and-prometheus.yaml` already grant it; `prometheus.yaml`, `discovery.yaml` and `prometheus-namespaced.yaml` do not, and with them the run goes on without it. It is made only when the store leaves some node's instance type, cloud or capacity type unknown. The program keeps each node's name, the labels named in [Node prices](node-prices.md#where-the-node-attributes-come-from) and the provider ID's cloud, and drops the rest.
 
 The exact PromQL is in `internal/adapters/prometheus/queries.go`, for GKE system metrics in `internal/adapters/prometheus/gke.go`, and for Azure Monitor in `internal/adapters/prometheus/split.go`. Each series comes back with all of its labels, some of which carry container images; the program keeps only namespace, pod, container, workload and node and drops the rest.
 
@@ -52,7 +55,7 @@ A `list` on pods returns whole pod objects: container images, commands and argum
 
 ### `savings-preview run`
 
-The default command. It needs the access of `prometheus` (without `--target`, discovery) and, when it falls back to polling, the access of `poll`; `poll-and-prometheus.yaml` grants both. With `--source poll` it needs only `poll.yaml`, and with `--source prometheus` only the `prometheus` roles. With `--url` it needs no Kubernetes access, and reads the kubeconfig only for the cluster name when `--cluster-name` is not given. When Datadog keys are given it first makes the requests of `datadog`; with `--source datadog` it makes only those and needs no Kubernetes access. When a request is forbidden during discovery, it reports why and polls instead. Before reading anything it prints which of these reads it will make.
+The default command. It needs the access of `prometheus` (without `--target`, discovery) and, when it falls back to polling, the access of `poll`; `poll-and-prometheus.yaml` grants both. With `--source poll` it needs only `poll.yaml`, and with `--source prometheus` only the `prometheus` roles. With `--url` it needs no Kubernetes access, and reads the kubeconfig only for the cluster name when `--cluster-name` is not given. When Datadog keys are given it first makes the requests of `datadog`; with `--source datadog` it makes only those and needs no Kubernetes access. Without `--source datadog`, it may also list the nodes, as `prometheus` does, to fill in node attributes Datadog does not have. When a request is forbidden during discovery, it reports why and polls instead. Before reading anything it prints which of these reads it will make.
 
 ### `savings-preview check`
 
@@ -65,11 +68,12 @@ Answers, before a run, whether `run` with the same flags can read usage data. It
 | core | `services` | `list`, all namespaces | Find stores, as `run` does. Skipped with `--target`. |
 | `monitoring.coreos.com` | `prometheuses`, `prometheusagents` | `list`, all namespaces | Optional, as for `prometheus`. |
 | core | `services/proxy` | `get` | Ask each store found whether it answers and how far back its data goes. |
+| core | `nodes` | `list` | Optional. When a usable store does not label every node with an instance type, count the live nodes that have one, to say where `run` would take instance types from. |
 | `metrics.k8s.io` | `pods` | `list`, all namespaces | Whether metrics-server answers. It asks for one pod; metrics-server may return them all. |
 
 The two reviews are `create` requests in name only: the API server evaluates them and stores nothing, and the default `system:basic-user` role allows them for every authenticated user, so the roles in `deploy/rbac/` need no extra rule. A row the identity is denied shows as `no`; the check itself goes on.
 
-Each store gets instant queries only (`/api/v1/query`, `/api/v1/status/buildinfo`, and `/api/v1/status/config` when it may run in agent mode), the same checks `prometheus` makes before it pulls, plus a search for the oldest sample of container usage. It never calls `/api/v1/query_range`. With Datadog keys it calls only `GET /api/v2/validate_keys`. It writes nothing, locally or in the cluster.
+Each store gets instant queries only (`/api/v1/query`, `/api/v1/status/buildinfo`, and `/api/v1/status/config` when it may run in agent mode), the same checks `prometheus` makes before it pulls, plus a search for the oldest sample of container usage and an instant query of `kube_node_labels` to count the nodes it labels with an instance type. It never calls `/api/v1/query_range`. With Datadog keys it calls only `GET /api/v2/validate_keys`. It writes nothing, locally or in the cluster.
 
 ### `savings-preview datadog`
 
@@ -90,7 +94,7 @@ On your machine it writes:
 ## What the output contains
 
 - Names: cluster, namespaces, Deployments and StatefulSets, containers, nodes. The cluster name is the kubeconfig's cluster name unless `--cluster-name` sets another; on EKS that is often the cluster ARN, which includes the AWS account ID.
-- Node attributes: instance type, cloud provider, region, on-demand or spot.
+- Node attributes: instance type, cloud provider, region, on-demand or spot, node pool, and whether the instance type came from the store or the Kubernetes API.
 - Numbers over time: CPU and memory usage, requests and limits, replica counts, node allocatable CPU and memory, OOM kills.
 
 It contains no Secrets, environment variables, logs, images, annotations, labels other than the node attributes above, or IP addresses. The format is described in [contract.md](contract.md), and the file is plain JSON you can read before sharing it.

@@ -112,7 +112,20 @@ type Node struct {
 	Provider     string
 	Region       string
 	CapacityType string // on_demand, spot or unknown
+	// Pool is the node pool or node group, when known.
+	Pool string
+	// TypeSource says where InstanceType came from: TypeFromStore or
+	// TypeFromAPI, or TypeFromLiveMix for a node with no instance type that
+	// was gone from the cluster when it was read.
+	TypeSource string
 }
+
+// Values of Node.TypeSource.
+const (
+	TypeFromStore   = "store"
+	TypeFromAPI     = "kubernetes_api"
+	TypeFromLiveMix = "live_mix"
+)
 
 // StepSpan says that a resource's points from Start up to End (unix seconds,
 // End exclusive) are spaced Step seconds apart.
@@ -214,13 +227,20 @@ func (r *Resource) attrs() []attr {
 		a = append(a, strs("thoras.held_metrics", r.Held))
 	}
 	if r.Node != nil {
-		return append(a,
+		a = append(a,
 			str("k8s.node.name", r.Node.Name),
 			str("host.type", r.Node.InstanceType),
 			str("cloud.provider", r.Node.Provider),
 			str("cloud.region", r.Node.Region),
 			str("thoras.node.capacity_type", r.Node.CapacityType),
 		)
+		if r.Node.Pool != "" {
+			a = append(a, str("thoras.node.pool", r.Node.Pool))
+		}
+		if r.Node.TypeSource != "" {
+			a = append(a, str("thoras.node.type_source", r.Node.TypeSource))
+		}
+		return a
 	}
 	a = append(a, str("k8s.namespace.name", r.Namespace))
 	if r.Kind == "statefulset" {

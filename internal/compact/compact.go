@@ -494,6 +494,10 @@ func readAttrs(rm *resourceIn) (contract.Resource, []contract.StepSpan, error) {
 			node.Region = s
 		case "thoras.node.capacity_type":
 			node.CapacityType = s
+		case "thoras.node.pool":
+			node.Pool = s
+		case "thoras.node.type_source":
+			node.TypeSource = s
 		}
 	}
 	if res.StepSeconds <= 0 && res.Error == "" {
