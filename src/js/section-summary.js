@@ -35,9 +35,11 @@
 
   function year(sec) { return new Date(sec * 1000).getUTCFullYear(); }
 
-  // The dates the figures cover: the time range when one is set, else the file.
+  // The dates the chart covers: the time range when one is set, else the
+  // time every cluster of a fleet covers, else the file.
   function coverage(r, st) {
-    var a = st.range ? st.range[0] : r.fidelity.start, b = st.range ? st.range[1] : r.fidelity.end;
+    var w = st.range || r.window;
+    var a = w ? w[0] : r.fidelity.start, b = w ? w[1] : r.fidelity.end;
     if (a === null || b === null) return '';
     if (day(a) === day(b) && year(a) === year(b)) return day(b) + ', ' + year(b) + ' (UTC)';
     return day(a) + (year(a) !== year(b) ? ', ' + year(a) : '') + ' – ' + day(b) + ', ' + year(b) + ' (UTC)';
@@ -72,8 +74,10 @@
     else if (polled(f)) from = 'From a ' + spanAdjective(span) + ' read of your ' + (r.fleet ? counted(r) + ' clusters.' : 'cluster.');
     else {
       var names = f.source ? f.source.split(', ').map(function (s) { return SOURCES[s] || s; }) : [];
-      from = 'From ' + model.formatSpan(span) + ' of your ' + (names.length ? names.join(' and ') + ' data' : 'cluster’s metrics') +
-        (r.fleet ? ' across ' + counted(r) + ' clusters.' : '.');
+      var what = names.length ? names.join(' and ') + ' data' : 'cluster’s metrics';
+      // Each cluster of a fleet counts over its own history, so no one span covers them.
+      if (r.fleet && !st.range) from = 'From your ' + (names.length ? what : 'clusters’ metrics') + ' across ' + counted(r) + ' clusters.';
+      else from = 'From ' + model.formatSpan(span) + ' of your ' + what + (r.fleet ? ' across ' + counted(r) + ' clusters.' : '.');
     }
     return from + ' Computed on your laptop. Nothing installed, nothing uploaded.';
   }
@@ -175,9 +179,11 @@
     return 'Thoras would cut this cluster’s compute spend by ' + ui.money(fig.savings) + ' a year, ' + ui.pct(fig.share) + '.';
   }
 
-  function method(st) {
+  // labels maps cluster names to the names shown, when the page has them.
+  function method(st, labels) {
+    var shown = st.onlyClusters && st.onlyClusters.map(function (n) { return (labels && labels[n]) || n; });
     return 'Target is ' + ui.num(1 + st.headroom, 2) + ' × the highest usage in any ' + st.peakMinutes + '-minute window; waste is the request above it.' +
-      (st.onlyClusters ? ' Only the ' + ui.plural(st.onlyClusters.length, 'cluster') + ' ' + st.onlyClusters.join(', ') + ' ' + (st.onlyClusters.length === 1 ? 'is' : 'are') + ' included.' : '') +
+      (st.onlyClusters ? ' Only the ' + ui.plural(st.onlyClusters.length, 'cluster') + ' ' + shown.join(', ') + ' ' + (st.onlyClusters.length === 1 ? 'is' : 'are') + ' included.' : '') +
       (st.namespaces ? ' Only the ' + ui.plural(st.namespaces.length, 'namespace') + ' ' + st.namespaces.join(', ') + ' ' + (st.namespaces.length === 1 ? 'is' : 'are') + ' included.' : '');
   }
 
@@ -185,13 +191,13 @@
   function summaryText(r, st) {
     var fig = figures(r);
     var lines = [
-      'Savings preview: ' + (r.cluster || 'Unnamed cluster'),
+      'Savings preview: ' + (r.label || r.cluster || 'Unnamed cluster'),
       'Thoras would cut compute spend' + (r.fleet ? ' across ' + counted(r) + ' clusters' : '') + ' by ' + ui.money(fig.savings) + ' a year, ' + ui.pct(fig.share) + '.',
       'Utilization: ' + ui.pct(fig.today.utilization) + ' today, ' + ui.pct(fig.thoras.utilization) + ' with Thoras.'
     ];
     if (r.fleet) {
       r.clusters.forEach(function (c) {
-        if (c.counted) lines.push('  ' + c.name + ': ' + ui.money(c.savings) + ' a year of ' + ui.money(c.spend));
+        if (c.counted) lines.push('  ' + (c.label || c.name) + ': ' + ui.money(c.savings) + ' a year of ' + ui.money(c.spend));
       });
     }
     lines.push(provenance(r, st));
@@ -253,7 +259,7 @@
   // Each cluster before and after, the biggest saving first.
   function clustersCard(r, st, killed) {
     var rows = r.clusters.filter(function (c) { return c.counted; }).map(function (c) {
-      return '<tr><td>' + clusterLink(st, c.name, '<span class="wl-name">' + esc(c.name) + '</span>') +
+      return '<tr><td>' + clusterLink(st, c.name, '<span class="wl-name" title="' + esc(c.name) + '">' + esc(c.label || c.name) + '</span>') +
         '<div class="wl-sub">' + c.counted + ' ' + ui.plural(c.counted, 'workload') + '</div></td>' +
         '<td class="num">' + esc(ui.money(c.spend)) + '</td><td class="num">' + esc(ui.money(c.spend - c.savings)) + '</td>' +
         '<td class="num"><span class="pill pill-brand">' + esc(ui.money(c.savings)) + '</span></td></tr>';
@@ -292,6 +298,12 @@
 
   var EMPTY = 'No data in the selected time range or namespaces.';
 
+  function labelsOf(data) {
+    var out = {};
+    (data.clusters || []).forEach(function (c) { out[c.name] = c.label || c.name; });
+    return out;
+  }
+
   // The product sizes requests to a usage forecast. This page has no
   // forecast, so its target is the rolling peak, as the method line says.
   function markup(data, r, st) {
@@ -307,7 +319,7 @@
       '<p class="sum-from">' + esc(provenance(r, st)) + all + '</p></div>' +
       versus(fig) + gapCard(r, st, fig) + detail +
       '<div class="pair">' + fleetCard(fig, st, r) + nextCard(r, st) + '</div>' +
-      '<p class="basis">' + esc(method(st)) + '</p>';
+      '<p class="basis">' + esc(method(st, labelsOf(data))) + '</p>';
   }
 
   function drawChart(host, r) {
@@ -380,7 +392,7 @@
 
   var api = {
     EMPTY: EMPTY, coverage: coverage, provenance: provenance, thin: thin, figures: figures, utilization: utilization, pick: pick, activeShare: activeShare,
-    oomKilled: oomKilled, engineers: engineers, clustersCard: clustersCard, headline: headline, method: method, summaryText: summaryText, markup: markup, day: day
+    oomKilled: oomKilled, engineers: engineers, clustersCard: clustersCard, headline: headline, method: method, labelsOf: labelsOf, summaryText: summaryText, markup: markup, day: day
   };
   if (node) module.exports = api;
   else {

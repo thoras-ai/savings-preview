@@ -92,7 +92,7 @@
   function clusters(data) {
     return '<div class="card"><div class="card-head"><div><h2>Clusters</h2><div class="sub">Include or exclude clusters from every figure</div></div>' + reset('clusters') + '</div>' +
       '<div class="lv-chips" role="group" aria-label="Clusters">' + data.clusters.map(function (c) {
-        return '<label class="lv-chip"><input type="checkbox" value="' + esc(c.name) + '" data-lever="cluster">' + esc(c.name) +
+        return '<label class="lv-chip" title="' + esc(c.name) + '"><input type="checkbox" value="' + esc(c.name) + '" data-lever="cluster">' + esc(c.label || c.name) +
           ' <span class="lv-count">' + c.workloads + '</span></label>';
       }).join('') + '</div></div>';
   }

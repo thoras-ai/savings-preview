@@ -168,3 +168,78 @@ test('the pricing card suggests node rates only for a single cluster', () => {
   // A single-cluster file suggests from all of its nodes.
   assert.deepStrictEqual(levers.suggestionNodes(single, model.compute(single)), single.nodes);
 });
+
+const history = read('fleet-history.otlp.json');
+const EAST = 'arn:aws:eks:us-east-1:111122223333:cluster/prod', WEST = 'arn:aws:eks:eu-west-1:111122223333:cluster/prod';
+const GKE = 'gke_acme-data_us-central1_analytics';
+const only = name => ({ resourceMetrics: history.resourceMetrics.filter(rm => rm.resource.attributes.some(x => x.key === 'k8s.cluster.name' && x.value.stringValue === name)) });
+
+test('cluster names are shortened, and names that come out the same are told apart', () => {
+  assert.deepStrictEqual(model.displayNames([EAST, GKE, 'staging']), { [EAST]: 'prod', [GKE]: 'analytics', staging: 'staging' });
+  assert.deepStrictEqual(model.displayNames([EAST, WEST]), { [EAST]: 'prod (us-east-1)', [WEST]: 'prod (eu-west-1)' });
+  const other = 'arn:aws:eks:us-east-1:444455556666:cluster/prod';
+  assert.deepStrictEqual(model.displayNames([EAST, other]), { [EAST]: 'prod (111122223333)', [other]: 'prod (444455556666)' });
+  assert.deepStrictEqual(model.displayNames([EAST, 'prod']), { [EAST]: 'prod (us-east-1)', prod: 'prod' });
+  assert.deepStrictEqual(model.displayNames(['arn:aws-cn:eks:cn-north-1:1:cluster/a', 'gke_p_europe-west1-b_b']), { 'arn:aws-cn:eks:cn-north-1:1:cluster/a': 'a', 'gke_p_europe-west1-b_b': 'b' });
+  assert.deepStrictEqual(model.displayNames(['arn:aws:eks:x', 'my_cluster']), { 'arn:aws:eks:x': 'arn:aws:eks:x', my_cluster: 'my_cluster' });
+
+  const data = model.prepare(history);
+  assert.deepStrictEqual(data.clusters.map(c => [c.name, c.label]), [[EAST, 'prod (us-east-1)'], [WEST, 'prod (eu-west-1)'], [GKE, 'analytics'], ['staging', 'staging']]);
+  assert.strictEqual(model.prepare(only(EAST)).label, 'prod');
+  assert.strictEqual(model.prepare(only(EAST)).cluster, EAST);
+});
+
+test('page one shows short cluster names and its links and filter keep the full ones', () => {
+  const data = model.prepare(history), st = state.parse('');
+  const r = model.compute(data, state.levers(st));
+  const html = summary.markup(data, r, st);
+  assert.match(html, />prod \(us-east-1\)</);
+  assert.match(html, />analytics</);
+  assert.match(html, new RegExp('data-cluster="' + EAST.replace(/[/.]/g, '\\$&') + '"'));
+  assert.doesNotMatch(html, />arn:aws/);
+  assert.match(summary.summaryText(r, st), /^ {2}prod \(us-east-1\): /m);
+
+  // A link made before short names, naming the full identifier, still filters.
+  const link = state.parse('#cluster=' + encodeURIComponent(EAST));
+  const one = model.compute(data, state.levers(link));
+  assert.strictEqual(one.cluster, EAST);
+  assert.strictEqual(one.label, 'prod (us-east-1)');
+  assert.ok(close(one.totals.savings, model.analyze(only(EAST)).totals.savings));
+  assert.match(summary.method(link, summary.labelsOf(data)), /Only the cluster prod \(us-east-1\) is included\./);
+});
+
+test('a fleet charts the time every cluster covers and keeps each cluster’s own totals', () => {
+  const data = model.prepare(history), r = model.compute(data);
+  const starts = data.clusters.map(c => c.fidelity.start), ends = data.clusters.map(c => c.fidelity.end);
+  assert.deepStrictEqual(r.window, [Math.max(...starts), Math.min(...ends)]);
+  assert.strictEqual(r.window[1] - r.window[0], 6 * 3600);
+  assert.ok(r.series.t.length >= 23);
+  assert.ok(r.series.t[0] >= r.window[0] && r.series.t[r.series.t.length - 1] < r.window[1]);
+  for (const f of ['cur', 'opt', 'useCost', 'reqCpu', 'tgtCpu']) assert.ok(r.series[f].every(Number.isFinite), f);
+
+  // On its own, the longest cluster has a gap the fleet chart would have drawn blank.
+  assert.ok(Array.from(model.analyze(only(EAST)).series.cur).some(v => !Number.isFinite(v)));
+
+  // Totals cover each cluster's whole history.
+  const alone = data.clusters.map(c => model.analyze(only(c.name)));
+  for (const k of ['spend', 'savings', 'cores', 'gib', 'reqCores', 'reqGiB', 'counted', 'workloads']) {
+    assert.ok(close(r.totals[k], alone.reduce((s, a) => s + a.totals[k], 0)), k);
+  }
+  for (const c of r.clusters) assert.ok(close(c.savings, model.analyze(only(c.name)).totals.savings), c.name);
+
+  // A time range set under Assumptions is charted as it is, and a single cluster is not windowed.
+  const ranged = model.compute(data, { range: [starts[0], ends[0]] });
+  assert.strictEqual(ranged.window, null);
+  assert.strictEqual(model.compute(data, { clusters: [EAST] }).window, null);
+  assert.strictEqual(model.analyze(only(EAST)).window, null);
+});
+
+test('the fleet provenance line does not claim one cluster’s history for all of them', () => {
+  const data = model.prepare(history), st = state.parse('');
+  const r = model.compute(data, state.levers(st));
+  assert.strictEqual(summary.provenance(r, st), 'From your Prometheus data across 4 clusters. Computed on your laptop. Nothing installed, nothing uploaded.');
+  assert.strictEqual(summary.coverage(r, st), 'Sep 17 – Sep 18, 2026 (UTC)');
+  const one = model.compute(model.prepare(only(EAST)));
+  assert.match(summary.provenance(one, st), /^From 2 days of your Prometheus data\./);
+  assert.strictEqual(summary.coverage(one, st), 'Sep 16 – Sep 18, 2026 (UTC)');
+});

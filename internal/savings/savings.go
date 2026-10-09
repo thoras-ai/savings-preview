@@ -45,8 +45,11 @@ var required = []string{cpuUse, memUse, cpuReq, memReq}
 // Summary is the JSON written next to the report.
 type Summary struct {
 	Cluster string `json:"cluster"`
-	Source  string `json:"source"`
-	Tier    int    `json:"tier"`
+	// DisplayName is the short name the report shows for Cluster. For a
+	// fleet it lists the clusters read, as Cluster does.
+	DisplayName string `json:"display_name,omitempty"`
+	Source      string `json:"source"`
+	Tier        int    `json:"tier"`
 	// StepSeconds is the coarsest step the data was collected at. For a
 	// compact file that is its source step, and CompactStepSeconds is the
 	// step of its points.
@@ -70,8 +73,9 @@ type Summary struct {
 // ClusterSummary is one cluster of a fleet: its own summary, or why it has
 // none.
 type ClusterSummary struct {
-	Cluster string `json:"cluster"`
-	Error   string `json:"error,omitempty"`
+	Cluster     string `json:"cluster"`
+	DisplayName string `json:"display_name"`
+	Error       string `json:"error,omitempty"`
 	*Summary
 }
 
@@ -320,7 +324,7 @@ func (cd *clusterData) summary() (*Summary, error) {
 	// Fidelity: worst tier and coarsest step, span from the first to one step
 	// past the last usage point.
 	slices.Sort(notes)
-	s := &Summary{Cluster: cd.name, Pricing: rates.basis, Totals: t, FidelityNotes: slices.Compact(notes)}
+	s := &Summary{Cluster: cd.name, DisplayName: DisplayNames([]string{cd.name})[cd.name], Pricing: rates.basis, Totals: t, FidelityNotes: slices.Compact(notes)}
 	tier, step, sourceStep := 1.0, 0.0, 0.0
 	t0, t1 := math.Inf(1), math.Inf(-1)
 	var sources []string
@@ -354,10 +358,15 @@ func (cd *clusterData) summary() (*Summary, error) {
 // whose data has nothing to price, is listed with the reason and adds nothing.
 func fleet(clusters []*clusterData) (*Summary, error) {
 	s := &Summary{}
-	var names, sources, pricing, notes []string
+	var names, shown, sources, pricing, notes []string
+	var all []string
+	for _, cd := range clusters {
+		all = append(all, cd.name)
+	}
+	labels := DisplayNames(all)
 	read := 0
 	for _, cd := range clusters {
-		cs := ClusterSummary{Cluster: cd.name, Error: cd.err}
+		cs := ClusterSummary{Cluster: cd.name, DisplayName: labels[cd.name], Error: cd.err}
 		if cd.err == "" {
 			sum, err := cd.summary()
 			if err != nil {
@@ -372,7 +381,7 @@ func fleet(clusters []*clusterData) (*Summary, error) {
 		}
 		c := cs.Summary
 		read++
-		names = append(names, cd.name)
+		names, shown = append(names, cd.name), append(shown, labels[cd.name])
 		for _, src := range strings.Split(c.Source, ", ") {
 			if src != "" && !slices.Contains(sources, src) {
 				sources = append(sources, src)
@@ -408,7 +417,7 @@ func fleet(clusters []*clusterData) (*Summary, error) {
 		}
 		return nil, fmt.Errorf("no cluster in the file has data to analyze (%s)", strings.Join(why, "; "))
 	}
-	s.Cluster, s.Source = strings.Join(names, ", "), strings.Join(sources, ", ")
+	s.Cluster, s.DisplayName, s.Source = strings.Join(names, ", "), strings.Join(shown, ", "), strings.Join(sources, ", ")
 	s.Pricing = pricing[0]
 	if len(pricing) > 1 {
 		s.Pricing = "each cluster priced from its own nodes, see clusters"
