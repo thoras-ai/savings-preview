@@ -848,11 +848,15 @@
     return isFinite(a) && isFinite(b) && a < b ? [a, b] : null;
   }
 
-  // The workloads with their series cut to range, as combine reads them.
+  // The workloads with their series cut to [range[0], range[1]), as combine
+  // reads them. The end is one step past the last point of the cluster that
+  // ends first, so a point at it belongs to the other clusters only.
   function within(list, range) {
     var out = [];
     list.forEach(function (w) {
-      var s = clip(w.series, range);
+      var a = lowerBound(w.series.t, range[0]), b = lowerBound(w.series.t, range[1]);
+      var s = { step: w.series.step, t: w.series.t.subarray(a, b) };
+      FIELDS.forEach(function (f) { s[f] = w.series[f].subarray(a, b); });
       if (s.t.length) out.push({ series: s, annualSpend: w.annualSpend });
     });
     return out;

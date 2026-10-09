@@ -76,7 +76,7 @@
       var names = f.source ? f.source.split(', ').map(function (s) { return SOURCES[s] || s; }) : [];
       var what = names.length ? names.join(' and ') + ' data' : 'cluster’s metrics';
       // Each cluster of a fleet counts over its own history, so no one span covers them.
-      if (r.fleet && !st.range) from = 'From your ' + (names.length ? what : 'clusters’ metrics') + ' across ' + counted(r) + ' clusters.';
+      if (r.fleet && !st.range) from = 'From your ' + (names.length ? what : 'metrics') + ' across ' + counted(r) + ' clusters.';
       else from = 'From ' + model.formatSpan(span) + ' of your ' + what + (r.fleet ? ' across ' + counted(r) + ' clusters.' : '.');
     }
     return from + ' Computed on your laptop. Nothing installed, nothing uploaded.';

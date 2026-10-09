@@ -295,7 +295,7 @@ func printFleet(w io.Writer, b *builtReport, members []*member) {
 	tw.Flush()
 	for _, c := range sum.Clusters {
 		if c.Summary == nil {
-			fmt.Fprintf(w, "not read: %s: %s\n", shownName(c), c.Error)
+			fmt.Fprintf(w, "not read: %s: %s\n", c.Cluster, c.Error)
 		}
 	}
 	fmt.Fprintf(w, "\nFleet, %d of %d clusters: %s a year in requests, %s a year in savings (%d of %d workloads counted)\n",

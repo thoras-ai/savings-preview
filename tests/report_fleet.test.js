@@ -243,3 +243,21 @@ test('the fleet provenance line does not claim one cluster’s history for all o
   assert.match(summary.provenance(one, st), /^From 2 days of your Prometheus data\./);
   assert.strictEqual(summary.coverage(one, st), 'Sep 16 – Sep 18, 2026 (UTC)');
 });
+
+test('a fleet whose clusters end at different times charts no cliff at the end', () => {
+  const doc = JSON.parse(JSON.stringify(history));
+  const end = 1789689600 - 2 * 3600;
+  doc.resourceMetrics.forEach(rm => {
+    if (rm.resource.attributes.some(x => x.key === 'k8s.cluster.name' && x.value.stringValue === 'staging')) return;
+    rm.scopeMetrics.forEach(sm => sm.metrics.forEach(m => {
+      const body = m.gauge || m.sum;
+      body.dataPoints = body.dataPoints.filter(p => Number(p.timeUnixNano) / 1e9 < end);
+    }));
+  });
+  const r = model.analyze(doc), s = r.series;
+  assert.deepStrictEqual(r.window, [1789689600 - 6 * 3600, end]);
+  assert.ok(s.t[s.t.length - 1] < end);
+  assert.ok(s.cur.every(Number.isFinite));
+  const last = s.reqCpu[s.reqCpu.length - 1], before = s.reqCpu[s.reqCpu.length - 2];
+  assert.ok(Math.abs(last - before) < 0.01 * before, last + ' after ' + before);
+});
