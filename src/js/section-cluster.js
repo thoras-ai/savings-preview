@@ -1,6 +1,6 @@
 /* Section 4: cluster and nodes. What the nodes can hold, what the workloads
  * request, would need and use, the instance types behind the prices, and how
- * many nodes the waste adds up to. Plain script: registers the section in the
+ * many nodes the waste adds up to. A fleet shows each cluster first. Plain script: registers the section in the
  * browser and exports summarize and markup under node. */
 (function () {
   'use strict';
@@ -106,6 +106,16 @@
       clouds: clouds.map(function (c) { return model.cloudNames[c] + ' ' + model.priceTable[c].region; }),
       customRates: !!r.pricing.custom
     };
+  }
+
+  // The section's figures for each cluster in scope, when there is more than
+  // one: each the same as the cluster shows with the Clusters filter set to it.
+  function byCluster(data, r, st) {
+    if (r.clusters.length < 2) return null;
+    return r.clusters.map(function (c) {
+      var one = Object.assign({}, st, { onlyClusters: [c.name] });
+      return { name: c.name, label: c.label || c.name, s: summarize(data, model.forCluster(data, r, c.name), one) };
+    }).sort(function (a, b) { return a.label.localeCompare(b.label); });
   }
 
   // approx rounds the figure to two significant figures and marks it with ~.
@@ -237,7 +247,46 @@
     return '<div class="cl-fig"><div class="meaning-figure">' + esc(big) + '</div><div class="muted">' + small + '</div></div>';
   }
 
-  function markup(s, approx) {
+  var MIX_TYPES = 3;
+
+  function mixText(list) {
+    if (!list.length) return 'No nodes';
+    var shown = list.slice(0, MIX_TYPES).map(function (g) {
+      return g.count + ' × ' + (g.type || 'type not stated') + (g.capacity === 'spot' ? ' spot' : '');
+    });
+    var more = list.length - shown.length;
+    return shown.join(', ') + (more ? ', ' + more + ' more ' + ui.plural(more, 'type') : '');
+  }
+
+  function cell(value, sub) {
+    return '<td class="num">' + value + (sub ? '<div class="wl-sub">' + esc(sub) + '</div>' : '') + '</td>';
+  }
+
+  // One row per cluster. The fleet figures below are the whole fleet's.
+  function clustersCard(list, approx) {
+    var rows = list.map(function (c) {
+      var s = c.s, f = s.freed;
+      return '<tr><td><span class="wl-name" title="' + esc(c.name) + '">' + esc(c.label) + '</span><div class="cl-mix-text">' + esc(mixText(s.mix)) + '</div></td>' +
+        cell(String(s.nodes)) +
+        cell(s.alloc ? pair(s.alloc.cores, s.alloc.gib, false) : '–') +
+        cell(pair(s.cpu.req, s.mem.req, approx), share(s, 'req')) +
+        cell(pair(s.cpu.used, s.mem.used, approx), share(s, 'used')) +
+        cell(esc(nodeFigure(f.nodes, approx)), f.whole >= 1 ? f.whole + ' whole ' + ui.plural(f.whole, 'node') : 'Less than one whole node') + '</tr>';
+    }).join('');
+    return '<div class="card"><h2>By cluster</h2><div class="sub">Each cluster on its own nodes, averaged over its own window. The fleet totals follow.</div>' +
+      '<div class="table-wrap"><table class="cl-clusters"><thead><tr><th scope="col">Cluster and instance mix</th><th scope="col" class="num">Nodes</th><th scope="col" class="num">Allocatable</th>' +
+      '<th scope="col" class="num">Requested</th><th scope="col" class="num">Used</th><th scope="col" class="num">Nodes that could be freed</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div></div>';
+  }
+
+  // clusters is byCluster's list, or null for one cluster.
+  function markup(s, approx, clusters) {
+    if (clusters) {
+      return '<p class="cl-lead">What each cluster has, what its workloads reserve, and what they use, then the same for the fleet.</p>' +
+        clustersCard(clusters, approx) + '<h3 class="cl-fleet">Fleet total</h3>' +
+        tiles(s, approx) + capacityCard(s, approx) +
+        '<div class="pair cl-pair">' + mixCard(s) + freedCard(s, approx) + '</div>';
+    }
     return '<p class="cl-lead">What the cluster has, what workloads reserve, and what they use.</p>' +
       tiles(s, approx) + capacityCard(s, approx) +
       '<div class="pair cl-pair">' + mixCard(s) + freedCard(s, approx) + '</div>';
@@ -245,9 +294,9 @@
 
   function render(host, ctx) {
     host.classList.toggle('provisional', ctx.approx);
-    host.innerHTML = markup(summarize(ctx.data, ctx.result, ctx.state), ctx.approx);
+    host.innerHTML = markup(summarize(ctx.data, ctx.result, ctx.state), ctx.approx, byCluster(ctx.data, ctx.result, ctx.state));
   }
 
-  if (node) module.exports = { summarize: summarize, markup: markup, levelOver: levelOver };
+  if (node) module.exports = { summarize: summarize, byCluster: byCluster, markup: markup, levelOver: levelOver };
   else SP.sections.register({ id: 'cluster', number: 4, title: 'Cluster and nodes', render: render });
 })();

@@ -15,6 +15,7 @@
   var PAGE_SIZE = 50;
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+  var CLUSTER = { key: 'cluster', label: 'Cluster' };
   var COLUMNS = [
     { key: 'name', label: 'Workload' },
     { key: 'status', label: 'Status' },
@@ -26,6 +27,11 @@
     { key: 'replicas', label: 'Replicas', num: true },
     { key: 'oomKills', label: 'OOM kills', num: true }
   ];
+  // Rows from more than one cluster list each workload's cluster.
+  function columns(fleet) { return fleet ? COLUMNS.slice(0, 1).concat(CLUSTER, COLUMNS.slice(1)) : COLUMNS; }
+
+  function isFleet(list) { return list.some(function (r) { return r.cluster !== list[0].cluster; }); }
+
   var STATUS = {
     ok: { label: 'Counted', cls: 'pill-brand', order: 0 },
     partial: { label: 'Partial data', cls: 'pill-neutral', order: 1 },
@@ -80,12 +86,12 @@
   // One row per workload in scope, with the figures model.compute gives it and
   // the replicas and OOM kills over the same time range.
   function rows(data, result) {
-    var byId = prepared(data), range = result.levers.range;
+    var byId = prepared(data), range = result.levers.range, labels = data.labels || {};
     return result.workloads.map(function (w) {
       var p = byId[w.id], counted = !!w.series;
       var lohi = counted ? bounds(p, range) : null;
       return {
-        id: w.id, name: w.name, ns: w.ns, kind: w.kind, status: counted ? w.status : 'excluded', reason: w.reason, notes: w.notes,
+        id: w.id, name: w.name, ns: w.ns, nsName: w.nsName, kind: w.kind, cluster: w.cluster, clusterLabel: labels[w.cluster] || w.cluster, status: counted ? w.status : 'excluded', reason: w.reason, notes: w.notes,
         annualSpend: w.annualSpend, annualSavings: w.annualSavings, savingsPct: w.savingsPct,
         wasteCores: w.wasteCores, wasteGiB: w.wasteGiB,
         replicas: counted ? meanReplicas(p, lohi[0], lohi[1]) : NaN,
@@ -96,15 +102,27 @@
 
   function cmp(a, b, key, dir) {
     if (key === 'status') return dir * (STATUS[a.status].order - STATUS[b.status].order);
+    if (key === 'cluster') return dir * a.clusterLabel.localeCompare(b.clusterLabel);
     var av = a[key], bv = b[key];
     if (typeof av === 'string') return dir * av.localeCompare(bv);
     return dir * (av - bv);
   }
 
+  function matches(r, q) {
+    return [r.name, r.nsName, r.clusterLabel].some(function (v) { return v.toLowerCase().indexOf(q) >= 0; });
+  }
+
   // The rows to list: matching the filter, counted ones sorted, the rest after them by name.
+  // Sorted by cluster, each cluster is one block: counted workloads by savings, then the rest.
   function arrange(list, view) {
     var q = view.filter.trim().toLowerCase(), s = view.sort;
-    var hit = q ? list.filter(function (r) { return r.name.toLowerCase().indexOf(q) >= 0 || r.ns.toLowerCase().indexOf(q) >= 0; }) : list;
+    var hit = q ? list.filter(function (r) { return matches(r, q); }) : list;
+    if (s.key === 'cluster') {
+      return hit.slice().sort(function (a, b) {
+        return cmp(a, b, 'cluster', s.dir) || (a.status === 'excluded') - (b.status === 'excluded') ||
+          (a.status === 'excluded' ? 0 : b.annualSavings - a.annualSavings) || a.name.localeCompare(b.name) || a.ns.localeCompare(b.ns);
+      });
+    }
     var counted = hit.filter(function (r) { return r.status !== 'excluded'; });
     var rest = hit.filter(function (r) { return r.status === 'excluded'; });
     counted.sort(function (a, b) { return cmp(a, b, s.key, s.dir) || a.name.localeCompare(b.name) || a.ns.localeCompare(b.ns); });
@@ -119,6 +137,7 @@
     if (!w) return null;
     var p = prepared(data)[id], lv = result.levers;
     var d = { w: w, p: p, containers: p.containers, oom: oomIn(p, lv.range, p.s ? p.s.step : 0), counted: !!w.series };
+    if (data.multi) d.where = { cluster: w.cluster, clusterLabel: data.labels[w.cluster] || w.cluster };
     if (!d.counted) return d;
     var s = p.s, lohi = bounds(p, lv.range), lo = lohi[0], hi = lohi[1];
     var sw = 0, swPod = 0, use = [0, 0], now = [0, 0], tgt = [0, 0], lim = [0, 0], peak = [0, 0], safe = [0, 0], limW = [0, 0];
@@ -202,27 +221,42 @@
   }
 
   function sortNote(view) {
-    var col = COLUMNS.filter(function (c) { return c.key === view.sort.key; })[0];
+    var col = columns(true).filter(function (c) { return c.key === view.sort.key; })[0];
     return 'Sorted by ' + col.label.toLowerCase() + '. Select a workload to see its history.';
   }
 
+  function clusterName(r) {
+    return '<span title="' + esc(r.cluster) + '">' + esc(r.clusterLabel) + '</span>';
+  }
+
+  // A cluster's heading row, with what the rows under it add up to in the arranged list.
+  function groupRow(g, cols, approx) {
+    var counted = g.workloads - g.excluded;
+    return '<tr class="wl-group"><th scope="colgroup" colspan="' + cols + '">' + clusterName(g.row) +
+      '<span class="wl-group-sub">' + esc(ui.num(g.workloads, 0) + ' ' + ui.plural(g.workloads, 'workload') + (g.excluded ? ', ' + ui.num(counted, 0) + ' counted' : '') +
+      ' · ' + ui.money(g.savings, approx) + ' a year') + '</span></th></tr>';
+  }
+
   // maxPct scales the waste bars, so a share draws the same length on every page.
-  function tableHtml(page, view, ctx, maxPct) {
-    var s = view.sort, approx = ctx.approx, st = ctx.state, last = view.last;
-    var head = COLUMNS.map(function (c) {
+  // groups maps a cluster to its totals when the rows are grouped by cluster.
+  function tableHtml(page, view, ctx, maxPct, fleet, groups) {
+    var s = view.sort, approx = ctx.approx, st = ctx.state, last = view.last, cols = columns(fleet);
+    var head = cols.map(function (c) {
       var active = s.key === c.key;
       return '<th scope="col"' + (c.num ? ' class="num"' : '') + ' aria-sort="' + (active ? (s.dir < 0 ? 'descending' : 'ascending') : 'none') + '">' +
         '<button type="button" data-sort="' + c.key + '">' + c.label + (active ? (s.dir < 0 ? ' ↓' : ' ↑') : '') + '</button></th>';
     }).join('');
-    var body = page.map(function (r) {
-      var name = '<td>' + link(st, r.id, esc(r.name), 'wl-link') + '<div class="wl-sub">' + esc(r.ns) + ' · ' + esc(r.kind) + '</div></td>';
+    var body = page.map(function (r, i) {
+      var name = '<td>' + link(st, r.id, esc(r.name), 'wl-link') + '<div class="wl-sub">' + esc(r.nsName) + ' · ' + esc(r.kind) + '</div></td>';
+      if (fleet) name += '<td>' + clusterName(r) + '</td>';
+      var group = groups && (i === 0 || page[i - 1].cluster !== r.cluster) ? groupRow(groups[r.cluster], cols.length, approx) : '';
       if (r.status === 'excluded') {
-        return '<tr class="excluded" data-id="' + esc(r.id) + '">' + name +
+        return group + '<tr class="excluded" data-id="' + esc(r.id) + '">' + name +
           '<td>' + statusPill('excluded') + ' <span class="wl-reason">' + esc(r.reason) + '</span></td>' +
           '<td class="num">–</td><td class="num">–</td><td class="num">–</td><td class="num">–</td><td class="num">–</td><td class="num">–</td>' +
           '<td class="num">' + (r.oomKills ? oomCell(r.oomKills) : '–') + '</td></tr>';
       }
-      return '<tr data-id="' + esc(r.id) + '"' + (r.id === last ? ' class="selected"' : '') + '>' + name +
+      return group + '<tr data-id="' + esc(r.id) + '"' + (r.id === last ? ' class="selected"' : '') + '>' + name +
         '<td>' + statusPill(r.status) + '</td>' +
         '<td class="num">' + ui.money(r.annualSpend, approx) + '</td>' +
         '<td class="num strong">' + ui.money(r.annualSavings, approx) + '</td>' +
@@ -232,7 +266,7 @@
         '<td class="num">' + ui.num(r.replicas, 1) + '</td>' +
         '<td class="num">' + oomCell(r.oomKills) + '</td></tr>';
     }).join('');
-    if (!page.length) body = '<tr><td colspan="' + COLUMNS.length + '" class="empty">No workload matches “' + esc(view.filter.trim()) + '”.</td></tr>';
+    if (!page.length) body = '<tr><td colspan="' + cols.length + '" class="empty">No workload matches “' + esc(view.filter.trim()) + '”.</td></tr>';
     return '<thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody>';
   }
 
@@ -243,10 +277,22 @@
     view.page = Math.min(Math.max(0, view.page), pages - 1);
     var from = view.page * PAGE_SIZE, page = list.slice(from, from + PAGE_SIZE);
     var range = list.length ? (from + 1) + '–' + (from + page.length) + ' of ' + ui.num(list.length, 0) : '0 of ' + ui.num(all.length, 0);
+    var groups = null, fleet = isFleet(all);
+    if (!fleet && view.sort.key === 'cluster') view.sort = { key: 'annualSavings', dir: -1 };
+    if (view.sort.key === 'cluster' && fleet) {
+      groups = {};
+      list.forEach(function (r) {
+        var g = groups[r.cluster] || (groups[r.cluster] = { row: r, workloads: 0, excluded: 0, savings: 0 });
+        g.workloads++;
+        if (r.status === 'excluded') g.excluded++;
+        else g.savings += r.annualSavings;
+      });
+    }
     return {
       title: listHead(all, all.length),
       sub: sortNote(view),
-      table: tableHtml(page, view, ctx, list.reduce(function (m, r) { return r.status !== 'excluded' ? Math.max(m, r.savingsPct) : m; }, 0.0001)),
+      filter: fleet ? 'Filter by name, namespace or cluster' : 'Filter by name or namespace',
+      table: tableHtml(page, view, ctx, list.reduce(function (m, r) { return r.status !== 'excluded' ? Math.max(m, r.savingsPct) : m; }, 0.0001), fleet, groups),
       range: range,
       prev: view.page > 0,
       next: view.page < pages - 1
@@ -264,8 +310,10 @@
 
   function detailHead(d, ctx) {
     var w = d.w, names = d.containers.map(function (c) { return c.name; });
+    // In a file with several clusters the line names the cluster, and its full name on hover.
+    var where = d.where ? clusterName(d.where) + ' · ' : '';
     return '<div class="wl-head"><div><a href="#' + esc(state.serialize(Object.assign({}, ctx.state, { workload: null, section: 'workloads' }))) + '" class="wl-back">← All workloads</a>' +
-      '<h3 class="wl-title">' + esc(w.name) + '</h3><div class="sub">' + esc(w.ns) + ' · ' + esc(w.kind) + ' · ' + esc(names.join(', ')) + '</div></div>' +
+      '<h3 class="wl-title">' + esc(w.name) + '</h3><div class="sub">' + where + esc(w.nsName) + ' · ' + esc(w.kind) + ' · ' + esc(names.join(', ')) + '</div></div>' +
       '<div class="wl-pills">' + statusPill(d.counted ? w.status : 'excluded') + ' ' + ui.confidencePill(ui.confidenceLevel(ctx.result.fidelity)) + '</div></div>';
   }
 
@@ -361,6 +409,7 @@
     var parts = listParts(currentRows(ctx), view, ctx);
     host.querySelector('.wl-list-title').textContent = parts.title;
     host.querySelector('.wl-list-sub').textContent = parts.sub;
+    host.querySelector('.wl-filter').placeholder = parts.filter;
     host.querySelector('.wl-table').innerHTML = parts.table;
     host.querySelector('.wl-range').textContent = parts.range;
     host.querySelector('[data-page="prev"]').disabled = !parts.prev;
@@ -392,7 +441,7 @@
       var sortBtn = e.target.closest('button[data-sort]');
       if (sortBtn) {
         var key = sortBtn.getAttribute('data-sort');
-        view.sort = { key: key, dir: view.sort.key === key ? -view.sort.dir : (key === 'name' || key === 'status' ? 1 : -1) };
+        view.sort = { key: key, dir: view.sort.key === key ? -view.sort.dir : (key === 'name' || key === 'status' || key === 'cluster' ? 1 : -1) };
         view.page = 0;
         renderList(host, ctx);
         return;

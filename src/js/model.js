@@ -424,7 +424,7 @@
   // next call.
   function computeWorkload(p, rates, lv) {
     var res = {
-      id: p.id, cluster: p.cluster, ns: p.ns, kind: p.kind, name: p.name, containers: p.containers, notes: p.notes,
+      id: p.id, cluster: p.cluster, ns: p.ns, nsName: p.nsName, kind: p.kind, name: p.name, containers: p.containers, notes: p.notes,
       status: p.status, reason: p.reason, series: null,
       annualSpend: 0, annualSavings: 0, savingsPct: 0, wasteCores: 0, wasteGiB: 0, reqCores: 0, reqGiB: 0, useCores: 0, useGiB: 0
     };
@@ -715,6 +715,8 @@
   // In a file with several clusters each cluster is priced from its own
   // nodes, workload ids start with the cluster's name, and namespaces are
   // named cluster/namespace, since two clusters can have the same ones.
+  // nsName is the namespace as the cluster names it, and labels maps each
+  // cluster name, read or not, to its short name.
   //   opts.dropped  [{cluster, kept, dropped}]: clusters read from more than
   //                 one file, and which file's data is used (files.combine)
   function prepare(doc, opts) {
@@ -731,6 +733,7 @@
       var info = { ns: first.ns, kind: first.kind, name: first.workload, workload: data.workloads[key] };
       var p = prepareWorkload(multi ? first.cluster + '/' + first.workloadId : first.workloadId, info, byWorkload[key]);
       p.cluster = first.cluster;
+      p.nsName = first.ns;
       if (multi) p.ns = first.cluster + '/' + first.ns;
       p.notes = workloadNotes(byWorkload[key]);
       return p;
@@ -753,7 +756,7 @@
       cluster: multi ? clusters.length + ' clusters' : data.cluster, label: multi ? clusters.length + ' clusters' : labels[data.cluster] || data.cluster, contract: data.contract, fidelity: fid,
       pricing: multi ? fleetPricing(clusters, data.nodes) : clusters[0].pricing, nodes: data.nodes,
       namespaces: namespaces.sort(), workloads: workloads,
-      clusters: clusters, failed: data.failed, dropped: (opts && opts.dropped) || [], multi: multi
+      clusters: clusters, failed: data.failed, dropped: (opts && opts.dropped) || [], multi: multi, labels: labels
     };
   }
 
@@ -785,16 +788,9 @@
     if (!inScope.length) inScope = clusters;
     var one = inScope.length === 1;
     var base = one ? inScope[0].pricing : data.pricing;
-    var custom = null;
-    if (lv.rates) {
-      custom = Object.assign({}, base, {
-        perCore: lv.rates.perCore, perGiB: lv.rates.perGiB, custom: true,
-        basis: fmtRate(lv.rates.perCore) + ' per core-hour and ' + fmtRate(lv.rates.perGiB) + ' per GiB-hour'
-      });
-    }
-    var rates = discounted(custom || base, lv.discount);
+    var rates = leverRates(base, lv);
     var own = {};
-    inScope.forEach(function (c) { own[c.name] = discounted(custom || c.pricing, lv.discount); });
+    inScope.forEach(function (c) { own[c.name] = leverRates(c.pricing, lv); });
     var scope = null;
     if (lv.namespaces) { scope = {}; lv.namespaces.forEach(function (n) { scope[n] = true; }); }
     var workloads = [];
@@ -803,18 +799,13 @@
       if (r && (!scope || scope[p.ns])) workloads.push(computeWorkload(p, r, lv));
     });
     var counted = workloads.filter(function (w) { return w.series; });
-    var totals = { spend: 0, savings: 0, cores: 0, gib: 0, reqCores: 0, reqGiB: 0, useCores: 0, useGiB: 0, workloads: workloads.length, counted: counted.length };
+    var totals = totalsOf(workloads);
     var perCluster = {};
     inScope.forEach(function (c) { perCluster[c.name] = { name: c.name, label: c.label || c.name, spend: 0, savings: 0, workloads: 0, counted: 0, fidelity: c.fidelity }; });
     workloads.forEach(function (w) {
       var pc = perCluster[w.cluster];
       if (pc) pc.workloads++;
-      if (!w.series) return;
-      totals.spend += w.annualSpend; totals.savings += w.annualSavings;
-      totals.cores += w.wasteCores; totals.gib += w.wasteGiB;
-      totals.reqCores += w.reqCores; totals.reqGiB += w.reqGiB;
-      totals.useCores += w.useCores; totals.useGiB += w.useGiB;
-      if (pc) { pc.counted++; pc.spend += w.annualSpend; pc.savings += w.annualSavings; }
+      if (w.series && pc) { pc.counted++; pc.spend += w.annualSpend; pc.savings += w.annualSavings; }
     });
     var byCluster = inScope.map(function (c) { return perCluster[c.name]; })
       .sort(function (a, b) { return b.savings - a.savings || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
@@ -833,6 +824,46 @@
       fidelity: data.multi && one ? inScope[0].fidelity : data.fidelity, pricing: rates, basePricing: base, namespaces: data.namespaces,
       nodes: one ? inScope[0].nodes : data.nodes, clusters: byCluster, fleet: fleet,
       levers: lv, workloads: workloads, totals: totals, series: series, window: window
+    };
+  }
+
+  // The rates under the levers: the given pricing, or the rates set under
+  // Assumptions, less the discount.
+  function leverRates(base, lv) {
+    var custom = null;
+    if (lv.rates) {
+      custom = Object.assign({}, base, {
+        perCore: lv.rates.perCore, perGiB: lv.rates.perGiB, custom: true,
+        basis: fmtRate(lv.rates.perCore) + ' per core-hour and ' + fmtRate(lv.rates.perGiB) + ' per GiB-hour'
+      });
+    }
+    return discounted(custom || base, lv.discount);
+  }
+
+  function totalsOf(workloads) {
+    var t = { spend: 0, savings: 0, cores: 0, gib: 0, reqCores: 0, reqGiB: 0, useCores: 0, useGiB: 0, workloads: workloads.length, counted: 0 };
+    workloads.forEach(function (w) {
+      if (!w.series) return;
+      t.counted++;
+      t.spend += w.annualSpend; t.savings += w.annualSavings;
+      t.cores += w.wasteCores; t.gib += w.wasteGiB;
+      t.reqCores += w.reqCores; t.reqGiB += w.reqGiB;
+      t.useCores += w.useCores; t.useGiB += w.useGiB;
+    });
+    return t;
+  }
+
+  // One cluster's part of a result: the figures compute gives with the
+  // Clusters filter set to that cluster alone, without computing again.
+  // Each workload in a fleet is already priced with its own cluster's rates.
+  function forCluster(data, result, name) {
+    var c = (data.clusters || []).filter(function (x) { return x.name === name; })[0];
+    if (!c) return null;
+    var lv = result.levers;
+    var workloads = result.workloads.filter(function (w) { return w.cluster === name; });
+    return {
+      cluster: name, label: c.label || name, fidelity: c.fidelity, pricing: leverRates(c.pricing, lv), basePricing: c.pricing,
+      nodes: c.nodes, workloads: workloads, totals: totalsOf(workloads), levers: lv
     };
   }
 
@@ -874,7 +905,7 @@
   }
 
   var api = {
-    analyze: analyze, prepare: prepare, displayNames: displayNames, mergeFidelity: mergeFidelity, priceNode: priceNode, priceTable: PRICES, cloudNames: CLOUD_NAMES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
+    analyze: analyze, prepare: prepare, forCluster: forCluster, displayNames: displayNames, mergeFidelity: mergeFidelity, priceNode: priceNode, priceTable: PRICES, cloudNames: CLOUD_NAMES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
     lowerBound: lowerBound, upperBound: upperBound, mean: mean,
     fidelityLabel: fidelityLabel, formatSpan: formatSpan, formatStep: formatStep, notes: NOTES, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
   };

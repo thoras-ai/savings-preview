@@ -113,7 +113,11 @@
     return out;
   }
 
-  function who(w) { return '<span class="wl-name">' + esc(w.name) + '</span> <span class="mono-sub">' + esc(w.ns) + '</span>'; }
+  // labels, in a file with several clusters, names each workload's cluster.
+  function whoIs(w, labels) {
+    var where = labels ? labels[w.cluster] + ' · ' + w.nsName : w.ns;
+    return '<span class="wl-name">' + esc(w.name) + '</span> <span class="mono-sub"' + (labels ? ' title="' + esc(w.cluster) + '"' : '') + '>' + esc(where) + '</span>';
+  }
 
   // A workload with every container missing a required series, as opposed to
   // one left out for its replicas, its timing or the time range.
@@ -121,7 +125,8 @@
 
   // One line per workload the totals leave out in whole or in part. Reasons
   // come from model.prepare and model.compute.
-  function workloadItem(w) {
+  function workloadItem(w, labels) {
+    var who = function (x) { return whoIs(x, labels); };
     if (w.reason === 'No data in the selected time range') return who(w) + ': no data in the time range set under Assumptions, so it is not counted.';
     if (w.reason === 'Missing replica count') return who(w) + ': no replica count (' + code(REPLICAS[w.kind]) + '), so it is listed but not counted.';
     if (w.reason === 'No time with complete data') return who(w) + ': its series never all have a value at the same time, so it is listed but not counted.';
@@ -171,7 +176,8 @@
 
   function missingCard(r, data) {
     var left = r.workloads.filter(function (w) { return !w.series || w.status === 'partial'; });
-    var items = left.map(workloadItem).concat(nodeItems(r.nodes || data.nodes, r.pricing.custom), r.fidelity.notes.map(esc));
+    var labels = data.multi ? data.labels : null;
+    var items = left.map(function (w) { return workloadItem(w, labels); }).concat(nodeItems(r.nodes || data.nodes, r.pricing.custom), r.fidelity.notes.map(esc));
     var after = [];
     if (left.some(unread)) after.push('A workload’s cost is the larger of its CPU and memory cost, so it cannot be computed from one of them.');
     after.push((left.length ? 'Every other' : 'Every') + ' required series was present for every workload.');
@@ -204,6 +210,12 @@
       '<ol class="method-steps">' + steps.map(function (s) { return '<li>' + s + '</li>'; }).join('') + '</ol></div>';
   }
 
+  // A cluster's short name, with its full name on hover and under it when the two differ.
+  function clusterName(data, name) {
+    var label = (data.labels && data.labels[name]) || name;
+    return '<span class="wl-name" title="' + esc(name) + '">' + esc(label) + '</span>' + (label !== name ? '<div class="mono-sub">' + esc(name) + '</div>' : '');
+  }
+
   // Each cluster in the file: what was read and what it comes to, the
   // clusters that could not be read and why, and the clusters that came from
   // more than one file.
@@ -212,15 +224,15 @@
     r.clusters.forEach(function (c) { figures[c.name] = c; });
     var rows = data.clusters.map(function (c) {
       var f = c.fidelity, x = figures[c.name];
-      return '<tr><td><span class="wl-name">' + esc(c.name) + '</span></td><td>' + esc(f.source || 'Not recorded') + '</td>' +
+      return '<tr><td>' + clusterName(data, c.name) + '</td><td>' + esc(f.source || 'Not recorded') + '</td>' +
         '<td>' + esc(f.label) + '</td><td class="num">' + f.tier + '</td>' +
         '<td class="num">' + (x ? esc(ui.num(x.counted) + ' of ' + ui.num(x.workloads)) : 'excluded') + '</td>' +
         '<td class="num">' + (x ? esc(ui.money(x.spend)) : '') + '</td><td class="num">' + (x ? esc(ui.money(x.savings)) : '') + '</td></tr>';
     }).concat(data.failed.map(function (f) {
-      return '<tr><td><span class="wl-name">' + esc(f.name) + '</span></td><td colspan="6">Not read: ' + esc(f.reason) + '</td></tr>';
+      return '<tr><td>' + clusterName(data, f.name) + '</td><td colspan="6">Not read: ' + esc(f.reason) + '</td></tr>';
     })).join('');
     var notes = data.dropped.map(function (d) {
-      return 'Cluster <span class="wl-name">' + esc(d.cluster) + '</span> is in ' + esc(d.kept) + ' and ' + esc(d.dropped) +
+      return 'Cluster <span class="wl-name" title="' + esc(d.cluster) + '">' + esc((data.labels && data.labels[d.cluster]) || d.cluster) + '</span> is in ' + esc(d.kept) + ' and ' + esc(d.dropped) +
         '. The figures use ' + esc(d.kept) + ', whose data is newer, and leave out ' + esc(d.dropped) + ', so the cluster is counted once.';
     });
     if (data.failed.length) notes.push('A cluster that could not be read adds nothing to the figures. Run it again once the reason above is fixed, and open both files together.');
