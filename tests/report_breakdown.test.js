@@ -163,6 +163,11 @@ test('Workloads lists the cluster in a column, and sorting by it groups each clu
   // And its full name, so a region or account finds the cluster.
   const west = wl.arrange(rows, Object.assign({}, VIEW, { filter: 'us-west-2' }));
   assert.ok(west.length && west.every(r => r.cluster === DELTA));
+  // A single-cluster report does not match its cluster's name.
+  const single = model.prepare(poll);
+  const local = wl.rows(single, model.compute(single, state.levers(state.DEFAULTS)));
+  assert.strictEqual(wl.arrange(local, Object.assign({}, VIEW, { filter: single.cluster })).length, 0);
+  assert.strictEqual(wl.arrange(local, Object.assign({}, VIEW, { filter: 'team-1' })).length, local.filter(r => r.ns === 'team-1').length);
   // Filtered to one cluster, the column goes and a cluster sort falls back to savings.
   const one = context({ onlyClusters: [GAMMA] });
   const v = Object.assign({}, view);

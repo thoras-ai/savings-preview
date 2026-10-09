@@ -108,15 +108,16 @@
     return dir * (av - bv);
   }
 
-  function matches(r, q) {
-    return [r.name, r.nsName, r.clusterLabel, r.cluster].some(function (v) { return v.toLowerCase().indexOf(q) >= 0; });
+  function matches(r, q, fleet) {
+    return (fleet ? [r.name, r.nsName, r.clusterLabel, r.cluster] : [r.name, r.ns]).some(function (v) { return v.toLowerCase().indexOf(q) >= 0; });
   }
 
   // The rows to list: matching the filter, counted ones sorted, the rest after them by name.
   // Sorted by cluster, each cluster is one block: counted workloads by savings, then the rest.
   function arrange(list, view) {
     var q = view.filter.trim().toLowerCase(), s = view.sort;
-    var hit = q ? list.filter(function (r) { return matches(r, q); }) : list;
+    var fleet = isFleet(list);
+    var hit = q ? list.filter(function (r) { return matches(r, q, fleet); }) : list;
     if (s.key === 'cluster') {
       return hit.slice().sort(function (a, b) {
         return cmp(a, b, 'cluster', s.dir) || (a.status === 'excluded') - (b.status === 'excluded') ||
