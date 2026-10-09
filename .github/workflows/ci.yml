@@ -33,7 +33,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           # go.mod names the minimum version; build and test with its latest patch release.
-          go-version: "1.26"
+          go-version: ">=1.26.9 <1.27"
           check-latest: true
           cache: false
       # Compiling the dependencies and linking the tests takes minutes, so the
@@ -95,7 +95,7 @@ jobs:
       - id: go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26"
+          go-version: ">=1.26.9 <1.27"
           check-latest: true
           cache: false
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -138,7 +138,7 @@ jobs:
       - id: go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26"
+          go-version: ">=1.26.9 <1.27"
           check-latest: true
           cache: false
       # The module sources the scan type-checks.
@@ -199,7 +199,7 @@ jobs:
       - id: go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26"
+          go-version: ">=1.26.9 <1.27"
           check-latest: true
           cache: false
       # -race builds differ from plain ones, so this job keeps its own cache.
@@ -227,7 +227,7 @@ jobs:
           node-version: "24"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26"
+          go-version: ">=1.26.9 <1.27"
           check-latest: true
           cache: false
       - name: Generate the demo cluster and fleet samples
