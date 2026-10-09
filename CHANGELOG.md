@@ -2,6 +2,12 @@
 
 Each release's section here is its release notes on GitHub. `scripts/release_notes.py` reads the section for a tag, and the release workflow fails when there is none.
 
+## v0.2.3
+
+### Fixes
+
+- The chart on page one of a fleet no longer drops at its ends. Each cluster's 15-minute steps start on its own minute, so the first and last buckets of the time all clusters cover could hold only some of them. Those buckets are now left out of a fleet's chart. Totals are unchanged.
+
 ## v0.2.2
 
 ### New

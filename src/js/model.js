@@ -527,15 +527,20 @@
     // One scratch row per field, reset over each workload's own buckets.
     var sum = FIELDS.map(function () { return new Float64Array(nb); }), cnt = new Float64Array(nb), near = new Int32Array(nb);
     var bin = new Int32Array(0);
+    // Which clusters have a value in each bucket. Each cluster's steps start
+    // on its own minute, so at either end of a fleet's window a bucket can
+    // hold only some clusters; those buckets are dropped below.
+    var clusterRows = {};
     list.forEach(function (w) {
       var s = w.chart, n = s.t.length, i, k;
+      var crow = clusterRows[w.cluster || ''] || (clusterRows[w.cluster || ''] = new Uint8Array(nb));
       var first = Math.floor((s.t[0] - t0) / step), last = Math.floor((s.t[n - 1] - t0) / step);
       var spend = w.annualSpend > 0 ? w.annualSpend : 0;
       if (bin.length < n) bin = new Int32Array(n);
       // The bucket of each valid point, or -1.
       for (i = 0; i < n; i++) bin[i] = isFinite(s.cur[i]) ? Math.floor((s.t[i] - t0) / step) : -1;
       for (k = first; k <= last; k++) cnt[k] = 0;
-      for (i = 0; i < n; i++) if (bin[i] >= 0) cnt[bin[i]]++;
+      for (i = 0; i < n; i++) if (bin[i] >= 0) { cnt[bin[i]]++; crow[bin[i]] = 1; }
       // The nearest bucket with a value, the earlier one on a tie.
       var prev = -1;
       for (k = first; k <= last; k++) { if (cnt[k]) prev = k; near[k] = prev; }
@@ -566,6 +571,12 @@
       for (var g = 0; g < nf; g++) outs[g][q] = NaN;
     }
     if (hi < 0) return out;
+    var rows = Object.keys(clusterRows).map(function (c) { return clusterRows[c]; });
+    var everyCluster = function (q) { return rows.every(function (r) { return r[q]; }); };
+    if (rows.length > 1) {
+      while (lo < hi && !everyCluster(lo)) lo++;
+      while (hi > lo && !everyCluster(hi)) hi--;
+    }
     out.t = out.t.subarray(lo, hi + 1);
     FIELDS.forEach(function (f) { out[f] = out[f].subarray(lo, hi + 1); });
     return out;
@@ -924,7 +935,7 @@
       var a = lowerBound(w.chart.t, range[0]), b = lowerBound(w.chart.t, range[1]);
       var s = { step: w.chart.step, t: w.chart.t.subarray(a, b) };
       FIELDS.forEach(function (f) { s[f] = w.chart[f].subarray(a, b); });
-      if (s.t.length) out.push({ chart: s, annualSpend: w.annualSpend });
+      if (s.t.length) out.push({ chart: s, annualSpend: w.annualSpend, cluster: w.cluster });
     });
     return out;
   }
