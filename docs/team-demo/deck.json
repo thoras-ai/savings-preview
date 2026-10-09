@@ -1,0 +1,52 @@
+{
+  "v": 4,
+  "title": "Savings preview team demo",
+  "cover": "cover",
+  "order": [
+    "cover",
+    "problem",
+    "answer",
+    "how",
+    "trust",
+    "live",
+    "results",
+    "clusters",
+    "fleet",
+    "send",
+    "playbook",
+    "next",
+    "close"
+  ],
+  "sections": {
+    "s1": {
+      "description": "Why prospects stall before a trial",
+      "start": "cover"
+    },
+    "s2": {
+      "description": "What savings preview is and how it works",
+      "start": "answer"
+    },
+    "s3": {
+      "description": "Live run against three Thoras clusters",
+      "start": "live"
+    },
+    "s4": {
+      "description": "Running it across a whole fleet",
+      "start": "fleet"
+    },
+    "s5": {
+      "description": "Using it in sales calls, and what comes next",
+      "start": "playbook"
+    }
+  },
+  "faces": {
+    "roboto": {
+      "family": "Roboto",
+      "href": "https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap"
+    },
+    "roboto-mono": {
+      "family": "Roboto Mono",
+      "href": "https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap"
+    }
+  }
+}

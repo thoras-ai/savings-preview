@@ -2,6 +2,9 @@
 
 A walk through the report with the demo cluster: what to click, in what order, and what to say. It takes about five minutes.
 
+
+Slides from the internal team demo, with speaker notes, are in [team-demo](team-demo/README.md).
+
 ## The demo cluster
 
 `go run ./scripts/gen_demo` writes `fixtures/demo-cluster.compact.otlp.json`, a cluster called `prod-us-east-1`: 60 workloads in 8 namespaces (web, api, workers, data, batch, platform, monitoring, kube-system) on 28 AWS nodes in four groups (31 over the window, counting spot replacements): m6i.2xlarge and r6i.2xlarge on demand, m6i.large for system pods, and an m6i.xlarge spot group that loses three nodes to reclamation. It covers 14 days at 5-minute steps, from a Prometheus source, written as the compact file `run` writes for the report.
