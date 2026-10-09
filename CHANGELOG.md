@@ -2,7 +2,7 @@
 
 Each release's section here is its release notes on GitHub. `scripts/release_notes.py` reads the section for a tag, and the release workflow fails when there is none.
 
-## Unreleased
+## v0.2.2
 
 ### New
 
@@ -17,6 +17,8 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 - `check` says, for each usable store in the cluster, where `run` would take the nodes' instance types from: the store's node labels, the Kubernetes API, or neither. `check --json` adds `instance_types` (`store`, `kubernetes_api` or `none`) and `instance_types_note` to each entry in `stores`, and the access list adds `list nodes` under `prometheus`, marked optional. No field changed.
 - Contract files may carry two optional node attributes, `thoras.node.pool` and `thoras.node.type_source`. Files without them are read as before, and earlier releases ignore them. See [contract.md](docs/contract.md#resource-attributes).
 
+- [Team demo slides](docs/team-demo/README.md): the slides from the internal team demo, with speaker notes, opened from `docs/team-demo/index.html`.
+
 ### Changed messages
 
 - `run` prints the plan in place of the list of reads and the `Output goes to` line it printed before. Its line about the zip now reads `wrote savings-preview.zip with a summary, report.html, a copy of the report that opens without this tool, and the compact file` (`and each cluster's compact file` for several clusters). No exit status changed.
@@ -28,6 +30,12 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 - The next step on page one and in the printout suggested `savings-preview run --duration 168h` for any report under a week, though `--duration` only sets how long polling runs. It now does so only when a cluster was polled. For data from a store or Datadog it says that 14 days of history in the store gives the full figure, and it says nothing when a shorter time range was picked under Assumptions.
 - The chart on page one of a fleet covers the time every cluster has data for, from the latest start to the earliest end. Before, it ran from the earliest start to the latest end, and where one cluster had history the others did not, a gap in that cluster's data could leave most of the chart blank. Each cluster's figures still cover its own history, and a file with one cluster, or a time range set under Assumptions, is charted as before.
 - Page one of a fleet says which data its figures come from across how many clusters, without a single span, since each cluster counts over its own history. The chart's dates are the time it covers.
+
+- In the page-one chart's tooltip, each series' swatch now has the colour of its line; "Requested today" was purple while its line is red.
+
+### Security
+
+- `golang.org/x/net` is v0.60.0, for GO-2026-6617 in the HTTP/2 client. Release binaries are built with Go 1.26.9 or a later 1.26 patch, which fixes GO-2026-6611, 6612, 6613 and 6617 in `net/http`.
 
 ### Changed figures
 
