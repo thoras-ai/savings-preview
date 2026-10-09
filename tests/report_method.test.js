@@ -209,3 +209,19 @@ test('nodes gone from the cluster with no instance type are priced by the live i
   ]) assert.ok(out.includes(s), s);
   assert.ok(!out.includes('gone-0 has no instance type'), out);
 });
+
+test('in a fleet, gone nodes take their own cluster’s mix, and same-named pools stay apart', () => {
+  const live = (cluster, hostType) => ({ cluster, hostType, provider: 'aws', region: 'us-east-1', capacity: 'on_demand', pool: 'default', typeSource: 'kubernetes_api' });
+  const gone = (cluster, pool) => ({ cluster, hostType: 'unknown', provider: 'unknown', region: 'unknown', capacity: 'unknown', pool, typeSource: 'live_mix' });
+  const nodes = [live('a', 'c5.large'), gone('a', 'default'), live('b', 'r5.4xlarge')];
+  for (let i = 0; i < 9; i++) nodes.push(gone('b', 'default'));
+  // c: one live node with no type and five gone nodes, so no priced node.
+  nodes.push({ cluster: 'c', hostType: 'unknown', provider: 'unknown', capacity: 'unknown', typeSource: '' });
+  for (let i = 0; i < 5; i++) nodes.push(gone('c', ''));
+  const p = model.pricing(nodes);
+  const cost = 2 * 0.085 + 10 * 1.008, cores = 2 * 2 + 10 * 16, gib = 2 * 4 + 10 * 128;
+  assert.ok(Math.abs(p.perCore - cost / cores) < 1e-12, String(p.perCore));
+  assert.ok(Math.abs(p.perGiB - cost / gib) < 1e-12, String(p.perGiB));
+  assert.strictEqual(p.mixed, 10);
+  assert.strictEqual(model.pricing(nodes.filter(n => n.cluster === 'c')).basis, 'default node (4 cores, 16 GiB, $0.192 per hour)');
+});

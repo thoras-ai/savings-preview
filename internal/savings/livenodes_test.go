@@ -99,7 +99,7 @@ func TestLiveNodesPriceAStoreWithoutNodeLabels(t *testing.T) {
 		apiNode("ip-10-0-0-5", "aws:///us-east-1a/i-5", map[string]string{"node.kubernetes.io/instance-type": "m5.large"}),
 	}
 	res := livenodes.Fill(&eks, eksLive)
-	if res != (livenodes.Result{Nodes: 6, Listed: 5, Live: 4, FromStore: 1, FromAPI: 3, Gone: 2}) {
+	if res != (livenodes.Result{Nodes: 6, Listed: 5, Live: 4, FromStore: 1, FromAPI: 3, Gone: 2, Current: 6, CurrentListed: 4}) {
 		t.Fatalf("eks fill: %+v", res)
 	}
 	if got, want := res.Text(), "4 of 6 nodes were live; instance types of 1 from the store and 3 from the Kubernetes API; 2 gone from the cluster with no instance type are priced by the live instance mix"; got != want {

@@ -51,6 +51,7 @@ LEVEL_METRICS = (
 
 COMMON_ATTRS = ("k8s.cluster.name", "thoras.source", "thoras.step_seconds", "thoras.fidelity_tier")
 CAPACITY_TYPES = ("on_demand", "spot", "unknown")
+TYPE_SOURCES = ("store", "kubernetes_api", "live_mix")
 
 CUMULATIVE = (2, "AGGREGATION_TEMPORALITY_CUMULATIVE")
 DELTA_TEMPORALITY = (1, "AGGREGATION_TEMPORALITY_DELTA")
@@ -269,6 +270,8 @@ def validate(doc):
                     errors.append("%s: node resource missing attribute %s" % (where, k))
             if attrs.get("thoras.node.capacity_type") not in CAPACITY_TYPES:
                 errors.append("%s: thoras.node.capacity_type must be one of %s" % (where, CAPACITY_TYPES))
+            if "thoras.node.type_source" in attrs and attrs["thoras.node.type_source"] not in TYPE_SOURCES:
+                errors.append("%s: thoras.node.type_source must be one of %s" % (where, TYPE_SOURCES))
             ident = ("node", cluster, attrs["k8s.node.name"])
         else:
             if bool(dep) == bool(sts):

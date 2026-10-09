@@ -191,6 +191,11 @@ class RejectTest(unittest.TestCase):
         attr(node, "thoras.node.capacity_type")["value"]["stringValue"] = "reserved"
         self.assertHas("capacity_type")
 
+    def test_node_type_source(self):
+        node = find(self.doc, **{"host.type": "m5.xlarge"})
+        node["resource"]["attributes"].append({"key": "thoras.node.type_source", "value": {"stringValue": "guess"}})
+        self.assertHas("type_source")
+
     def test_scope_version(self):
         for version in ("1.2.0", "2.0.0"):
             with self.subTest(version=version):

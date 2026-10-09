@@ -80,7 +80,29 @@ func TestFillOtherCluster(t *testing.T) {
 	if n := f.Resources[0].Node; n.InstanceType != "unknown" || n.TypeSource != "" {
 		t.Errorf("node a: %+v", n)
 	}
-	if got, want := res.Text(), "none of the 2 nodes in the data is among the 1 nodes the Kubernetes API lists, so instance types come from the store only"; got != want {
+	if got, want := res.Text(), "only 0 of the 2 nodes reporting at the end of the data are among the 1 nodes the Kubernetes API lists, so the data and the API seem to be different clusters and instance types come from the store only"; got != want {
 		t.Errorf("text %q", got)
+	}
+}
+
+// One name in common is not enough when most of the nodes running at the end
+// of the data are not listed. Nodes that stopped reporting earlier do not
+// count either way.
+func TestFillNeedsMostCurrentNodesListed(t *testing.T) {
+	pts := func(end int64) []contract.Series {
+		return []contract.Series{{Name: contract.NodeCPU, Points: []contract.Point{{T: end - 300, V: 4}, {T: end, V: 4}}}}
+	}
+	f := &contract.File{}
+	for i, end := range []int64{100_000, 100_000, 100_000, 50_000, 50_000} {
+		f.Resources = append(f.Resources, contract.Resource{Common: contract.Common{StepSeconds: 300},
+			Node: &contract.Node{Name: fmt.Sprint("n", i), InstanceType: "unknown"}, Metrics: pts(end)})
+	}
+	res := Fill(f, []contract.Node{{Name: "n0", InstanceType: "m5.large"}})
+	if !res.Mismatch || res.Current != 3 || res.CurrentListed != 1 || f.Resources[0].Node.InstanceType != "unknown" {
+		t.Errorf("one of three current nodes listed: %+v", res)
+	}
+	res = Fill(f, []contract.Node{{Name: "n0", InstanceType: "m5.large"}, {Name: "n1", InstanceType: "m5.large"}})
+	if res.Mismatch || res.Gone != 3 || f.Resources[1].Node.TypeSource != contract.TypeFromAPI {
+		t.Errorf("two of three current nodes listed: %+v", res)
 	}
 }

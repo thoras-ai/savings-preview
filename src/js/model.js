@@ -230,14 +230,18 @@
   // priced it falls back to the product's default node. internal/savings
   // pricing is the Go port.
   function pricing(nodes) {
-    var all = { cost: 0, cores: 0, gib: 0, n: 0 }, pools = {}, gone = [], clouds = {}, spot = false, azureSpot = false, regions = false;
+    // Sums are kept per cluster, and per pool within it, so a fleet's gone
+    // nodes take their own cluster's mix.
+    var all = { cost: 0, cores: 0, gib: 0, n: 0 }, own = {}, gone = [], clouds = {}, spot = false, azureSpot = false, regions = false;
+    var sum = function (k) { return own[k] || (own[k] = { cost: 0, cores: 0, gib: 0, n: 0 }); };
     var add = function (s, p) { s.cost += p.hourly; s.cores += p.cores; s.gib += p.gib; s.n++; };
     nodes.forEach(function (n) {
       if (liveMix(n)) { gone.push(n); return; }
       var p = priceNode(n);
       if (p.reason) return;
       add(all, p);
-      if (n.pool) add(pools[n.pool] || (pools[n.pool] = { cost: 0, cores: 0, gib: 0, n: 0 }), p);
+      add(sum('c\u0000' + (n.cluster || '')), p);
+      if (n.pool) add(sum('p\u0000' + (n.cluster || '') + '\u0000' + n.pool), p);
       clouds[p.cloud] = true;
       spot = spot || p.spot; azureSpot = azureSpot || p.azureSpot; regions = regions || p.otherRegion;
     });
@@ -250,18 +254,19 @@
         priced: 0, mixed: 0, nodes: nodes.length
       };
     }
-    var cost = all.cost, cores = all.cores, gib = all.gib;
+    var cost = all.cost, cores = all.cores, gib = all.gib, mixed = 0;
     gone.forEach(function (n) {
-      var ref = Object.prototype.hasOwnProperty.call(pools, n.pool) ? pools[n.pool] : all;
-      cost += ref.cost / ref.n; cores += ref.cores / ref.n; gib += ref.gib / ref.n;
+      var c = n.cluster || '', ref = own['p\u0000' + c + '\u0000' + n.pool] || own['c\u0000' + c];
+      if (!ref) return;
+      cost += ref.cost / ref.n; cores += ref.cores / ref.n; gib += ref.gib / ref.n; mixed++;
     });
     var used = CLOUD_ORDER.filter(function (c) { return clouds[c]; });
     var where = used.map(function (c) { return CLOUD_NAMES[c] + ' ' + PRICES[c].region; });
     var basis = priced + ' of ' + nodes.length + ' nodes at ' + listJoin(where) + ' ' + (spot ? 'on-demand and spot' : 'on-demand') + ' list prices';
-    if (gone.length) basis += ' and ' + gone.length + ' that were gone from the cluster at the live instance mix';
+    if (mixed) basis += ' and ' + mixed + ' that were gone from the cluster at the live instance mix';
     if (azureSpot) basis += '; Azure spot nodes are priced at on-demand';
     if (regions) basis += used.length === 1 ? '; nodes outside ' + PRICES[used[0]].region + ' are priced as if in it' : '; nodes outside those regions are priced as if in them';
-    return { perCore: cost / cores, perGiB: cost / gib, basis: basis, priced: priced, mixed: gone.length, nodes: nodes.length };
+    return { perCore: cost / cores, perGiB: cost / gib, basis: basis, priced: priced, mixed: mixed, nodes: nodes.length };
   }
 
   // Mean of a level series over the time it covers. A held series weights each

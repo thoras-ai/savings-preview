@@ -159,9 +159,9 @@
       }
     });
     if (gone) {
-      var live = nodes.length - gone, priced = nodes.some(function (n) { return !model.liveMix(n) && !model.priceNode(n).reason; });
-      out.unshift(ui.num(live) + ' of ' + ui.num(nodes.length) + ' nodes were live; ' + (priced ?
-        'the rest are priced by the live instance mix: each at the average list price, vCPUs and memory of the priced nodes in its pool, or of all priced nodes when its pool has none.' :
+      var live = nodes.length - gone, mixed = model.pricing(nodes).mixed;
+      out.unshift(ui.num(live) + ' of ' + ui.num(nodes.length) + ' nodes were live; ' + (mixed ?
+        (mixed === gone ? 'the rest are' : ui.num(mixed) + ' of the rest are') + ' priced by the live instance mix: each at the average list price, vCPUs and memory of the priced nodes in its pool, or of all priced nodes in its cluster when its pool has none.' :
         'the rest had no instance type, and with no node of a known list price, requests are priced with the default node.'));
     }
     Object.keys(inferred).forEach(function (c) {

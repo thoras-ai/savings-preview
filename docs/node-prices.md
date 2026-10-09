@@ -40,9 +40,9 @@ When `run` or `prometheus` reaches a store through the Kubernetes API and the st
 - the region from `topology.kubernetes.io/region`;
 - the cloud from `spec.providerID`;
 - spot from the labels in step 4;
-- the node pool from `karpenter.sh/nodepool`, `karpenter.sh/provisioner-name`, `eks.amazonaws.com/nodegroup`, `cloud.google.com/gke-nodepool` or `kubernetes.azure.com/agentpool`.
+- the node pool from `karpenter.sh/nodepool`, `karpenter.sh/provisioner-name`, `eks.amazonaws.com/nodegroup`, `cloud.google.com/gke-nodepool`, `kubernetes.azure.com/agentpool` or `agentpool`.
 
-The store's labels always win. A run that reads Datadog does the same when it has also read the kubeconfig to fall back to the cluster. If none of the nodes in the data is in the API's list, the data and the kubeconfig are not the same cluster, and nothing is filled in. A store read with `--url`, and a run whose identity may not list nodes, keep the attributes the store gives. `thoras.node.type_source` records where each node's instance type came from, and `check` says where they would come from before a run.
+The store's labels always win. A run that reads Datadog does the same when it has also read the kubeconfig to fall back to the cluster. If fewer than half of the nodes that report at the end of the data are in the API's list, the data and the kubeconfig are taken to be different clusters, since node names can repeat across clusters, and nothing is filled in. A store read with `--url`, and a run whose identity may not list nodes, keep the attributes the store gives. `thoras.node.type_source` records where each node's instance type came from, and `check` says where they would come from before a run.
 
 ### Nodes that are gone
 

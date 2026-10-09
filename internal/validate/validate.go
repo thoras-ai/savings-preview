@@ -337,6 +337,13 @@ func newChecker() checker {
 			default:
 				add("%s: thoras.node.capacity_type must be one of ('on_demand', 'spot', 'unknown')", where)
 			}
+			if v, ok := at["thoras.node.type_source"]; ok {
+				switch v {
+				case "store", "kubernetes_api", "live_mix":
+				default:
+					add("%s: thoras.node.type_source must be one of ('store', 'kubernetes_api', 'live_mix')", where)
+				}
+			}
 			ident = []any{node}
 		} else {
 			if (dep == "") == (sts == "") {

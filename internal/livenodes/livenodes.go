@@ -83,8 +83,12 @@ type Result struct {
 	FromAPI   int // instance type read from the API
 	Gone      int // no instance type and not in the API's list: priced by the live mix
 	Untyped   int // no instance type, though the API lists the node
-	// Mismatch is set when no node in the file is in the API's list, so the
-	// file and the API are not the same cluster and nothing was filled.
+	// Current counts the nodes that report at the end of the data, and
+	// CurrentListed those of them the API lists.
+	Current, CurrentListed int
+	// Mismatch is set when fewer than half of the nodes that report at the
+	// end of the data are in the API's list, so the data and the API are not
+	// the same cluster and nothing was filled.
 	Mismatch bool
 }
 
@@ -100,15 +104,30 @@ func Fill(f *contract.File, live []contract.Node) Result {
 		byName[n.Name] = n
 	}
 	res := Result{Listed: len(live)}
+	var end int64
 	for _, r := range f.Resources {
 		if r.Node != nil && r.Error == "" {
 			res.Nodes++
 			if _, ok := byName[r.Node.Name]; ok {
 				res.Live++
 			}
+			end = max(end, last(r))
 		}
 	}
-	res.Mismatch = res.Nodes > 0 && res.Live == 0
+	// The nodes that report at the end of the data are the ones running when
+	// the cluster was read, so most of them must be in the list. A name or
+	// two in common is not enough: node names can repeat across clusters.
+	current, listed := 0, 0
+	for _, r := range f.Resources {
+		if r.Node != nil && r.Error == "" && last(r) >= end-max(3*int64(r.StepSeconds), 900) {
+			current++
+			if _, ok := byName[r.Node.Name]; ok {
+				listed++
+			}
+		}
+	}
+	res.Current, res.CurrentListed = current, listed
+	res.Mismatch = res.Nodes > 0 && (res.Live == 0 || 2*listed < current)
 	for _, r := range f.Resources {
 		n := r.Node
 		if n == nil || r.Error != "" {
@@ -155,7 +174,7 @@ func Fill(f *contract.File, live []contract.Node) Result {
 func (r Result) Text() string {
 	switch {
 	case r.Mismatch:
-		return fmt.Sprintf("none of the %d nodes in the data is among the %d nodes the Kubernetes API lists, so instance types come from the store only", r.Nodes, r.Listed)
+		return fmt.Sprintf("only %d of the %d nodes reporting at the end of the data are among the %d nodes the Kubernetes API lists, so the data and the API seem to be different clusters and instance types come from the store only", r.CurrentListed, r.Current, r.Listed)
 	case r.Nodes == 0:
 		return "no node resources to price"
 	}
@@ -170,6 +189,17 @@ func (r Result) Text() string {
 		s += fmt.Sprintf("; %d gone from the cluster with no instance type %s priced by the live instance mix", r.Gone, plural(r.Gone, "is", "are"))
 	}
 	return s
+}
+
+// last is the time of a node resource's latest point.
+func last(r contract.Resource) int64 {
+	var t int64
+	for _, m := range r.Metrics {
+		if n := len(m.Points); n > 0 {
+			t = max(t, m.Points[n-1].T)
+		}
+	}
+	return t
 }
 
 func plural(n int, one, many string) string {

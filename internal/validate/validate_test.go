@@ -378,6 +378,11 @@ func mutations() []mutation {
 			node := find(t, doc, map[string]string{"host.type": "m5.xlarge"})
 			valueOf(node, "thoras.node.capacity_type")["stringValue"] = "reserved"
 		}, "capacity_type"},
+		{"node type source", func(t *testing.T, doc, app, worker obj) {
+			node := find(t, doc, map[string]string{"host.type": "m5.xlarge"})
+			attrs := node["resource"].(obj)["attributes"].([]any)
+			node["resource"].(obj)["attributes"] = append(attrs, obj{"key": "thoras.node.type_source", "value": obj{"stringValue": "guess"}})
+		}, "type_source must be one of"},
 		{"scope version", func(t *testing.T, doc, app, worker obj) {
 			scope(app)["scope"].(obj)["version"] = "2.0.0"
 		}, "scope version must be 1.0.0"},
