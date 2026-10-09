@@ -181,9 +181,9 @@ func TestInteractiveNeedsTerminals(t *testing.T) {
 	}
 	defer null.Close()
 	// /dev/null is a character device but not a terminal.
-	for _, f := range [][2]*os.File{{r, w}, {null, null}, {r, null}} {
-		if interactive(f[0], f[1]) {
-			t.Errorf("interactive(%s, %s)", f[0].Name(), f[1].Name())
+	for _, f := range [][]*os.File{{r, w, w}, {null, null, null}, {r, null, w}} {
+		if interactive(f...) {
+			t.Errorf("interactive(%s, %s, %s)", f[0].Name(), f[1].Name(), f[2].Name())
 		}
 	}
 }

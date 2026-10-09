@@ -103,7 +103,7 @@ The last line sums it up. The exit status is 0 when `run` would read 14 days at 
 
 `savings-preview run` uses your current kubeconfig context, or `--context`. Before it reads any history it finds each cluster's source, as `check` does, and prints a plan: where it will read each cluster from, or why it cannot, what it reads, the files it writes and where, and whether it opens a browser. Then it waits: Enter goes on, and `q` or Ctrl-C quits without reading anything. It then reads, writes the files, and opens the report in your browser. Ctrl-C stops it.
 
-It waits only when stdin and stdout are both terminals. Run from a script, a pipe or CI, it prints the plan and goes on. `--yes` (`-y`) skips the wait in a terminal too.
+It waits only when stdin, stdout and stderr are all terminals. Run from a script, a pipe or CI, or with its output sent to a file, it prints the plan and goes on. `--yes` (`-y`) skips the wait in a terminal too.
 
 ### No metrics store
 

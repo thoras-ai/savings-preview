@@ -24,10 +24,16 @@ const planTimeout = time.Minute
 // timeNow is the time the checks measure history up to; tests replace it.
 var timeNow = time.Now
 
-// interactive reports whether run may wait for Enter: only when both stdin
-// and stdout are terminals, so scripts, pipes and CI never wait.
-func interactive(in, out *os.File) bool {
-	return term.IsTerminal(int(in.Fd())) && term.IsTerminal(int(out.Fd()))
+// interactive reports whether run may wait for Enter: only when stdin,
+// stdout and stderr, where the plan and the prompt go, are all terminals, so
+// scripts, pipes, CI and a redirected log never wait.
+func interactive(files ...*os.File) bool {
+	for _, f := range files {
+		if !term.IsTerminal(int(f.Fd())) {
+			return false
+		}
+	}
+	return true
 }
 
 // preflight finds each cluster's source as check does, prints the plan and,
