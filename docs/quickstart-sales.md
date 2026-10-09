@@ -106,7 +106,7 @@ The files land in the folder you ran it from:
 - **Send `savings-preview.zip`**, or just the `report.html` inside it. `report.html` opens in any browser, with no install.
 - **Open it on the upload page**: https://curly-dollop-gw8yzn1.pages.github.io/ takes `savings-preview.compact.otlp.json`, the zip or `report.html`. Drop several at once to combine clusters into one report. The page needs a GitHub login in the thoras-ai organization.
 - **Show the demo without a cluster**: https://curly-dollop-gw8yzn1.pages.github.io/#sample=demo opens a 60-workload sample cluster. [demo.md](demo.md) walks through it in five minutes.
-- **Show a fleet without a cluster**: https://curly-dollop-gw8yzn1.pages.github.io/#sample=fleet opens a sample report across several clusters.
+- **Show a fleet without a cluster**: https://updog.link/thoras-savings-preview opens a sample report across several clusters.
 
 ## Sending us your results
 

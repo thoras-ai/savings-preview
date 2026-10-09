@@ -6,7 +6,7 @@ To run it on your cluster, start with [docs/getting-started.md](docs/getting-sta
 
 ![The report page with the synthetic sample: the summary section](docs/images/report.png)
 
-The report page is also published at https://curly-dollop-gw8yzn1.pages.github.io/. The site is private: it needs a GitHub login with access to the thoras-ai organization. It opens a `savings-preview.otlp.json`, a `savings-preview.zip` or a `report.html`, or several of them at once, in the browser, and nothing is uploaded.
+The report page is also published at https://curly-dollop-gw8yzn1.pages.github.io/. The site is private: it needs a GitHub login with access to the thoras-ai organization. It opens a `savings-preview.otlp.json`, a `savings-preview.zip` or a `report.html`, or several of them at once, in the browser, and nothing is uploaded. https://updog.link/thoras-savings-preview opens it on a sample fleet of three clusters.
 
 ## Install
 

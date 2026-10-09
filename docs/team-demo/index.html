@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Savings preview team demo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&amp;display=swap">
+<style>
+  body { margin: 0; background: #27272a; font-family: Roboto, Arial, sans-serif; }
+  .slide { margin: 24px auto; width: 1920px; transform-origin: top left; }
+  .frame { width: 1920px; height: 1080px; position: relative; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.4); }
+  .frame > section { position: absolute; inset: 0; box-sizing: border-box; }
+  .frame h1, .frame h2, .frame h3, .frame p, .frame ul { margin: 0; }
+  .frame table { width: 100%; border-collapse: collapse; }
+  .frame th, .frame td { padding: 0.35em 0.6em; border-bottom: 1px solid #e4e4e7; text-align: left; }
+  x-icon { display: none; }
+  x-connector { display: flex; align-items: center; justify-content: center; flex: none; }
+  x-connector::after { content: "\2192"; font-size: 48px; color: #9f9fa9; }
+  .notes { color: #d4d4d8; font-size: 28px; line-height: 1.5; padding: 24px 8px 48px; }
+  .notes b { color: #ffffff; }
+</style>
+</head>
+<body>
+<div class="slide" id="cover"><div class="frame"><section id="cover" data-transition="fade" style="background:#18181b;color:#ffffff;font-family:'Roboto', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:space-between">
+<img src="../../design/assets/thoras-wordmark.svg" alt="Thoras" style="width:320px;height:48px;object-fit:contain">
+<div style="display:flex;flex-direction:column;gap:40px">
+<p style="font-size:32px;font-weight:500;color:#7fc9b3;letter-spacing:4px;text-transform:uppercase">Team demo</p>
+<h1 style="font-size:112px;font-weight:700;line-height:1.05;color:#ffffff">Savings preview</h1>
+<p style="font-size:44px;line-height:1.35;color:#d4d4d8;width:1400px">A read-only CLI that estimates what Thoras would save on any cluster, using the metrics it already has.</p>
+</div>
+<p style="font-size:26px;color:#9f9fa9">David · October 9 · v0.2.1</p>
+</section></div><div class="notes"><b>1.</b> Quick walkthrough of savings preview: what it is, how to run it, a live run against our own clusters, and what's next. Stop me with questions anytime.</div></div>
+<div class="slide" id="problem"><div class="frame"><section id="problem" data-transition="fade" style="background:#f5f4f1;color:#09090b;font-family:'Roboto', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:64px">
+<div style="display:flex;flex-direction:column;gap:20px">
+<p style="font-size:26px;font-weight:500;color:#2a6357;letter-spacing:3px;text-transform:uppercase">Why</p>
+<h2 style="font-size:72px;font-weight:700;line-height:1.1;width:1500px">Why we built it</h2>
+</div>
+<div style="display:flex;gap:32px;flex:1">
+<div style="flex:1;display:flex;flex-direction:column;gap:20px;background:#ffffff;padding:48px;border:1px solid #e4e4e7;border-radius:16px">
+<h3 style="font-size:40px;font-weight:500;line-height:1.2">Their environment</h3>
+<p style="font-size:30px;line-height:1.4;color:#52525c">Prospects see our demo, but can't tell what Thoras would do with their own load.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:20px;background:#ffffff;padding:48px;border:1px solid #e4e4e7;border-radius:16px">
+<h3 style="font-size:40px;font-weight:500;line-height:1.2">No install</h3>
+<p style="font-size:30px;line-height:1.4;color:#52525c">Anyone with kubectl access can run it during a call. Nothing goes into the cluster.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:20px;background:#ffffff;padding:48px;border:1px solid #e4e4e7;border-radius:16px">
+<h3 style="font-size:40px;font-weight:500;line-height:1.2">Whole fleet</h3>
+<p style="font-size:30px;line-height:1.4;color:#52525c">One number across every cluster helps price deals before procurement starts.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#71717b">Savings preview · team demo</p>
+</section></div><div class="notes"><b>2.</b> Context from Jen: deals stall between demo and trial because prospects can't picture Thoras in their own environment, and we price deals off partial installs. This gives a number up front, from their own data, with no install.</div></div>
+<div class="slide" id="answer"><div class="frame"><section id="answer" data-transition="fade" style="background:#f5f4f1;color:#09090b;font-family:'Roboto', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:56px">
+<div style="display:flex;flex-direction:column;gap:20px">
+<p style="font-size:26px;font-weight:500;color:#2a6357;letter-spacing:3px;text-transform:uppercase">Savings preview</p>
+<h2 style="font-size:72px;font-weight:700;line-height:1.1;width:1500px">Install and run</h2>
+</div>
+<div style="display:flex;flex-direction:column;gap:24px;background:#18181b;padding:56px;border-radius:16px">
+<p style="font-size:26px;color:#9f9fa9;font-family:'Roboto Mono', 'Courier New', monospace"># install (one line)</p>
+<p style="font-size:30px;color:#ffffff;font-family:'Roboto Mono', 'Courier New', monospace">gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh</p>
+<p style="font-size:26px;color:#9f9fa9;font-family:'Roboto Mono', 'Courier New', monospace"># run against every cluster they're logged in to</p>
+<p style="font-size:30px;color:#7fc9b3;font-family:'Roboto Mono', 'Courier New', monospace">savings-preview --all-contexts</p>
+</div>
+<div style="display:flex;gap:32px">
+<p style="flex:1;font-size:30px;line-height:1.4;color:#52525c">A single binary for macOS and Linux, checksum-verified on install.</p>
+<p style="flex:1;font-size:30px;line-height:1.4;color:#52525c">Finds Prometheus, Datadog or metrics-server on its own.</p>
+<p style="flex:1;font-size:30px;line-height:1.4;color:#52525c">Opens a report in the browser in about a minute.</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#71717b">Savings preview · team demo</p>
+</section></div><div class="notes"><b>3.</b> This is the whole user experience. One line to install, one line to run. It uses the kubectl logins they already have, so there's no setup and no license key. It finds whatever metrics they already collect: almost everyone has Prometheus.</div></div>
+<div class="slide" id="how"><div class="frame"><section id="how" data-transition="fade" style="background:#f5f4f1;color:#09090b;font-family:'Roboto', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:64px">
+<div style="display:flex;flex-direction:column;gap:20px">
+<p style="font-size:26px;font-weight:500;color:#2a6357;letter-spacing:3px;text-transform:uppercase">Method</p>
+<h2 style="font-size:72px;font-weight:700;line-height:1.1">How it works</h2>
+</div>
+<div style="display:flex;gap:24px;align-items:stretch">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#ffffff;padding:40px;border:1px solid #e4e4e7;border-radius:16px">
+<x-icon name="Key" style="color:#2a6357;width:48px;height:48px"></x-icon>
+<h3 style="font-size:36px;font-weight:500">Their login</h3>
+<p style="font-size:28px;line-height:1.4;color:#52525c">The kubeconfig contexts they already use</p>
+</div>
+<x-connector style="width:64px;color:#9f9fa9"></x-connector>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#ffffff;padding:40px;border:1px solid #e4e4e7;border-radius:16px">
+<x-icon name="Database" style="color:#2a6357;width:48px;height:48px"></x-icon>
+<h3 style="font-size:36px;font-weight:500">Their history</h3>
+<p style="font-size:28px;line-height:1.4;color:#52525c">Up to 14 days of requests and usage per workload</p>
+</div>
+<x-connector style="width:64px;color:#9f9fa9"></x-connector>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#ffffff;padding:40px;border:1px solid #e4e4e7;border-radius:16px">
+<x-icon name="Chart" style="color:#2a6357;width:48px;height:48px"></x-icon>
+<h3 style="font-size:36px;font-weight:500">The target</h3>
+<p style="font-size:28px;line-height:1.4;color:#52525c">1.1 × the peak in each 15-minute window</p>
+</div>
+<x-connector style="width:64px;color:#9f9fa9"></x-connector>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#e1f5ec;padding:40px;border:1px solid #afe0cf;border-radius:16px">
+<x-icon name="Star" style="color:#21403a;width:48px;height:48px"></x-icon>
+<h3 style="font-size:36px;font-weight:500;color:#21403a">The report</h3>
+<p style="font-size:28px;line-height:1.4;color:#21403a">Savings, priced from Thoras's own node tables</p>
+</div>
+</div>
+<p style="font-size:32px;line-height:1.4;color:#52525c;width:1500px">Waste is every request above the target. Same simple rule as the forecaster: pay for what you use, plus a buffer.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#71717b">Savings preview · team demo</p>
+</section></div><div class="notes"><b>4.</b> Under the hood it's deliberately simple. Ricky's guidance: take what they use and add the buffer. We read their history, set each workload's target to 1.1 times its peak in any 15-minute window, and count everything requested above that as waste. Node prices come from the same price tables the product uses.</div></div>
+<div class="slide" id="trust"><div class="frame"><section id="trust" data-transition="fade" style="background:#f5f4f1;color:#09090b;font-family:'Roboto', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:56px">
+<div style="display:flex;flex-direction:column;gap:20px">
+<p style="font-size:26px;font-weight:500;color:#2a6357;letter-spacing:3px;text-transform:uppercase">What it touches</p>
+<h2 style="font-size:72px;font-weight:700;line-height:1.1">What it reads and writes</h2>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px">
+<div style="display:flex;flex-direction:column;gap:20px;background:#ffffff;padding:48px;border:1px solid #e4e4e7;border-radius:16px">
+<h3 style="font-size:36px;font-weight:500">Reads</h3>
+<ul style="font-size:30px;line-height:1.5;color:#52525c">
+<li>Services, to find a metrics store</li>
+<li>Prometheus queries through the API server proxy (GET only)</li>
+<li>Pods, workloads, nodes and metrics-server, when there's no store</li>
+<li>Datadog's query API, when given keys</li>
+</ul>
+</div>
+<div style="display:flex;flex-direction:column;gap:20px;background:#ffffff;padding:48px;border:1px solid #e4e4e7;border-radius:16px">
+<h3 style="font-size:36px;font-weight:500">Never</h3>
+<ul style="font-size:30px;line-height:1.5;color:#52525c">
+<li>Installs anything in the cluster</li>
+<li>Creates, changes or deletes a resource</li>
+<li>Uploads data anywhere</li>
+<li>Asks for credentials it doesn't already have</li>
+</ul>
+</div>
+</div>
+<p style="font-size:30px;line-height:1.4;color:#52525c"><b style="color:#09090b">savings-preview check</b> shows what it can read and from where, without pulling any history.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#71717b">Savings preview · team demo</p>
+</section></div><div class="notes"><b>5.</b> This matters for running it on a prospect's call. It only reads, through their existing kubectl access. Nothing is installed or changed, and the data stays on the laptop. The access list is in docs/security.md and deploy/rbac if anyone needs a scoped service account.</div></div>
+<div class="slide" id="live"><div class="frame"><section id="live" data-transition="fade" style="background:#21403a;color:#ffffff;font-family:'Roboto', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:center;gap:48px">
+<p style="font-size:32px;font-weight:500;color:#7fc9b3;letter-spacing:4px;text-transform:uppercase">Live</p>
+<h2 style="font-size:96px;font-weight:700;line-height:1.05;color:#ffffff">Live run on dev, demo and integration-test</h2>
+<div style="display:flex;flex-direction:column;gap:16px;background:#18181b;padding:48px;border-radius:16px">
+<p style="font-size:32px;color:#ffffff;font-family:'Roboto Mono', 'Courier New', monospace">savings-preview check --all-contexts</p>
+<p style="font-size:32px;color:#7fc9b3;font-family:'Roboto Mono', 'Courier New', monospace">savings-preview --all-contexts</p>
+</div>
+</section></div><div class="notes"><b>6.</b> Switch to the terminal. First, check: it finds the Prometheus in each cluster and says how much history there is. Then run: it reads all three in parallel, in about a minute, and opens the report. Kubeconfig for the demo: ~/workspace/savings-preview-demo/thoras.kubeconfig (pass --kubeconfig). Fallback if anything breaks: fleet-1d/savings-preview.zip.</div></div>
+<div class="slide" id="results"><div class="frame"><section id="results" data-transition="fade" style="display:flex; flex-direction:column; gap:56px; padding:128px 128px 160px; background:#f5f4f1">
+  <div style="display:flex; flex-direction:column; gap:20px">
+    <p style="font-family:Roboto, Arial, sans-serif; font-size:26px; font-weight:500; letter-spacing:3px; text-transform:uppercase; color:#2a6357">What it found</p>
+    <h2 style="font-family:Roboto, Arial, sans-serif; font-size:72px; font-weight:700; line-height:1.1; color:#09090b">Results across the three clusters</h2>
+  </div>
+  <div style="display:flex; flex-direction:row; gap:32px">
+    <div style="display:flex; flex-direction:column; gap:16px; flex:1; padding:48px; background:#ffe3e3; border:1px solid #ffbdbd; border-radius:16px">
+      <p style="font-family:Roboto, Arial, sans-serif; font-size:28px; font-weight:500; color:#ab091e">Today</p>
+      <p style="font-family:Roboto, Arial, sans-serif; font-size:96px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; color:#09090b">$26,465</p>
+      <p style="font-family:Roboto, Arial, sans-serif; font-size:30px; color:#52525c">a year · 23% utilization</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:16px; flex:1; padding:48px; background:#e1f5ec; border:1px solid #afe0cf; border-radius:16px">
+      <p style="font-family:Roboto, Arial, sans-serif; font-size:28px; font-weight:500; color:#21403a">With Thoras</p>
+      <p style="font-family:Roboto, Arial, sans-serif; font-size:96px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; color:#09090b">$8,597</p>
+      <p style="font-family:Roboto, Arial, sans-serif; font-size:30px; color:#52525c">a year · 70% utilization</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:16px; flex:1; padding:48px; background:#ffffff; border:1px solid #e4e4e7; border-radius:16px">
+      <p style="font-family:Roboto, Arial, sans-serif; font-size:28px; font-weight:500; color:#2a6357">Savings</p>
+      <p style="font-family:Roboto, Arial, sans-serif; font-size:96px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; color:#2a6357">$17,868</p>
+      <p style="font-family:Roboto, Arial, sans-serif; font-size:30px; color:#52525c">a year · 68%</p>
+    </div>
+  </div>
+  <p style="font-family:Roboto, Arial, sans-serif; font-size:30px; line-height:1.4; color:#52525c">3 clusters · 159 of 168 workloads counted · Prometheus, up to 7 days of history · read in about a minute</p>
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:Roboto, Arial, sans-serif; font-size:24px; color:#71717b">Savings preview · team demo · dry run, October 8</p>
+</section></div><div class="notes"><b>7.</b> These are from last night's dry run; today's live numbers will be close. Pricing note for the team: these clusters' Prometheus doesn't export node instance types, so nodes are priced at the default node right now. A fix that reads instance types from the Kubernetes API is in progress.</div></div>
+<div class="slide" id="clusters"><div class="frame"><section id="clusters" data-transition="fade" style="display:flex; flex-direction:column; gap:56px; padding:128px 128px 160px; background:#f5f4f1">
+  <div style="display:flex; flex-direction:column; gap:20px">
+    <p style="font-family:Roboto, Arial, sans-serif; font-size:26px; font-weight:500; letter-spacing:3px; text-transform:uppercase; color:#2a6357">By cluster</p>
+    <h2 style="font-family:Roboto, Arial, sans-serif; font-size:72px; font-weight:700; line-height:1.1; color:#09090b">Results by cluster</h2>
+  </div>
+  <div style="display:flex; flex-direction:column; padding:24px 48px; background:#ffffff; border:1px solid #e4e4e7; border-radius:16px">
+    <table style="font-family:Roboto, Arial, sans-serif; font-size:34px; font-variant-numeric:tabular-nums; color:#09090b">
+      <tr><th style="width:34%">Cluster</th><th style="width:22%; text-align:right">Today / yr</th><th style="width:22%; text-align:right">With Thoras</th><th style="width:22%; text-align:right">Saves</th></tr>
+      <tr><td>integration-test</td><td style="text-align:right">$7,473</td><td style="text-align:right">$217</td><td style="text-align:right; color:#2a6357">$7,256 (97%)</td></tr>
+      <tr><td>dev</td><td style="text-align:right">$13,978</td><td style="text-align:right">$7,106</td><td style="text-align:right; color:#2a6357">$6,872 (49%)</td></tr>
+      <tr><td>demo</td><td style="text-align:right">$5,013</td><td style="text-align:right">$1,274</td><td style="text-align:right; color:#2a6357">$3,740 (75%)</td></tr>
+    </table>
+  </div>
+  <p style="width:1500px; font-family:Roboto, Arial, sans-serif; font-size:30px; line-height:1.4; color:#52525c">In the report, Details for engineers breaks every section down by cluster: workloads, namespaces, nodes and capacity.</p>
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:Roboto, Arial, sans-serif; font-size:24px; color:#71717b">Savings preview · team demo · dry run, October 8</p>
+</section></div><div class="notes"><b>8.</b> integration-test requests 187% of its allocatable CPU and uses about 2%. Click into a cluster in the report to show the drill-down: workloads table, namespaces map, cluster and nodes.</div></div>
+<div class="slide" id="fleet"><div class="frame"><section id="fleet" data-transition="fade" style="display:flex; flex-direction:column; gap:56px; padding:128px 128px 160px; background:#f5f4f1">
+  <div style="display:flex; flex-direction:column; gap:20px">
+    <p style="font-family:Roboto, Arial, sans-serif; font-size:26px; font-weight:500; letter-spacing:3px; text-transform:uppercase; color:#2a6357">Many clusters</p>
+    <h2 style="font-family:Roboto, Arial, sans-serif; font-size:72px; font-weight:700; line-height:1.1; color:#09090b">Running across many clusters</h2>
+  </div>
+  <div style="display:grid; gap:32px; grid-template-columns:1fr 1fr">
+    <div style="display:flex; flex-direction:column; gap:16px; padding:40px; background:#ffffff; border:1px solid #e4e4e7; border-radius:16px">
+      <p style="font-family:'Roboto Mono', 'Courier New', monospace; font-size:30px; color:#2a6357">--all-contexts</p>
+      <p style="font-family:Roboto, Arial, sans-serif; font-size:30px; line-height:1.4; color:#52525c">Every context in the kubeconfig</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:16px; padding:40px; background:#ffffff; border:1px solid #e4e4e7; border-radius:16px">
+      <p style="font-family:'Roboto Mono', 'Courier New', monospace; font-size:30px; color:#2a6357">--context a --context b</p>
+      <p style="font-family:Roboto, Arial, sans-serif; font-size:30px; line-height:1.4; color:#52525c">A chosen subset</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:16px; padding:40px; background:#ffffff; border:1px solid #e4e4e7; border-radius:16px">
+      <p style="font-family:'Roboto Mono', 'Courier New', monospace; font-size:30px; color:#2a6357">--contexts-file clusters.txt</p>
+      <p style="font-family:Roboto, Arial, sans-serif; font-size:30px; line-height:1.4; color:#52525c">A list, one context per line</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:16px; padding:40px; background:#ffffff; border:1px solid #e4e4e7; border-radius:16px">
+      <p style="font-family:'Roboto Mono', 'Courier New', monospace; font-size:30px; color:#2a6357">Upload page</p>
+      <p style="font-family:Roboto, Arial, sans-serif; font-size:30px; line-height:1.4; color:#52525c">Drop several files at once to combine separate runs</p>
+    </div>
+  </div>
+  <p style="width:1500px; font-family:Roboto, Arial, sans-serif; font-size:30px; line-height:1.4; color:#52525c">Up to three clusters are read at a time. One that fails is listed with the reason, and the rest still run.</p>
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:Roboto, Arial, sans-serif; font-size:24px; color:#71717b">Savings preview · team demo</p>
+</section></div><div class="notes"><b>9.</b> This is what Jen asked for: a prospect with 30 clusters runs one command, or each team runs it on its own cluster and sends us the files, and we combine them on the upload page.</div></div>
+<div class="slide" id="send"><div class="frame"><section id="send" data-transition="fade" style="background:#f5f4f1;color:#09090b;font-family:'Roboto', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:56px">
+<div style="display:flex;flex-direction:column;gap:20px">
+<p style="font-size:26px;font-weight:500;color:#2a6357;letter-spacing:3px;text-transform:uppercase">Getting results back</p>
+<h2 style="font-size:72px;font-weight:700;line-height:1.1">Getting results back from a customer</h2>
+</div>
+<div style="display:flex;gap:24px;align-items:stretch">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#ffffff;padding:40px;border:1px solid #e4e4e7;border-radius:16px">
+<h3 style="font-size:36px;font-weight:500">They run</h3>
+<p style="font-size:28px;color:#2a6357;font-family:'Roboto Mono', 'Courier New', monospace">savings-preview --all-contexts --collect-only</p>
+</div>
+<x-connector style="width:64px;color:#9f9fa9"></x-connector>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#ffffff;padding:40px;border:1px solid #e4e4e7;border-radius:16px">
+<h3 style="font-size:36px;font-weight:500">They send</h3>
+<p style="font-size:28px;line-height:1.4;color:#52525c">savings-preview.zip: the report plus each cluster's data, a few MB</p>
+</div>
+<x-connector style="width:64px;color:#9f9fa9"></x-connector>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#ffffff;padding:40px;border:1px solid #e4e4e7;border-radius:16px">
+<h3 style="font-size:36px;font-weight:500">We open</h3>
+<p style="font-size:28px;line-height:1.4;color:#52525c">report.html directly, or drop the zip on the upload page</p>
+</div>
+</div>
+<p style="font-size:30px;line-height:1.4;color:#52525c;width:1500px">Before reading anything, run prints what it found and what it will do, and waits for Enter.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#71717b">Savings preview · team demo · --collect-only and the prompt land in v0.2.2</p>
+</section></div><div class="notes"><b>10.</b> --collect-only skips the browser and server and exits, telling them what to send. The plan-and-confirm prompt shows exactly what it detected and what it will read before it does anything. Both are in review now and ship in v0.2.2.</div></div>
+<div class="slide" id="playbook"><div class="frame"><section id="playbook" data-transition="fade" style="background:#f5f4f1;color:#09090b;font-family:'Roboto', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:56px">
+<div style="display:flex;flex-direction:column;gap:20px">
+<p style="font-size:26px;font-weight:500;color:#2a6357;letter-spacing:3px;text-transform:uppercase">On calls</p>
+<h2 style="font-size:72px;font-weight:700;line-height:1.1">Using it on sales calls</h2>
+</div>
+<div style="display:flex;flex-direction:column;gap:0px;background:#ffffff;border:1px solid #e4e4e7;border-radius:16px">
+<div style="display:flex;gap:32px;align-items:center;padding:32px 48px;border-bottom:1px solid #e4e4e7">
+<p style="font-size:44px;font-weight:700;color:#2a6357;width:64px">1</p>
+<p style="font-size:32px;line-height:1.4">During a demo with an engineer on the call, have them run it on one cluster.</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:32px 48px;border-bottom:1px solid #e4e4e7">
+<p style="font-size:44px;font-weight:700;color:#2a6357;width:64px">2</p>
+<p style="font-size:32px;line-height:1.4">Before procurement, ask for a --collect-only run across the fleet to price the deal.</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:32px 48px">
+<p style="font-size:44px;font-weight:700;color:#2a6357;width:64px">3</p>
+<p style="font-size:32px;line-height:1.4">Without a cluster, show the samples on the Pages site (#sample=fleet).</p>
+</div>
+</div>
+<p style="font-size:30px;line-height:1.4;color:#52525c">Instructions for sales are in docs/quickstart-sales.md.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#71717b">Savings preview · team demo</p>
+</section></div><div class="notes"><b>11.</b> Jen wants this to be a natural part of the demo experience. During rollouts, it can also show which clusters to start with. The Pages site link: curly-dollop-gw8yzn1.pages.github.io, private to the org.</div></div>
+<div class="slide" id="next"><div class="frame"><section id="next" data-transition="fade" style="background:#f5f4f1;color:#09090b;font-family:'Roboto', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:56px">
+<div style="display:flex;flex-direction:column;gap:20px">
+<p style="font-size:26px;font-weight:500;color:#2a6357;letter-spacing:3px;text-transform:uppercase">Status</p>
+<h2 style="font-size:72px;font-weight:700;line-height:1.1">Status and next steps</h2>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:32px">
+<div style="display:flex;flex-direction:column;gap:20px;background:#ffffff;padding:40px;border:1px solid #e4e4e7;border-radius:16px">
+<h3 style="font-size:34px;font-weight:500;color:#2a6357">Shipped (v0.2.1)</h3>
+<ul style="font-size:28px;line-height:1.5;color:#52525c">
+<li>Prometheus, Datadog, Grafana, Mimir, AMP, GKE, Azure, CloudWatch</li>
+<li>Polling fallback</li>
+<li>Multi-cluster report</li>
+<li>Product pricing tables</li>
+</ul>
+</div>
+<div style="display:flex;flex-direction:column;gap:20px;background:#ffffff;padding:40px;border:1px solid #e4e4e7;border-radius:16px">
+<h3 style="font-size:34px;font-weight:500;color:#2a6357">In progress (v0.2.2)</h3>
+<ul style="font-size:28px;line-height:1.5;color:#52525c">
+<li>Short cluster names, per-cluster breakdowns</li>
+<li>Plan and confirm before running</li>
+<li>--collect-only</li>
+<li>Instance types from the Kubernetes API</li>
+</ul>
+</div>
+<div style="display:flex;flex-direction:column;gap:20px;background:#ffffff;padding:40px;border:1px solid #e4e4e7;border-radius:16px">
+<h3 style="font-size:34px;font-weight:500;color:#2a6357">Open questions</h3>
+<ul style="font-size:28px;line-height:1.5;color:#52525c">
+<li>Open source it? (Jen and Nilo)</li>
+<li>Homebrew and npx install</li>
+<li>Paste-into-Claude setup</li>
+<li>Datadog across many clusters</li>
+</ul>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#71717b">Savings preview · team demo</p>
+</section></div><div class="notes"><b>12.</b> Open-sourcing changes distribution most: a public repo means brew install, npx, and a link from the website with no GitHub token. Feedback on what's missing for your own calls is the most useful thing today.</div></div>
+<div class="slide" id="close"><div class="frame"><section id="close" data-transition="fade" style="background:#18181b;color:#ffffff;font-family:'Roboto', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:space-between">
+<img src="../../design/assets/thoras-wordmark.svg" alt="Thoras" style="width:320px;height:48px;object-fit:contain">
+<div style="display:flex;flex-direction:column;gap:40px">
+<h2 style="font-size:96px;font-weight:700;line-height:1.05;color:#ffffff">Links</h2>
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:32px;color:#d4d4d8">Repo: <span style="color:#7fc9b3">github.com/thoras-ai/savings-preview</span></p>
+<p style="font-size:32px;color:#d4d4d8">Samples: <a href="https://updog.link/thoras-savings-preview" style="color:#7fc9b3">updog.link/thoras-savings-preview</a></p>
+<p style="font-size:32px;color:#d4d4d8">Sales guide: <span style="color:#7fc9b3">docs/quickstart-sales.md</span></p>
+</div>
+</div>
+<p style="font-size:26px;color:#9f9fa9">Questions?</p>
+</section></div><div class="notes"><b>13.</b> Install line is on slide 3. If gh says release not found, your active gh account can't see thoras-ai: set GH_TOKEN from your Thoras account first.</div></div>
+<script>
+  // Scale the 1920px slides to the window, and step through them with the keyboard.
+  const slides = [...document.querySelectorAll('.slide')];
+  function fit() {
+    const s = Math.min(1, (window.innerWidth - 48) / 1920);
+    for (const el of slides) {
+      el.style.transform = 'scale(' + s + ')';
+      el.style.marginBottom = (-(1 - s) * el.offsetHeight + 24) + 'px';
+      el.style.marginLeft = Math.max(24, (window.innerWidth - 1920 * s) / 2) + 'px';
+    }
+  }
+  window.addEventListener('resize', fit); fit();
+  document.addEventListener('keydown', e => {
+    const step = ['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key) ? 1 : ['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key) ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const y = window.scrollY + 1;
+    const tops = slides.map(el => el.getBoundingClientRect().top + window.scrollY);
+    let i = tops.findIndex(t => t >= y);
+    i = step > 0 ? (i < 0 ? slides.length - 1 : i) : Math.max(0, (i < 0 ? slides.length : i) - 2);
+    window.scrollTo({ top: tops[i] - 24, behavior: 'smooth' });
+  });
+</script>
+</body>
+</html>
