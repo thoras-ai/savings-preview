@@ -261,3 +261,28 @@ test('a fleet whose clusters end at different times charts no cliff at the end',
   const last = s.reqCpu[s.reqCpu.length - 1], before = s.reqCpu[s.reqCpu.length - 2];
   assert.ok(Math.abs(last - before) < 0.01 * before, last + ' after ' + before);
 });
+
+// A copy of doc with every point moved later by sec seconds.
+function shifted(doc, sec) {
+  const out = JSON.parse(JSON.stringify(doc));
+  const ns = BigInt(sec) * 1000000000n;
+  out.resourceMetrics.forEach(rm => (rm.scopeMetrics || []).forEach(sm => sm.metrics.forEach(m => {
+    const pts = (m.gauge || m.sum || {}).dataPoints || [];
+    pts.forEach(p => { p.timeUnixNano = String(BigInt(p.timeUnixNano) + ns); if (p.startTimeUnixNano) p.startTimeUnixNano = String(BigInt(p.startTimeUnixNano) + ns); });
+  })));
+  return out;
+}
+
+test('a fleet chart drops end buckets that not every cluster reaches, so its ends do not dip', () => {
+  const x = named(inter, 'x', '1.4.0'), y = named(shifted(inter, 240), 'y', '1.4.0');
+  const r = model.compute(model.prepare({ resourceMetrics: x.resourceMetrics.concat(y.resourceMetrics) }), model.defaultLevers);
+  const cur = Array.from(r.series.cur).filter(Number.isFinite);
+  const sorted = cur.slice().sort((p, q) => p - q), median = sorted[Math.floor(sorted.length / 2)];
+  assert.ok(cur.length > 4);
+  assert.ok(cur[0] > 0.8 * median, 'first ' + cur[0] + ' vs median ' + median);
+  assert.ok(cur[cur.length - 1] > 0.8 * median, 'last ' + cur[cur.length - 1] + ' vs median ' + median);
+  // A single cluster's chart keeps both ends.
+  const one = model.compute(model.prepare(x), model.defaultLevers);
+  const two = model.compute(model.prepare({ resourceMetrics: x.resourceMetrics.concat(named(inter, 'z', '1.4.0').resourceMetrics) }), model.defaultLevers);
+  assert.strictEqual(two.series.t.length, one.series.t.length);
+});
