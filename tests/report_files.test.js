@@ -67,6 +67,36 @@ test('prefers a contract file in the zip', async () => {
   assert.deepStrictEqual(await files.fromBytes(z), other);
 });
 
+test('opens the zips earlier versions wrote', async () => {
+  // 0.1: the compact data as savings-preview.otlp.json, next to the summary and the page.
+  const old = { resourceMetrics: [{ resource: { attributes: [{ key: 'k8s.cluster.name', value: { stringValue: 'old' } }] } }] };
+  const z = zip([['savings-preview.otlp.json', JSON.stringify(old)], ['summary.json', '{}'], ['report.html', inlined('<script>x()</script>', doc)]]);
+  assert.deepStrictEqual(await files.fromBytes(z), old);
+});
+
+test('reads a single cluster zip from its compact file', async () => {
+  const z = zip([['summary.json', '{}'], ['report.html', inlined('<script>x()</script>', doc)], ['savings-preview.compact.otlp.json', JSON.stringify(doc)]]);
+  assert.deepStrictEqual(await files.fromBytes(z), doc);
+});
+
+function cluster(name, extra) {
+  return { resourceMetrics: [{ resource: { attributes: [{ key: 'k8s.cluster.name', value: { stringValue: name } }].concat(extra || []) } }] };
+}
+
+test('reads a fleet zip from report.html, which also holds the clusters not read', async () => {
+  const a = cluster('a'), b = cluster('b'), failed = cluster('c', [{ key: 'thoras.cluster.error', value: { stringValue: 'Unauthorized' } }]);
+  const fleet = { resourceMetrics: a.resourceMetrics.concat(b.resourceMetrics, failed.resourceMetrics) };
+  const z = zip([['summary.json', '{}'], ['report.html', inlined('<script>x()</script>', fleet)],
+    ['savings-preview.clusters/a.compact.otlp.json', JSON.stringify(a)], ['savings-preview.clusters/b.compact.otlp.json', JSON.stringify(b)]]);
+  assert.deepStrictEqual(await files.fromBytes(z), fleet);
+});
+
+test('joins the per-cluster files of a zip without report.html', async () => {
+  const a = cluster('a'), b = cluster('b');
+  const z = zip([['savings-preview.clusters/a.compact.otlp.json', JSON.stringify(a)], ['savings-preview.clusters/b.compact.otlp.json', JSON.stringify(b)]]);
+  assert.deepStrictEqual(await files.fromBytes(z), { resourceMetrics: a.resourceMetrics.concat(b.resourceMetrics) });
+});
+
 test('explains files it cannot read', async () => {
   await assert.rejects(files.fromBytes(new TextEncoder().encode('{nope')), /not valid JSON/);
   await assert.rejects(files.fromBytes(zip([['summary.json', '{}']])), /no report.html/);

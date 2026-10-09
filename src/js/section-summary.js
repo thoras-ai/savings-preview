@@ -19,7 +19,7 @@
   var DAY = 86400;
   var BOOK_DEMO = 'https://www.thoras.ai/book-a-demo';
   var LONG_RUN = 'savings-preview run --duration 168h';
-  // Readings that cover less than this get the run-it-for-a-week next step.
+  // Readings that cover less than this get a next step for a longer window.
   var FULL_WEEK = 7 * DAY;
   // A workload above half its highest usage for less than this share of the
   // window runs in bursts, like a batch job.
@@ -64,6 +64,17 @@
   // Under a week of data, or a single reading, the figure misses part of a
   // full week of demand.
   function thin(r, st) { return r.fidelity.snapshot || windowSeconds(r, st) < FULL_WEEK; }
+
+  // The next step for a short window: {text, code}, or null. --duration sets
+  // how long polling runs, so it helps only when a cluster was polled; a
+  // store-backed run gets more history from the store.
+  function longer(r, st) {
+    if (!thin(r, st)) return null;
+    if (r.fidelity.snapshot || polled(r.fidelity)) return { text: 'Run it for a week for a full-month figure: ', code: LONG_RUN };
+    // A shorter range picked on the page is not a short history.
+    if (r.fidelity.spanSeconds >= FULL_WEEK) return null;
+    return { text: 'With 14 days of history in your metrics store, the same run gives the full figure.', code: '' };
+  }
 
   function provenance(r, st) {
     var f = r.fidelity, span = windowSeconds(r, st), from;
@@ -290,8 +301,9 @@
   }
 
   function nextCard(r, st) {
-    var longer = thin(r, st) ? '<p class="muted">Run it for a week for a full-month figure: <code>' + esc(LONG_RUN) + '</code></p>' : '';
-    return '<div class="card next"><h2>Next step</h2><p>A two-week proof of value on ' + (r.fleet ? 'these clusters' : 'this cluster') + ', read-only, with the same numbers measured live.</p>' + longer +
+    var more = longer(r, st);
+    var line = more ? '<p class="muted">' + esc(more.text) + (more.code ? '<code>' + esc(more.code) + '</code>' : '') + '</p>' : '';
+    return '<div class="card next"><h2>Next step</h2><p>A two-week proof of value on ' + (r.fleet ? 'these clusters' : 'this cluster') + ', read-only, with the same numbers measured live.</p>' + line +
       '<div class="next-actions"><a class="button" href="' + BOOK_DEMO + '" target="_blank" rel="noopener">Book a demo</a>' +
       '<button type="button" class="button button-quiet" data-copy-summary>Copy summary</button></div></div>';
   }
@@ -391,7 +403,7 @@
   }
 
   var api = {
-    EMPTY: EMPTY, coverage: coverage, provenance: provenance, thin: thin, figures: figures, utilization: utilization, pick: pick, activeShare: activeShare,
+    EMPTY: EMPTY, coverage: coverage, provenance: provenance, thin: thin, longer: longer, figures: figures, utilization: utilization, pick: pick, activeShare: activeShare,
     oomKilled: oomKilled, engineers: engineers, clustersCard: clustersCard, headline: headline, method: method, labelsOf: labelsOf, summaryText: summaryText, markup: markup, day: day
   };
   if (node) module.exports = api;

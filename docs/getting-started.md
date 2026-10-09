@@ -101,7 +101,9 @@ The last line sums it up. The exit status is 0 when `run` would read 14 days at 
 
 ## Run
 
-`savings-preview run` uses your current kubeconfig context, or `--context`. It prints what it will read before reading anything, picks a source, writes the files, and opens the report in your browser. Ctrl-C stops it.
+`savings-preview run` uses your current kubeconfig context, or `--context`. Before it reads any history it finds each cluster's source, as `check` does, and prints a plan: where it will read each cluster from, or why it cannot, what it reads, the files it writes and where, and whether it opens a browser. Then it waits: Enter goes on, and `q` or Ctrl-C quits without reading anything. It then reads, writes the files, and opens the report in your browser. Ctrl-C stops it.
+
+It waits only when stdin, stdout and stderr are all terminals. Run from a script, a pipe or CI, or with its output sent to a file, it prints the plan and goes on. `--yes` (`-y`) skips the wait in a terminal too.
 
 ### No metrics store
 
@@ -194,7 +196,7 @@ Each cluster needs the same read access as a single-cluster run, in that cluster
 
 A cluster that cannot be read, because its context is missing, its credentials have expired or it has no usage data, does not stop the others. The run lists it with the reason at the end and in the report's Data and method section, and fails only when no cluster can be read. Two contexts that point at the same kubeconfig cluster are each read and named after their context.
 
-The run writes the same files as a single-cluster run, holding every cluster: `savings-preview.otlp.json`, `savings-preview.compact.otlp.json` and `savings-preview.zip`. `summary.json` in the zip keeps its fields, which now hold the fleet's totals, and adds `clusters`, one entry per cluster with its own figures, or with `error` for a cluster that was not read. `display_name` gives the short name the report shows for each cluster, such as `dev` for an EKS ARN that ends in `cluster/dev`. Each cluster's own file is kept in `savings-preview.clusters/`.
+The run writes the same files as a single-cluster run, holding every cluster: `savings-preview.otlp.json`, `savings-preview.compact.otlp.json` and `savings-preview.zip`. `summary.json` in the zip keeps its fields, which now hold the fleet's totals, and adds `clusters`, one entry per cluster with its own figures, or with `error` for a cluster that was not read. `display_name` gives the short name the report shows for each cluster, such as `dev` for an EKS ARN that ends in `cluster/dev`. Each cluster's own file is kept in `savings-preview.clusters/`, and the zip carries each cluster's compact file under the same folder name.
 
 Datadog, `--url`, `--cluster-name` and `--source datadog` name one cluster, so they work only with one context. To read clusters that live in Datadog or in one shared store, run once per cluster with `--selector`, and open the files together on the report page.
 
@@ -211,7 +213,7 @@ The report opens on one page:
 - **The gap chart**: requested spend today against spend with Thoras over the window, with usage under them and the waste hatched.
 - **Three workloads, before and after**: monthly spend today and with Thoras for the biggest saver that runs all day, a job that runs in bursts, and one that is already right-sized. Select one to open its drill-down.
 - **Across your fleet**: the saving times the number of clusters like this one, in dollars and in loaded engineers.
-- **Next step**: Book a demo, and Copy summary, which copies a few plain lines for chat or email, with a line per cluster in a report of several. With less than 7 days of data it also suggests a week-long run.
+- **Next step**: Book a demo, and Copy summary, which copies a few plain lines for chat or email, with a line per cluster in a report of several. With less than 7 days of data it also suggests a week-long run when the cluster was polled, or 14 days of history in the store when the data came from one.
 
 A report of several clusters opens on the fleet: the headline and Today and with Thoras add up every cluster, each priced from its own nodes, the gap chart sums them over the window, a table lists each cluster's spend today and with Thoras, the biggest saving first, and Across your fleet counts the clusters that have workloads in the figures. Select a cluster to see page one for it alone; Show all clusters goes back. Under Assumptions, Clusters includes or excludes clusters from every figure, and the link keeps the choice. Namespaces are named `cluster/namespace`, since clusters often share namespace names.
 
@@ -229,9 +231,21 @@ The page address keeps the settings, so **Copy link** in the header gives a link
 
 ## Share the results
 
-Send `savings-preview.zip` to Thoras. It holds `summary.json` (cluster name, time span, confidence tier, totals, the full file's name and size, the tool version and when it was written) and `report.html`, which opens from disk in any browser and carries a 15-minute copy of the data. Open both before sending if you want to see exactly what leaves your machine.
+Send `savings-preview.zip` to Thoras. It holds `summary.json` (cluster name, time span, confidence tier, totals, the full file's name and size, the tool version and when it was written), `report.html`, which opens from disk in any browser and carries a 15-minute copy of the data, and that same copy as `savings-preview.compact.otlp.json`, or one file per cluster in `savings-preview.clusters/` for several clusters. Open them before sending if you want to see exactly what leaves your machine.
 
 The full-resolution file, `savings-preview.otlp.json`, stays on your machine and is not in the zip. The cluster name on EKS is often the cluster ARN, which includes the AWS account ID; set `--cluster-name` to use another name.
+
+## Sending us your results
+
+If you are running Savings Preview to send the result to Thoras, add `--collect-only`:
+
+    savings-preview --context <context> --collect-only
+
+It prints its plan and waits for Enter, reads and writes the same files as `run`, then exits without opening a browser or serving the report. Its last lines say what to send:
+
+    Send savings-preview.zip to your Thoras contact. It holds the report and the data, and nothing else from your environment.
+
+To run it from a script, add `--yes`, which starts without waiting for Enter. Without a terminal it never waits.
 
 ## Troubleshooting
 
@@ -251,4 +265,4 @@ The full-resolution file, `savings-preview.otlp.json`, stays on your machine and
 | `another poller is writing ...` | A poll with the same output file is still running. Stop it, or pass another `-o`. |
 | `N running pods are not owned by a Deployment or StatefulSet` | Expected: DaemonSets, Jobs and bare pods are not counted. |
 | `the store has no per-container usage series` | The container runtime does not label container usage, so each pod's usage is split between its containers by their requests. The figures are still usable. |
-| Next step suggests a week-long run | Less than 7 days of history. Point `run` at a store with more, or poll longer. |
+| Next step suggests a week-long run, or 14 days of history in the store | Less than 7 days of history. Poll longer, or keep more history in the store. |

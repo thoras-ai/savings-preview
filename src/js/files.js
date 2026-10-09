@@ -78,14 +78,22 @@
   }
 
   // Prefers a contract file in the zip, then the report page the CLI puts there.
+  // The CLI's zip also carries each cluster's compact file in a NAME.clusters
+  // folder. Its report.html holds all of them and the clusters that could not
+  // be read, so those files are read, together, only when it is missing.
   function fromZip(bytes) {
     return Promise.resolve().then(function () {
       var entries = zipEntries(bytes);
       var base = function (e) { return e.name.split('/').pop(); };
-      var pick = entries.filter(function (e) { return /\.otlp\.json$/.test(base(e)); })[0] ||
+      var data = entries.filter(function (e) { return /\.otlp\.json$/.test(base(e)); });
+      var perCluster = function (e) { return /(^|\/)[^/]+\.clusters\//.test(e.name); };
+      var pick = data.filter(function (e) { return !perCluster(e); })[0] ||
         entries.filter(function (e) { return /\.html?$/.test(base(e)); })[0];
-      if (!pick) fail('That zip has no report.html or .otlp.json file in it.');
-      return entryText(bytes, pick).then(fromText);
+      if (pick) return entryText(bytes, pick).then(fromText);
+      if (!data.length) fail('That zip has no report.html or .otlp.json file in it.');
+      return Promise.all(data.map(function (e) {
+        return entryText(bytes, e).then(function (text) { return { name: e.name, doc: fromText(text) }; });
+      })).then(function (list) { return combine(list).doc; });
     });
   }
 

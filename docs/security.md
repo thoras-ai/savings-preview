@@ -84,7 +84,7 @@ On your machine it writes:
 - the output file, `savings-preview.otlp.json` by default (`--out` for `prometheus`, `datadog` and `run`, `-o` for `poll` and `run`);
 - for `poll`, and for `run` when it polls, a `FILE.readings/` directory holding the readings taken so far, so a stopped run can continue;
 - for `run` and `export --compact`, a compact copy of the output file next to it (`savings-preview.compact.otlp.json` by default): the same resources at 15-minute steps;
-- for `run`, a zip next to the output file (`savings-preview.zip` by default) holding `summary.json` (cluster name, time span, fidelity tier, the savings totals, and the file name and size of the full output file) and `report.html`, the report page with the compact file inside it;
+- for `run`, a zip next to the output file (`savings-preview.zip` by default) holding `summary.json` (cluster name, time span, fidelity tier, the savings totals, and the file name and size of the full output file), `report.html`, the report page with the compact file inside it, and the compact file itself, or each cluster's compact file under `savings-preview.clusters/` with several contexts;
 - for `run` with several contexts, a `savings-preview.clusters/` directory next to the output file with each cluster's own file, its compact copy and, for a cluster that polls, its readings. The output file, the compact file and the zip hold every cluster, and `summary.json` lists them with the reason any could not be read.
 
 ## What the output contains

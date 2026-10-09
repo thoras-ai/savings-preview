@@ -382,6 +382,7 @@
     if (!anyValid) { p.reason = 'No time with complete data'; return p; }
     s.t = grid; s.step = step;
     p.s = s;
+    p.compacted = usable.some(function (c) { return c.sourceStep < c.coarseStep; });
     p.weight = weight;
     p.replicas = replicas;
     p.limCpu = hasLimCpu ? limCpu : null;
@@ -425,7 +426,7 @@
   function computeWorkload(p, rates, lv) {
     var res = {
       id: p.id, cluster: p.cluster, ns: p.ns, nsName: p.nsName, kind: p.kind, name: p.name, containers: p.containers, notes: p.notes,
-      status: p.status, reason: p.reason, series: null,
+      status: p.status, reason: p.reason, series: null, chart: null,
       annualSpend: 0, annualSavings: 0, savingsPct: 0, wasteCores: 0, wasteGiB: 0, reqCores: 0, reqGiB: 0, useCores: 0, useGiB: 0
     };
     if (!p.s) return res;
@@ -451,6 +452,7 @@
       p.wasteMem[k] = Math.max(0, s.reqMem[k] - s.tgtMem[k]);
     }
     res.series = lv.range ? clip(s, lv.range) : s;
+    res.chart = p.partialEnd ? withoutLast(res.series, s.t[n - 1]) : res.series;
     res.reqCores = mean(s.reqCpu, weight, lo, hi);
     res.reqGiB = mean(s.reqMem, weight, lo, hi);
     res.useCores = mean(s.useCpu, weight, lo, hi);
@@ -472,21 +474,22 @@
     return name;
   }
 
-  // Sum workload series onto one grid. Each workload adds its mean to a
+  // Sum workload chart series onto one grid. Each workload adds its mean to a
   // bucket, except for peaks, where it adds its highest point, and adds
   // nothing outside its first and last point. A bucket inside that span where
   // the workload has no value takes the value of its nearest bucket that has
-  // one. The bucket counts only when the workloads filled this way make up at
-  // most FILL_SHARE of the spend of the workloads in it; otherwise every field
-  // is NaN. Buckets at either end that do not count are dropped.
+  // one. The bucket counts only when the workloads filled this way, other
+  // than across a single missing bucket, make up at most FILL_SHARE of the
+  // spend of the workloads in it; otherwise every field is NaN. Buckets at
+  // either end that do not count are dropped.
   var PEAKS = ['peakCpu', 'peakMem'];
   var FILL_SHARE = 0.05;
   function combine(list) {
     var step = 0, t0 = Infinity, t1 = -Infinity;
     list.forEach(function (w) {
-      step = Math.max(step, w.series.step);
-      t0 = Math.min(t0, w.series.t[0]);
-      t1 = Math.max(t1, w.series.t[w.series.t.length - 1]);
+      step = Math.max(step, w.chart.step);
+      t0 = Math.min(t0, w.chart.t[0]);
+      t1 = Math.max(t1, w.chart.t[w.chart.t.length - 1]);
     });
     if (!(step > 0)) step = 1;
     var nb = Math.floor((t1 - t0) / step) + 1, nf = FIELDS.length;
@@ -501,7 +504,7 @@
     var sum = FIELDS.map(function () { return new Float64Array(nb); }), cnt = new Float64Array(nb), near = new Int32Array(nb);
     var bin = new Int32Array(0);
     list.forEach(function (w) {
-      var s = w.series, n = s.t.length, i, k;
+      var s = w.chart, n = s.t.length, i, k;
       var first = Math.floor((s.t[0] - t0) / step), last = Math.floor((s.t[n - 1] - t0) / step);
       var spend = w.annualSpend > 0 ? w.annualSpend : 0;
       if (bin.length < n) bin = new Int32Array(n);
@@ -519,7 +522,9 @@
       }
       for (k = first; k <= last; k++) {
         inSpend[k] += spend;
-        if (cnt[k]) real[k]++;
+        // One missing bucket, such as a missed scrape, draws through with
+        // the value next to it. Longer gaps count as filled.
+        if (cnt[k] || (k > first && k < last && cnt[k - 1] && cnt[k + 1])) real[k]++;
         else fillSpend[k] += spend;
       }
       for (var f = 0; f < nf; f++) {
@@ -738,6 +743,12 @@
       p.notes = workloadNotes(byWorkload[key]);
       return p;
     });
+    // A compact file's last step is still filling when the run ends: it can
+    // hold a minute of readings, so its peak and the target from it read
+    // low. Charts leave out each cluster's last step; totals keep it.
+    var lastAt = {};
+    workloads.forEach(function (w) { if (w.s) lastAt[w.cluster] = Math.max(lastAt[w.cluster] || -Infinity, w.s.t[w.s.t.length - 1]); });
+    workloads.forEach(function (w) { w.partialEnd = !!(w.s && w.compacted && w.s.t[w.s.t.length - 1] === lastAt[w.cluster]); });
     var namespaces = [];
     workloads.forEach(function (w) { if (namespaces.indexOf(w.ns) < 0) namespaces.push(w.ns); });
     var labels = displayNames(data.clusters.concat(data.failed.map(function (f) { return f.name; })));
@@ -814,8 +825,9 @@
     // cover, the combined chart has some clusters and not others, so a fleet
     // charts only that time. Totals still cover each cluster's own history.
     var window = fleet && !lv.range ? overlap(byCluster) : null;
-    var charted = window ? within(counted, window) : counted;
-    if (!charted.length) { window = null; charted = counted; }
+    var chartable = counted.filter(function (w) { return w.chart; });
+    var charted = window ? within(chartable, window) : chartable;
+    if (!charted.length) { window = null; charted = chartable; }
     var series = charted.length ? combine(charted) : null;
     if (series && lv.range) series = clip(series, lv.range);
     return {
@@ -879,17 +891,27 @@
     return isFinite(a) && isFinite(b) && a < b ? [a, b] : null;
   }
 
-  // The workloads with their series cut to [range[0], range[1]), as combine
+  // The workloads with their chart series cut to [range[0], range[1]), as combine
   // reads them. The end is one step past the last point of the cluster that
   // ends first, so a point at it belongs to the other clusters only.
   function within(list, range) {
     var out = [];
     list.forEach(function (w) {
-      var a = lowerBound(w.series.t, range[0]), b = lowerBound(w.series.t, range[1]);
-      var s = { step: w.series.step, t: w.series.t.subarray(a, b) };
-      FIELDS.forEach(function (f) { s[f] = w.series[f].subarray(a, b); });
-      if (s.t.length) out.push({ series: s, annualSpend: w.annualSpend });
+      var a = lowerBound(w.chart.t, range[0]), b = lowerBound(w.chart.t, range[1]);
+      var s = { step: w.chart.step, t: w.chart.t.subarray(a, b) };
+      FIELDS.forEach(function (f) { s[f] = w.chart[f].subarray(a, b); });
+      if (s.t.length) out.push({ chart: s, annualSpend: w.annualSpend });
     });
+    return out;
+  }
+
+  // The series without its point at time last, or null when nothing is left.
+  function withoutLast(series, last) {
+    var n = series.t.length;
+    if (!n || series.t[n - 1] !== last) return series;
+    if (n === 1) return null;
+    var out = { step: series.step, t: series.t.subarray(0, n - 1) };
+    FIELDS.forEach(function (f) { out[f] = series[f].subarray(0, n - 1); });
     return out;
   }
 

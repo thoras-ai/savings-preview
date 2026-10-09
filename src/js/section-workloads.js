@@ -422,7 +422,7 @@
     if (!el || !d || !d.counted) return;
     var lv = ctx.result.levers;
     var names = view.mode === 'spend' ? null : { b: 'Target: peak + ' + Math.round((lv.headroom - 1) * 100) + '%' };
-    chart.render(el, d.w.series, view.mode, {
+    chart.render(el, d.w.chart || d.w.series, view.mode, {
       title: d.w.name, fromZero: true, className: 'chart-detail', names: names,
       markers: view.mode === 'spend' ? [] : d.oom.marks
     });

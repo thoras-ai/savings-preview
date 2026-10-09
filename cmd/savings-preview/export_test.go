@@ -206,8 +206,11 @@ func TestBuildReport(t *testing.T) {
 		files[f.Name], _ = io.ReadAll(rc)
 		rc.Close()
 	}
-	if strings.Join(names, " ") != "summary.json report.html" {
+	if strings.Join(names, " ") != "summary.json report.html savings-preview.compact.otlp.json" {
 		t.Errorf("zip holds %v", names)
+	}
+	if !bytes.Equal(files["savings-preview.compact.otlp.json"], data) {
+		t.Error("the compact file in the zip differs from the one on disk")
 	}
 	var s map[string]any
 	if err := json.Unmarshal(files["summary.json"], &s); err != nil {

@@ -16,7 +16,7 @@
 
 ## The zip carries its data once, inside report.html
 
-**What changes.** In v0.1.0 the zip written by `run` held `savings-preview.otlp.json`, the full contract file, as well as `summary.json` and `report.html`, which carried the same data again. The zip now holds only `summary.json` and `report.html`, and the data inside `report.html` is a compact copy at 15-minute steps (see [contract.md](contract.md#compact-files)). The full file is not in the zip. It stays next to the zip on the machine that ran the tool, and `summary.json` names it in `full_data`.
+**What changes.** In v0.1.0 the zip written by `run` held `savings-preview.otlp.json`, the full contract file, as well as `summary.json` and `report.html`, which carried the same data again. The zip then held only `summary.json` and `report.html` (later releases add the compact files; see [The zip carries the compact files](#the-zip-carries-the-compact-files)), and the data inside `report.html` is a compact copy at 15-minute steps (see [contract.md](contract.md#compact-files)). The full file is not in the zip. It stays next to the zip on the machine that ran the tool, and `summary.json` names it in `full_data`.
 
 **Who it affects.** Anyone who takes `savings-preview.otlp.json` out of a zip: their tools find no such entry. People who open `report.html` or read `summary.json` keep working: `report.html` carries a page that reads compact files, and `summary.json` keeps its fields, though its totals now come from the compact file (see below).
 
@@ -36,7 +36,35 @@
 
 ## Commands
 
-`run` writes `savings-preview.compact.otlp.json` next to the output file in addition to the files it wrote before, and serves the compact file to the report. It reads every file it checks as a stream, so its memory stays at a few hundred MB whatever the size of the cluster: under 300 MB for 14 days of 1,000 workload-containers. The new `export` command writes compact copies and takes a report page's data back out. Existing commands and flags are unchanged.
+`run` writes `savings-preview.compact.otlp.json` next to the output file in addition to the files it wrote before, and serves the compact file to the report. It reads every file it checks as a stream, so its memory stays at a few hundred MB whatever the size of the cluster: under 300 MB for 14 days of 1,000 workload-containers. The new `export` command writes compact copies and takes a report page's data back out. Existing commands and flags were unchanged in that release; [run waits for Enter in a terminal](#run-waits-for-enter-in-a-terminal) describes a later change.
+
+## run waits for Enter in a terminal
+
+**What changes.** Before it reads any history, `run` prints a plan and waits for Enter; `q`, Ctrl-C or the end of input exits with status 0 having read nothing. It waits only when stdin, stdout and stderr are all terminals.
+
+**Who it affects.** Anyone who drives `run` through a terminal from a program: expect scripts, `tmux send-keys`, terminal recordings. The run sits at the prompt. Scripts, pipes, cron and CI without a terminal are not affected: they print the plan and go on.
+
+**Why.** The first thing a prospect's engineer sees is what the tool is about to read and write, before it reads anything.
+
+**How to keep the old behavior.** Pass `--yes` (`-y`).
+
+**How to tell which you have.** The run prints `Press Enter to continue, or q to quit.` after the plan.
+
+**How to roll back.** Run the previous release, or add `--yes`.
+
+## The zip carries the compact files
+
+**What changes.** Besides `summary.json` and `report.html`, the zip holds the compact data as plain files: `savings-preview.compact.otlp.json` for one cluster, or `savings-preview.clusters/NAME.compact.otlp.json` for each cluster read in a run of several. They are the files the run leaves on disk. The full-resolution files stay out of the zip. `summary.json` and `report.html` are unchanged.
+
+**Who it affects.** Tools that list a zip's entries and expect exactly two. An upload page built before this change also opens a new fleet zip wrongly: it reads the first `.otlp.json` entry, so it shows one cluster's figures as if they were the whole report, with no error. A single-cluster zip opens correctly there.
+
+**Why.** Thoras can take the data out of a zip a customer sends without running `export`, and drop either the zip or the files on the upload page.
+
+**How to upgrade.** Deploy the upload page from this release before handing out the CLI. Until then, open a new fleet zip by opening the `report.html` inside it, or on the current upload page.
+
+**How to tell which you have.** `unzip -l` lists `.compact.otlp.json` entries in a new zip. A fleet zip shown on an older page has one cluster in the header, where it should say the number of clusters, and no Clusters filter under Assumptions.
+
+**How to roll back.** Open `report.html` from the zip; it carries all the clusters and its own page.
 
 ## run reads Datadog when its keys are set
 
