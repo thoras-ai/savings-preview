@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -220,7 +221,7 @@ func runRun(args []string) error {
 	}
 	sum := b.summary
 	fmt.Fprintf(os.Stderr, "\n%s: %s a year in requests, %s a year in savings (%d of %d workloads counted, tier %d, %s)\n",
-		sum.Cluster, money(sum.Totals.AnnualSpend), money(sum.Totals.AnnualSavings), sum.Totals.Counted, sum.Totals.Workloads,
+		cmp.Or(sum.DisplayName, sum.Cluster), money(sum.Totals.AnnualSpend), money(sum.Totals.AnnualSavings), sum.Totals.Counted, sum.Totals.Workloads,
 		sum.Tier, spanText(time.Duration(sum.SpanSeconds)*time.Second))
 	fmt.Fprintf(os.Stderr, "wrote %s with a summary and report.html, a copy of the report that carries the compact file and opens without this tool\n", b.zip)
 	fmt.Fprintf(os.Stderr, "the full-resolution file stays at %s (%s); it is not in the zip\n", o.out, megabytes(b.full.Bytes))

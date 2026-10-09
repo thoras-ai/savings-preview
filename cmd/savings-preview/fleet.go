@@ -19,6 +19,7 @@ import (
 
 	"github.com/thoras-ai/savings-preview/internal/fleet"
 	"github.com/thoras-ai/savings-preview/internal/kube"
+	"github.com/thoras-ai/savings-preview/internal/savings"
 )
 
 // fleetConcurrency is how many clusters are read at once. Polling is the
@@ -133,7 +134,12 @@ func runFleet(ctx context.Context, o *runOptions, w io.Writer) (*builtReport, er
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	fmt.Fprintf(w, "Reading %d %s: %s\n", len(names), plural(len(names), "cluster", "clusters"), strings.Join(names, ", "))
+	short := savings.DisplayNames(names)
+	var shown []string
+	for _, n := range names {
+		shown = append(shown, short[n])
+	}
+	fmt.Fprintf(w, "Reading %d %s: %s\n", len(names), plural(len(names), "cluster", "clusters"), strings.Join(shown, ", "))
 	if o.source == "auto" && o.datadog.KeysGiven() {
 		fmt.Fprintln(w, "Datadog keys are set, but Datadog reads one cluster per run, so each cluster is read through its own API server.")
 	}
@@ -142,7 +148,7 @@ func runFleet(ctx context.Context, o *runOptions, w io.Writer) (*builtReport, er
 	var mu sync.Mutex
 	members := make([]*member, len(names))
 	for i, n := range names {
-		pw := &prefixWriter{mu: &mu, w: w, prefix: "[" + n + "] "}
+		pw := &prefixWriter{mu: &mu, w: w, prefix: "[" + short[n] + "] "}
 		m := &member{context: n, log: pw}
 		members[i] = m
 		if m.conn, m.err = connectFleet(o.kubeconfig, n); m.err == nil {
@@ -280,11 +286,11 @@ func printFleet(w io.Writer, b *builtReport, members []*member) {
 	read := 0
 	for _, c := range sum.Clusters {
 		if c.Summary == nil {
-			fmt.Fprintf(tw, "%s\tnot read\n", c.Cluster)
+			fmt.Fprintf(tw, "%s\tnot read\n", shownName(c))
 			continue
 		}
 		read++
-		fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%s\n", c.Cluster, c.Source, c.Tier, money(c.Totals.AnnualSpend), money(c.Totals.AnnualSavings))
+		fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%s\n", shownName(c), c.Source, c.Tier, money(c.Totals.AnnualSpend), money(c.Totals.AnnualSavings))
 	}
 	tw.Flush()
 	for _, c := range sum.Clusters {
@@ -295,6 +301,8 @@ func printFleet(w io.Writer, b *builtReport, members []*member) {
 	fmt.Fprintf(w, "\nFleet, %d of %d clusters: %s a year in requests, %s a year in savings (%d of %d workloads counted)\n",
 		read, len(sum.Clusters), money(sum.Totals.AnnualSpend), money(sum.Totals.AnnualSavings), sum.Totals.Counted, sum.Totals.Workloads)
 }
+
+func shownName(c savings.ClusterSummary) string { return cmp.Or(c.DisplayName, c.Cluster) }
 
 // each runs fn on every member, at most n at a time.
 func each(ms []*member, n int, fn func(*member)) {

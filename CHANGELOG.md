@@ -2,6 +2,18 @@
 
 Each release's section here is its release notes on GitHub. `scripts/release_notes.py` reads the section for a tag, and the release workflow fails when there is none.
 
+## Unreleased
+
+### New
+
+- The report and the CLI show clusters by a short name: for an EKS ARN, the name after `cluster/`; for a GKE context name (`gke_PROJECT_LOCATION_NAME`), the cluster name; otherwise the name as it is. When two clusters come out the same, the region is added, then the account or project. Page one, the header, the Clusters filter, the printout, the copied summary and the terminal summary use it. Data and method, the file and the filter's links keep the full name, so links made before still open the same clusters.
+- `summary.json` adds `display_name`, the short name, at the top level and for each entry in `clusters`. The change is additive: `cluster` and every other field are unchanged.
+
+### Fixes
+
+- The chart on page one of a fleet covers the time every cluster has data for, from the latest start to the earliest end. Before, it ran from the earliest start to the latest end, and where one cluster had history the others did not, a gap in that cluster's data could leave most of the chart blank. Each cluster's figures still cover its own history, and a file with one cluster, or a time range set under Assumptions, is charted as before.
+- Page one of a fleet says which data its figures come from across how many clusters, without a single span, since each cluster counts over its own history. The chart's dates are the time it covers.
+
 ## v0.2.1
 
 ### New

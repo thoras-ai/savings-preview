@@ -199,7 +199,7 @@
     page.timing = { prepare: performance.now() - t0 };
     recompute();
     show('report');
-    $('context').textContent = data.cluster || 'Unnamed cluster';
+    $('context').textContent = data.label || 'Unnamed cluster';
     renderSections(null);
     var id = store.get().section;
     markActive(id);

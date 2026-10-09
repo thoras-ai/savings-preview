@@ -651,6 +651,53 @@
     };
   }
 
+  // Short names for clusters: the name after cluster/ in an EKS ARN, the
+  // cluster in a GKE context name (gke_PROJECT_LOCATION_NAME), else the name
+  // itself. Names that come out the same take the region, then the account or
+  // project, then both, and keep the full name when none tells them apart.
+  // internal/savings DisplayNames is the Go port.
+  var EKS_ARN = /^arn:aws[a-z-]*:eks:([^:]*):([^:]*):cluster\/(.+)$/;
+  var GKE_NAME = /^gke_([^_]+)_([^_]+)_(.+)$/;
+  function splitName(full) {
+    var m = EKS_ARN.exec(full) || GKE_NAME.exec(full);
+    if (!m) return { full: full, short: full, region: '', account: '' };
+    return EKS_ARN.test(full) ? { full: full, short: m[3], region: m[1], account: m[2] } : { full: full, short: m[3], region: m[2], account: m[1] };
+  }
+
+  //   names   cluster names, as in the file
+  //   result  {name: short name}
+  function displayNames(names) {
+    var out = {}, groups = {}, order = [];
+    names.forEach(function (n) {
+      if (Object.prototype.hasOwnProperty.call(out, n)) return;
+      var p = splitName(n);
+      out[n] = p.short;
+      if (!groups[p.short]) { groups[p.short] = []; order.push(p.short); }
+      groups[p.short].push(p);
+    });
+    var unique = function (labels) { return labels.every(function (l, i) { return labels.indexOf(l) === i; }); };
+    var qualified = function (p, q) { return q ? p.short + ' (' + q + ')' : p.full; };
+    order.forEach(function (short) {
+      var g = groups[short];
+      if (g.length < 2) return;
+      var tries = [
+        function (p) { return qualified(p, p.region); },
+        function (p) { return qualified(p, p.account); },
+        function (p) { return qualified(p, [p.region, p.account].filter(Boolean).join(', ')); }
+      ];
+      var labels = null;
+      for (var i = 0; i < tries.length && !labels; i++) {
+        var l = g.map(tries[i]);
+        if (unique(l)) labels = l;
+      }
+      g.forEach(function (p, j) { out[p.full] = labels ? labels[j] : p.full; });
+    });
+    var count = {};
+    Object.keys(out).forEach(function (n) { count[out[n]] = (count[out[n]] || 0) + 1; });
+    Object.keys(out).forEach(function (n) { if (count[out[n]] > 1 && out[n] !== n) out[n] = n; });
+    return out;
+  }
+
   // Rates for a fleet's page-wide figures: the clusters' priced nodes pooled.
   // Each workload is priced with its own cluster's rates.
   function fleetPricing(clusters, nodes) {
@@ -690,6 +737,7 @@
     });
     var namespaces = [];
     workloads.forEach(function (w) { if (namespaces.indexOf(w.ns) < 0) namespaces.push(w.ns); });
+    var labels = displayNames(data.clusters.concat(data.failed.map(function (f) { return f.name; })));
     var clusters = data.clusters.map(function (name) {
       var mine = function (r) { return r.cluster === name; };
       var own = workloads.filter(mine);
@@ -697,12 +745,12 @@
       var f = cs.length ? fidelity(cs) : fidelity([]);
       f.notes = noteSummaries(own);
       var nodes = data.nodes.filter(mine);
-      return { name: name, pricing: pricing(nodes), nodes: nodes, fidelity: f, workloads: own.length };
+      return { name: name, label: labels[name], pricing: pricing(nodes), nodes: nodes, fidelity: f, workloads: own.length };
     });
     var fid = multi ? mergeFidelity(clusters.map(function (c) { return c.fidelity; })) : fidelity(data.containers);
     fid.notes = noteSummaries(workloads);
     return {
-      cluster: multi ? clusters.length + ' clusters' : data.cluster, contract: data.contract, fidelity: fid,
+      cluster: multi ? clusters.length + ' clusters' : data.cluster, label: multi ? clusters.length + ' clusters' : labels[data.cluster] || data.cluster, contract: data.contract, fidelity: fid,
       pricing: multi ? fleetPricing(clusters, data.nodes) : clusters[0].pricing, nodes: data.nodes,
       namespaces: namespaces.sort(), workloads: workloads,
       clusters: clusters, failed: data.failed, dropped: (opts && opts.dropped) || [], multi: multi
@@ -757,7 +805,7 @@
     var counted = workloads.filter(function (w) { return w.series; });
     var totals = { spend: 0, savings: 0, cores: 0, gib: 0, reqCores: 0, reqGiB: 0, useCores: 0, useGiB: 0, workloads: workloads.length, counted: counted.length };
     var perCluster = {};
-    inScope.forEach(function (c) { perCluster[c.name] = { name: c.name, spend: 0, savings: 0, workloads: 0, counted: 0, fidelity: c.fidelity }; });
+    inScope.forEach(function (c) { perCluster[c.name] = { name: c.name, label: c.label || c.name, spend: 0, savings: 0, workloads: 0, counted: 0, fidelity: c.fidelity }; });
     workloads.forEach(function (w) {
       var pc = perCluster[w.cluster];
       if (pc) pc.workloads++;
@@ -768,16 +816,50 @@
       totals.useCores += w.useCores; totals.useGiB += w.useGiB;
       if (pc) { pc.counted++; pc.spend += w.annualSpend; pc.savings += w.annualSavings; }
     });
-    var series = counted.length ? combine(counted) : null;
-    if (series && lv.range) series = clip(series, lv.range);
     var byCluster = inScope.map(function (c) { return perCluster[c.name]; })
       .sort(function (a, b) { return b.savings - a.savings || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
+    var fleet = data.multi && byCluster.filter(function (c) { return c.counted; }).length > 1;
+    // Clusters keep different amounts of history. Outside the time they all
+    // cover, the combined chart has some clusters and not others, so a fleet
+    // charts only that time. Totals still cover each cluster's own history.
+    var window = fleet && !lv.range ? overlap(byCluster) : null;
+    var charted = window ? within(counted, window) : counted;
+    if (!charted.length) { window = null; charted = counted; }
+    var series = charted.length ? combine(charted) : null;
+    if (series && lv.range) series = clip(series, lv.range);
     return {
       cluster: one ? (data.multi ? inScope[0].name : data.cluster) : inScope.length + ' clusters',
+      label: one ? (data.multi ? inScope[0].label : data.label || data.cluster) : inScope.length + ' clusters',
       fidelity: data.multi && one ? inScope[0].fidelity : data.fidelity, pricing: rates, basePricing: base, namespaces: data.namespaces,
-      nodes: one ? inScope[0].nodes : data.nodes, clusters: byCluster, fleet: data.multi && byCluster.filter(function (c) { return c.counted; }).length > 1,
-      levers: lv, workloads: workloads, totals: totals, series: series
+      nodes: one ? inScope[0].nodes : data.nodes, clusters: byCluster, fleet: fleet,
+      levers: lv, workloads: workloads, totals: totals, series: series, window: window
     };
+  }
+
+  // [latest start, earliest end] of the counted clusters, or null when they
+  // share no time.
+  function overlap(clusters) {
+    var a = -Infinity, b = Infinity;
+    clusters.forEach(function (c) {
+      if (!c.counted || c.fidelity.start === null) return;
+      a = Math.max(a, c.fidelity.start);
+      b = Math.min(b, c.fidelity.end);
+    });
+    return isFinite(a) && isFinite(b) && a < b ? [a, b] : null;
+  }
+
+  // The workloads with their series cut to [range[0], range[1]), as combine
+  // reads them. The end is one step past the last point of the cluster that
+  // ends first, so a point at it belongs to the other clusters only.
+  function within(list, range) {
+    var out = [];
+    list.forEach(function (w) {
+      var a = lowerBound(w.series.t, range[0]), b = lowerBound(w.series.t, range[1]);
+      var s = { step: w.series.step, t: w.series.t.subarray(a, b) };
+      FIELDS.forEach(function (f) { s[f] = w.series[f].subarray(a, b); });
+      if (s.t.length) out.push({ series: s, annualSpend: w.annualSpend });
+    });
+    return out;
   }
 
   function clip(series, range) {
@@ -792,7 +874,7 @@
   }
 
   var api = {
-    analyze: analyze, prepare: prepare, mergeFidelity: mergeFidelity, priceNode: priceNode, priceTable: PRICES, cloudNames: CLOUD_NAMES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
+    analyze: analyze, prepare: prepare, displayNames: displayNames, mergeFidelity: mergeFidelity, priceNode: priceNode, priceTable: PRICES, cloudNames: CLOUD_NAMES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
     lowerBound: lowerBound, upperBound: upperBound, mean: mean,
     fidelityLabel: fidelityLabel, formatSpan: formatSpan, formatStep: formatStep, notes: NOTES, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
   };

@@ -243,5 +243,6 @@ jobs:
           python3 scripts/validate_contract.py fixtures/savings-preview.otlp.json
           python3 scripts/validate_contract.py fixtures/minikube-poll.otlp.json
           python3 scripts/validate_contract.py fixtures/intermittent.otlp.json
+          python3 scripts/validate_contract.py fixtures/fleet-history.otlp.json
           python3 scripts/validate_contract.py fixtures/demo-cluster.compact.otlp.json
           python3 scripts/validate_contract.py fixtures/fleet.compact.otlp.json

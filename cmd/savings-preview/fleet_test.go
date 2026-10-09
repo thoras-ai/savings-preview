@@ -183,6 +183,44 @@ func TestRunFleet(t *testing.T) {
 	}
 }
 
+func TestRunFleetShortNames(t *testing.T) {
+	east, west := "arn:aws:eks:us-east-1:111122223333:cluster/prod", "arn:aws:eks:eu-west-1:111122223333:cluster/prod"
+	gke := "gke_acme-data_us-central1_analytics"
+	fakeFleet(t, map[string]string{east: east, west: west, gke: gke}, nil)
+	out := filepath.Join(t.TempDir(), "savings-preview.otlp.json")
+	o, err := runFlags([]string{"--context", east, "--context", west, "--context", gke, "-o", out})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var log bytes.Buffer
+	b, err := runFleet(context.Background(), o, &log)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, log.String())
+	}
+	text := log.String()
+	for _, s := range []string{"Reading 3 clusters: prod (us-east-1), prod (eu-west-1), analytics", "[prod (eu-west-1)] ",
+		"\nprod (us-east-1)  ", "\nanalytics  "} {
+		if !strings.Contains(text, s) {
+			t.Errorf("log lacks %q:\n%s", s, text)
+		}
+	}
+	var sum struct {
+		Cluster     string `json:"cluster"`
+		DisplayName string `json:"display_name"`
+		Clusters    []struct {
+			Cluster     string `json:"cluster"`
+			DisplayName string `json:"display_name"`
+		} `json:"clusters"`
+	}
+	if err := json.Unmarshal(readZipEntry(t, b.zip, "summary.json"), &sum); err != nil {
+		t.Fatal(err)
+	}
+	if sum.Cluster != east+", "+west+", "+gke || sum.DisplayName != "prod (us-east-1), prod (eu-west-1), analytics" ||
+		sum.Clusters[1].Cluster != west || sum.Clusters[1].DisplayName != "prod (eu-west-1)" {
+		t.Errorf("summary.json: %+v", sum)
+	}
+}
+
 func TestRunFleetAllFail(t *testing.T) {
 	fakeFleet(t, map[string]string{"a": "x"}, map[string]error{"a": errors.New("Unauthorized")})
 	o, err := runFlags([]string{"--context", "a", "--context", "b", "-o", filepath.Join(t.TempDir(), "o.otlp.json")})

@@ -52,7 +52,7 @@
 
   function clusters(r) {
     var rows = r.clusters.filter(function (c) { return c.counted; }).map(function (c) {
-      return '<tr><td><span class="print-name">' + esc(c.name) + '</span></td>' +
+      return '<tr><td><span class="print-name">' + esc(c.label || c.name) + '</span></td>' +
         '<td class="num">' + esc(ui.money(c.spend)) + '</td><td class="num">' + esc(ui.money(c.spend - c.savings)) + '</td><td class="num"><span class="pill pill-brand">' + esc(ui.money(c.savings)) + '</span></td></tr>';
     }).join('');
     return '<div class="print-box"><h2>Cluster by cluster</h2><table class="print-table"><thead><tr><th>Cluster</th><th class="num">Today / year</th>' +
@@ -78,7 +78,7 @@
   // now is the print date; tests pass a fixed one.
   function html(ctx, now) {
     var r = ctx.result, st = ctx.state, fig = summary.figures(r);
-    var top = '<div class="print-top"><strong>Thoras Savings Preview</strong><span>' + esc((r.cluster || 'Unnamed cluster') + ' · printed ' + today(now || new Date())) + '</span></div>';
+    var top = '<div class="print-top"><strong>Thoras Savings Preview</strong><span>' + esc((r.label || r.cluster || 'Unnamed cluster') + ' · printed ' + today(now || new Date())) + '</span></div>';
     if (!r.totals.counted) return top + '<h1>' + esc(summary.EMPTY) + '</h1>';
     return top +
       '<div><h1>' + esc(summary.headline(fig, r)) + '</h1>' +
@@ -86,7 +86,7 @@
       '<p class="print-muted">' + esc(summary.provenance(r, st)) + '</p></div>' +
       versus(fig) + gap(r, st, fig) + (r.fleet ? clusters(r) : workloads(summary.pick(r, st), summary.oomKilled(ctx.data, r, st))) +
       '<div class="print-pair">' + fleet(fig, st, r) + next(r, st) + '</div>' +
-      '<p class="print-foot">' + esc(summary.method(st)) + ' Every workload, the node inventory and the settings used are in the report link shared with this printout.</p>';
+      '<p class="print-foot">' + esc(summary.method(st, summary.labelsOf(ctx.data))) + ' Every workload, the node inventory and the settings used are in the report link shared with this printout.</p>';
   }
 
   function render(host, ctx) {

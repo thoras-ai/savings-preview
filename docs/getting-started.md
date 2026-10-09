@@ -194,7 +194,7 @@ Each cluster needs the same read access as a single-cluster run, in that cluster
 
 A cluster that cannot be read, because its context is missing, its credentials have expired or it has no usage data, does not stop the others. The run lists it with the reason at the end and in the report's Data and method section, and fails only when no cluster can be read. Two contexts that point at the same kubeconfig cluster are each read and named after their context.
 
-The run writes the same files as a single-cluster run, holding every cluster: `savings-preview.otlp.json`, `savings-preview.compact.otlp.json` and `savings-preview.zip`. `summary.json` in the zip keeps its fields, which now hold the fleet's totals, and adds `clusters`, one entry per cluster with its own figures, or with `error` for a cluster that was not read. Each cluster's own file is kept in `savings-preview.clusters/`.
+The run writes the same files as a single-cluster run, holding every cluster: `savings-preview.otlp.json`, `savings-preview.compact.otlp.json` and `savings-preview.zip`. `summary.json` in the zip keeps its fields, which now hold the fleet's totals, and adds `clusters`, one entry per cluster with its own figures, or with `error` for a cluster that was not read. `display_name` gives the short name the report shows for each cluster, such as `dev` for an EKS ARN that ends in `cluster/dev`. Each cluster's own file is kept in `savings-preview.clusters/`.
 
 Datadog, `--url`, `--cluster-name` and `--source datadog` name one cluster, so they work only with one context. To read clusters that live in Datadog or in one shared store, run once per cluster with `--selector`, and open the files together on the report page.
 

@@ -32,6 +32,8 @@
 
 `step_seconds` still gives the coarsest step the data was collected at, as in v0.1.0. New fields: `compact_step_seconds` (900 when the data in the zip is compact) and `full_data` (`file` and `bytes` of the full-resolution file). Totals are computed from the compact file, so they can differ from the full file's by up to about 1%; [contract.md](contract.md#compact-files) explains why. `start`, `end`, `span_seconds` and `snapshot` also come from the compact file: its first and last steps count in full, so a run of a few minutes reports a 15-minute span and `snapshot` true.
 
+`display_name` is the short name the report shows for `cluster`, such as `dev` for `arn:aws:eks:us-east-1:111122223333:cluster/dev`. A file of several clusters has it at the top level, listing the clusters read, and in each entry of `clusters`. `cluster` still holds the full name.
+
 ## Commands
 
 `run` writes `savings-preview.compact.otlp.json` next to the output file in addition to the files it wrote before, and serves the compact file to the report. It reads every file it checks as a stream, so its memory stays at a few hundred MB whatever the size of the cluster: under 300 MB for 14 days of 1,000 workload-containers. The new `export` command writes compact copies and takes a report page's data back out. Existing commands and flags are unchanged.
