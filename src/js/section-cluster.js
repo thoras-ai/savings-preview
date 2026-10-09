@@ -1,7 +1,8 @@
 /* Section 4: cluster and nodes. What the nodes can hold, what the workloads
  * request, would need and use, the instance types behind the prices, and how
- * many nodes the waste adds up to. A fleet shows each cluster first. Plain script: registers the section in the
- * browser and exports summarize and markup under node. */
+ * many nodes the waste adds up to. A fleet shows each cluster first. Plain
+ * script: registers the section in the browser and exports summarize and
+ * markup under node. */
 (function () {
   'use strict';
 

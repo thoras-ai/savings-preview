@@ -160,6 +160,9 @@ test('Workloads lists the cluster in a column, and sorting by it groups each clu
   assert.match(text(grouped.table), /alpha 21 workloads/);
   // The filter matches the cluster's short name.
   assert.ok(wl.arrange(rows, Object.assign({}, VIEW, { filter: 'gamma' })).every(r => r.cluster === GAMMA));
+  // And its full name, so a region or account finds the cluster.
+  const west = wl.arrange(rows, Object.assign({}, VIEW, { filter: 'us-west-2' }));
+  assert.ok(west.length && west.every(r => r.cluster === DELTA));
   // Filtered to one cluster, the column goes and a cluster sort falls back to savings.
   const one = context({ onlyClusters: [GAMMA] });
   const v = Object.assign({}, view);

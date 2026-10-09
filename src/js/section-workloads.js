@@ -109,7 +109,7 @@
   }
 
   function matches(r, q) {
-    return [r.name, r.nsName, r.clusterLabel].some(function (v) { return v.toLowerCase().indexOf(q) >= 0; });
+    return [r.name, r.nsName, r.clusterLabel, r.cluster].some(function (v) { return v.toLowerCase().indexOf(q) >= 0; });
   }
 
   // The rows to list: matching the filter, counted ones sorted, the rest after them by name.
@@ -232,7 +232,7 @@
   // A cluster's heading row, with what the rows under it add up to in the arranged list.
   function groupRow(g, cols, approx) {
     var counted = g.workloads - g.excluded;
-    return '<tr class="wl-group"><th scope="colgroup" colspan="' + cols + '">' + clusterName(g.row) +
+    return '<tr class="wl-group"><th scope="rowgroup" colspan="' + cols + '">' + clusterName(g.row) +
       '<span class="wl-group-sub">' + esc(ui.num(g.workloads, 0) + ' ' + ui.plural(g.workloads, 'workload') + (g.excluded ? ', ' + ui.num(counted, 0) + ' counted' : '') +
       ' · ' + ui.money(g.savings, approx) + ' a year') + '</span></th></tr>';
   }
