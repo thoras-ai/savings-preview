@@ -54,6 +54,9 @@ type runOptions struct {
 	duration, interval          time.Duration
 	writeEvery, keepRaw, rollup time.Duration
 	noOpen                      bool
+	yes                         bool      // do not wait for Enter after the plan
+	collectOnly                 bool      // write the files and the zip, then exit
+	planned                     bool      // the plan, which lists what the run reads, was printed
 	now                         time.Time // end of the history pulled; zero is now
 }
 
@@ -81,6 +84,9 @@ func addRunFlags(fs *flag.FlagSet) (o *runOptions, finish func() error) {
 	fs.DurationVar(&o.keepRaw, "keep-raw", 48*time.Hour, "when polling, keep readings at --interval for this long, then roll them up to --rollup (0: never roll up)")
 	fs.DurationVar(&o.rollup, "rollup", 5*time.Minute, "when polling, step of rolled-up readings, which keep the mean and the peak")
 	fs.BoolVar(&o.noOpen, "no-open", false, "print the report URL instead of opening a browser")
+	fs.BoolVar(&o.yes, "yes", false, "start without waiting for Enter after printing the plan; for scripts")
+	fs.BoolVar(&o.yes, "y", false, "same as --yes")
+	fs.BoolVar(&o.collectOnly, "collect-only", false, "write the files and the zip, then exit without serving the report or opening a browser")
 	return o, func() error {
 		if fs.NArg() > 0 {
 			return fmt.Errorf("unexpected argument %q", fs.Arg(0))
@@ -104,6 +110,12 @@ writes a compact copy of the file at 15-minute steps, which the report reads.
 A zip with a summary and a self-contained copy of the report, which carries
 the compact copy, is written next to the contract file; the full file stays on
 disk. Everything is read-only; nothing is uploaded.
+
+Before it reads any history, run finds each cluster's source as check does,
+prints what it found, what it will read and write, and whether it will open a
+browser, and waits for Enter. q or Ctrl-C quits. It waits only when stdin and
+stdout are terminals; --yes starts without waiting. With --collect-only it
+writes the files and the zip and exits, for sending the zip on.
 
 With --context given more than once, --contexts-file or --all-contexts, the
 run reads each of those clusters, a few at a time, and writes one file, one
@@ -190,6 +202,12 @@ func (o *runOptions) check(target string) error {
 }
 
 func runRun(args []string) error {
+	return runWith(args, os.Stdin, os.Stderr, interactive(os.Stdin, os.Stdout))
+}
+
+// runWith runs with progress on w. When ask is set it waits on in for Enter
+// after the plan.
+func runWith(args []string, in io.Reader, w io.Writer, ask bool) error {
 	o, err := runFlags(args)
 	if errors.Is(err, flag.ErrHelp) {
 		return nil
@@ -199,36 +217,48 @@ func runRun(args []string) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if o.fleet {
-		b, err := runFleet(ctx, o, os.Stderr)
-		if err != nil {
-			return err
-		}
-		stop()
-		return serve(b.page, b.compact, !o.noOpen)
+	switch ok, err := preflight(ctx, o, in, w, ask); {
+	case err != nil:
+		return err
+	case !ok:
+		return nil
 	}
-	s, err := newSources(o, os.Stderr)
+	b, err := collectAndBuild(ctx, o, w)
 	if err != nil {
 		return err
 	}
-	if err := collect(ctx, s, o, os.Stderr); err != nil {
-		return err
+	if o.collectOnly {
+		printSend(w, b.zip)
+		return nil
 	}
-
-	b, err := buildReport(o.out)
-	if err != nil {
-		return err
-	}
-	sum := b.summary
-	fmt.Fprintf(os.Stderr, "\n%s: %s a year in requests, %s a year in savings (%d of %d workloads counted, tier %d, %s)\n",
-		cmp.Or(sum.DisplayName, sum.Cluster), money(sum.Totals.AnnualSpend), money(sum.Totals.AnnualSavings), sum.Totals.Counted, sum.Totals.Workloads,
-		sum.Tier, spanText(time.Duration(sum.SpanSeconds)*time.Second))
-	fmt.Fprintf(os.Stderr, "wrote %s with a summary and report.html, a copy of the report that carries the compact file and opens without this tool\n", b.zip)
-	fmt.Fprintf(os.Stderr, "the full-resolution file stays at %s (%s); it is not in the zip\n", o.out, megabytes(b.full.Bytes))
-
 	// The first Ctrl-C may have ended polling; a fresh one stops the server.
 	stop()
 	return serve(b.page, b.compact, !o.noOpen)
+}
+
+// collectAndBuild reads the clusters and writes the files and the zip.
+func collectAndBuild(ctx context.Context, o *runOptions, w io.Writer) (*builtReport, error) {
+	if o.fleet {
+		return runFleet(ctx, o, w)
+	}
+	s, err := newSources(o, w)
+	if err != nil {
+		return nil, err
+	}
+	if err := collect(ctx, s, o, w); err != nil {
+		return nil, err
+	}
+	b, err := buildReport(o.out)
+	if err != nil {
+		return nil, err
+	}
+	sum := b.summary
+	fmt.Fprintf(w, "\n%s: %s a year in requests, %s a year in savings (%d of %d workloads counted, tier %d, %s)\n",
+		cmp.Or(sum.DisplayName, sum.Cluster), money(sum.Totals.AnnualSpend), money(sum.Totals.AnnualSavings), sum.Totals.Counted, sum.Totals.Workloads,
+		sum.Tier, spanText(time.Duration(sum.SpanSeconds)*time.Second))
+	fmt.Fprintf(w, "wrote %s with a summary, report.html, a copy of the report that opens without this tool, and the compact file\n", b.zip)
+	fmt.Fprintf(w, "the full-resolution file stays at %s (%s); it is not in the zip\n", o.out, megabytes(b.full.Bytes))
+	return b, nil
 }
 
 // builtReport is what buildReport wrote.
@@ -247,7 +277,7 @@ func buildReport(out string) (*builtReport, error) {
 	if err := compactChecked(out, os.Stderr); err != nil {
 		return nil, err
 	}
-	return finishReport(out)
+	return finishReport(out, []bundleData{{Name: filepath.Base(compactName(out)), Path: compactName(out)}})
 }
 
 // compactChecked writes the compact copy of the contract file at out and
@@ -275,8 +305,8 @@ func checkContract(path string, w io.Writer) error {
 }
 
 // finishReport computes the totals from the checked compact copy of out and
-// writes the zip.
-func finishReport(out string) (*builtReport, error) {
+// writes the zip, which also carries the compact files in data.
+func finishReport(out string, data []bundleData) (*builtReport, error) {
 	b := &builtReport{compact: compactName(out)}
 	var err error
 	if b.full, err = fullDataOf(out); err != nil {
@@ -295,7 +325,7 @@ func finishReport(out string) (*builtReport, error) {
 		return nil, err
 	}
 	b.zip, err = writeBundle(out, b.compact, b.page, summaryFile{Summary: *b.summary, Version: versionString(),
-		Generated: time.Now().UTC().Truncate(time.Second), FullData: b.full})
+		Generated: time.Now().UTC().Truncate(time.Second), FullData: b.full}, data)
 	if err != nil {
 		return nil, fmt.Errorf("write zip: %w", err)
 	}
@@ -390,7 +420,7 @@ func newSources(o *runOptions, w io.Writer) (sources, error) {
 			fmt.Fprintf(w, "Cannot read the kubeconfig; only Datadog can be read.\n%s\n", indent(err.Error(), "  "))
 		}
 	}
-	if !o.member {
+	if !o.member && !o.planned {
 		printAccess(w, o)
 	}
 
@@ -565,6 +595,12 @@ func save(out string, p *pulled, w io.Writer) error {
 }
 
 func printAccess(w io.Writer, o *runOptions) {
+	printReads(w, o)
+	fmt.Fprintf(w, "Output goes to %s, a 15-minute copy for the report in %s, and %s. Nothing is uploaded.\n\n", o.out, compactName(o.out), zipName(o.out))
+}
+
+// printReads lists what the run reads.
+func printReads(w io.Writer, o *runOptions) {
 	fmt.Fprintln(w, "This run only reads; it creates, changes and deletes nothing. It will:")
 	next := "  - "
 	if o.useDatadog {
@@ -599,7 +635,6 @@ func printAccess(w io.Writer, o *runOptions) {
 		}
 		fmt.Fprintln(w, prefix+"read Pods, ReplicaSets, Deployments, StatefulSets, Nodes and metrics-server pod usage at each interval")
 	}
-	fmt.Fprintf(w, "Output goes to %s, a 15-minute copy for the report in %s, and %s. Nothing is uploaded.\n\n", o.out, compactName(o.out), zipName(o.out))
 }
 
 // pollWithProgress polls until o.duration passes or the user presses Ctrl-C,
@@ -780,22 +815,28 @@ func fullDataOf(path string) (*fullData, error) {
 	return &fullData{File: filepath.Base(path), Bytes: fi.Size()}, nil
 }
 
-// writeBundle writes the zip next to out with the summary and a copy of the
-// report that carries the compact contract file at dataPath. The data is in
-// the zip once, inside report.html; savings-preview export takes it back out.
-func writeBundle(out, dataPath, page string, sum summaryFile) (string, error) {
+// bundleData is a compact contract file to carry in the zip.
+type bundleData struct {
+	Name string // name in the zip
+	Path string
+}
+
+// writeBundle writes the zip next to out with the summary, a copy of the
+// report that carries the compact contract file at dataPath, and the compact
+// files in data, so the data can be taken out without this tool.
+func writeBundle(out, dataPath, page string, sum summaryFile, data []bundleData) (string, error) {
 	js, err := json.MarshalIndent(sum, "", "  ")
 	if err != nil {
 		return "", err
 	}
 	path := zipName(out)
 	comment := "report.html carries the data as a compact copy at 15-minute steps that keeps the peaks and means of usage; " +
-		"savings-preview export -o " + report.DataName + " report.html writes it out."
+		"savings-preview export -o " + report.DataName + " report.html writes it out. The .compact.otlp.json entries hold the same data as plain files."
 	if sum.FullData != nil {
 		comment += fmt.Sprintf(" The full-resolution file, %s (%s), is not in the zip; it stays next to the zip on the machine that wrote it.",
 			sum.FullData.File, megabytes(sum.FullData.Bytes))
 	}
-	return path, report.WriteZip(path, comment, []report.Entry{
+	entries := []report.Entry{
 		{Name: "summary.json", Data: append(js, '\n')},
 		{Name: "report.html", Write: func(w io.Writer) error {
 			f, err := os.Open(dataPath)
@@ -805,7 +846,19 @@ func writeBundle(out, dataPath, page string, sum summaryFile) (string, error) {
 			defer f.Close()
 			return report.WriteInline(w, page, f)
 		}},
-	})
+	}
+	for _, d := range data {
+		entries = append(entries, report.Entry{Name: d.Name, Write: func(w io.Writer) error {
+			f, err := os.Open(d.Path)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			_, err = io.Copy(w, f)
+			return err
+		}})
+	}
+	return path, report.WriteZip(path, comment, entries)
 }
 
 // serve shows the report on a loopback address until Ctrl-C.

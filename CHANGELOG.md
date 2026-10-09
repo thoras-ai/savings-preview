@@ -6,11 +6,23 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 
 ### New
 
+- `run` says what it is about to do before it reads any history. It first finds each cluster's source as `check` does, then prints a short plan: for each cluster, the store and how much history it holds, Datadog, or that it will poll metrics-server and for how long; a cluster that cannot be read, with the reason; what the run reads; the files it writes and where; and whether it opens a browser. It then waits for Enter, and `q` or Ctrl-C exits with status 0 having read no history. It waits only when stdin and stdout are both terminals, so scripts, pipes and CI are not held up: without a terminal it prints the plan and goes on. `--yes` (`-y`) skips the wait in a terminal too. `check` never waits, and accepts and ignores both flags, as it does `--no-open`.
+- `run --collect-only` is for a customer who runs the tool and sends the result to Thoras. It reads and writes what `run` does, then exits without serving the report or opening a browser. Its last line says to send `savings-preview.zip` to your Thoras contact.
+- The zip also carries the compact data: `savings-preview.compact.otlp.json` for one cluster, and `savings-preview.clusters/NAME.compact.otlp.json` for each cluster read in a run of several. They are the same files the run leaves on disk, so they can be taken out of the zip without `export`. The full-resolution files stay out of the zip. The change is additive: `summary.json` and `report.html` are unchanged.
+- The upload page reads the new zips: it opens a run of several clusters from its `report.html`, which also lists the clusters that could not be read, and a zip that holds only per-cluster files as one fleet. Zips from earlier versions open as before.
+
 - The report and the CLI show clusters by a short name: for an EKS ARN, the name after `cluster/`; for a GKE context name (`gke_PROJECT_LOCATION_NAME`), the cluster name; otherwise the name as it is. When two clusters come out the same, the region is added, then the account or project. Page one, the header, the Clusters filter, the printout, the copied summary and the terminal summary use it. Data and method, the file and the filter's links keep the full name, so links made before still open the same clusters.
 - `summary.json` adds `display_name`, the short name, at the top level and for each entry in `clusters`. The change is additive: `cluster` and every other field are unchanged.
 
+### Changed messages
+
+- `run` prints the plan in place of the list of reads and the `Output goes to` line it printed before. Its line about the zip now reads `wrote savings-preview.zip with a summary, report.html, a copy of the report that opens without this tool, and the compact file` (`and each cluster's compact file` for several clusters). No exit status changed.
+
 ### Fixes
 
+- The last 15-minute step of a compact file is cut short by the end of the run and can hold a minute of readings, so every chart dipped at its right edge. The charts on page one, in the workload drill-down and in the printout now leave out each cluster's last step when the data was compacted. Totals still count it.
+- A single missing 15-minute step in a workload, such as one missed scrape, no longer breaks the line on page one: the workload's neighbouring value fills it. Gaps of two steps or more break the line as before.
+- The next step on page one and in the printout suggested `savings-preview run --duration 168h` for any report under a week, though `--duration` only sets how long polling runs. It now does so only when a cluster was polled. For data from a store or Datadog it says that 14 days of history in the store gives the full figure, and it says nothing when a shorter time range was picked under Assumptions.
 - The chart on page one of a fleet covers the time every cluster has data for, from the latest start to the earliest end. Before, it ran from the earliest start to the latest end, and where one cluster had history the others did not, a gap in that cluster's data could leave most of the chart blank. Each cluster's figures still cover its own history, and a file with one cluster, or a time range set under Assumptions, is charted as before.
 - Page one of a fleet says which data its figures come from across how many clusters, without a single span, since each cluster counts over its own history. The chart's dates are the time it covers.
 

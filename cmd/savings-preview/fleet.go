@@ -143,7 +143,9 @@ func runFleet(ctx context.Context, o *runOptions, w io.Writer) (*builtReport, er
 	if o.source == "auto" && o.datadog.KeysGiven() {
 		fmt.Fprintln(w, "Datadog keys are set, but Datadog reads one cluster per run, so each cluster is read through its own API server.")
 	}
-	printAccess(w, o)
+	if !o.planned {
+		printAccess(w, o)
+	}
 
 	var mu sync.Mutex
 	members := make([]*member, len(names))
@@ -211,6 +213,7 @@ func runFleet(ctx context.Context, o *runOptions, w io.Writer) (*builtReport, er
 	}
 
 	var fulls, compacts []string
+	var data []bundleData
 	var failed []fleet.Failed
 	each(members, fleetConcurrency, func(m *member) {
 		if m.err == nil {
@@ -224,6 +227,7 @@ func runFleet(ctx context.Context, o *runOptions, w io.Writer) (*builtReport, er
 			continue
 		}
 		fulls, compacts = append(fulls, m.out), append(compacts, compactName(m.out))
+		data = append(data, bundleData{Name: filepath.Base(dir) + "/" + filepath.Base(compactName(m.out)), Path: compactName(m.out)})
 	}
 	for _, m := range members {
 		m.log.(*prefixWriter).Flush()
@@ -242,12 +246,12 @@ func runFleet(ctx context.Context, o *runOptions, w io.Writer) (*builtReport, er
 	if err := checkContract(compactName(o.out), w); err != nil {
 		return nil, err
 	}
-	b, err := finishReport(o.out)
+	b, err := finishReport(o.out, data)
 	if err != nil {
 		return nil, err
 	}
 	printFleet(w, b, members)
-	fmt.Fprintf(w, "wrote %s with a summary and report.html, a copy of the report that carries the compact file and opens without this tool\n", b.zip)
+	fmt.Fprintf(w, "wrote %s with a summary, report.html, a copy of the report that opens without this tool, and each cluster's compact file\n", b.zip)
 	fmt.Fprintf(w, "the full-resolution file for every cluster stays at %s (%s); each cluster's own files are in %s\n", o.out, megabytes(b.full.Bytes), dir)
 	return b, nil
 }
@@ -387,21 +391,7 @@ func checkFleet(ctx context.Context, o *runOptions, timeout time.Duration, asJSO
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return checkBlocked
 	}
-	fc := &fleetCheck{Clusters: make([]clusterCheck, len(names))}
-	ms := make([]*member, len(names))
-	for i, n := range names {
-		ms[i] = &member{context: n}
-		fc.Clusters[i].Context = n
-	}
-	now := time.Now()
-	each(ms, fleetConcurrency, func(m *member) {
-		oc := *o
-		oc.context, oc.contexts, oc.allContexts, oc.contextsFile, oc.fleet = m.context, nil, false, "", false
-		i := slices.Index(names, m.context)
-		cctx, cancel := context.WithTimeout(ctx, timeout)
-		defer cancel()
-		fc.Clusters[i].Report = check(cctx, &oc, newFleetCheckEnv(&oc), now)
-	})
+	fc := &fleetCheck{Clusters: checkContexts(ctx, o, names, timeout, "savings-preview check")}
 	counts := map[int]int{}
 	for _, c := range fc.Clusters {
 		counts[c.Report.ExitCode]++
@@ -428,6 +418,30 @@ func checkFleet(ctx context.Context, o *runOptions, timeout time.Duration, asJSO
 	}
 	printFleetCheck(w, fc, color)
 	return fc.ExitCode
+}
+
+// checkContexts checks each named context as check does one, a few at a
+// time, each with its own timeout. A kubeconfig problem is explained with
+// command, the command to run again.
+func checkContexts(ctx context.Context, o *runOptions, names []string, timeout time.Duration, command string) []clusterCheck {
+	out := make([]clusterCheck, len(names))
+	ms := make([]*member, len(names))
+	for i, n := range names {
+		ms[i] = &member{context: n}
+		out[i].Context = n
+	}
+	now := timeNow()
+	each(ms, fleetConcurrency, func(m *member) {
+		oc := *o
+		oc.context, oc.contexts, oc.allContexts, oc.contextsFile, oc.fleet = m.context, nil, false, "", false
+		i := slices.Index(names, m.context)
+		cctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		e := newFleetCheckEnv(&oc)
+		e.connErr = kube.WithCommand(e.connErr, command)
+		out[i].Report = check(cctx, &oc, e, now)
+	})
+	return out
 }
 
 func printFleetCheck(w io.Writer, fc *fleetCheck, color bool) {
