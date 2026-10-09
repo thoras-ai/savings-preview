@@ -70,13 +70,13 @@ test('a missing required series excludes the workload and is explained', () => {
 });
 
 test('gaps are left out, not filled', () => {
-  const cpu = [1, 1, null, 1, 1], mem = [1, 1, 1, 1, 1];
+  const cpu = [1, 1, null, null, 1, 1], mem = [1, 1, 1, 1, 1, 1];
   const r = model.analyze(doc({ cpu, mem }));
   const s = r.workloads[0].series;
-  assert.strictEqual(s.t.length, 5);
+  assert.strictEqual(s.t.length, 6);
   assert.ok(Number.isNaN(s.cur[2]));
-  assert.ok(Number.isFinite(s.cur[3]));
-  assert.ok(Number.isNaN(r.series.cur[2]));
+  assert.ok(Number.isFinite(s.cur[4]));
+  assert.ok(Number.isNaN(r.series.cur[2]) && Number.isNaN(r.series.cur[3]));
 });
 
 test('a single point is labeled a snapshot', () => {
@@ -183,9 +183,20 @@ test('a workload that starts late does not blank the cluster series', () => {
   assert.ok(r.series.reqCpu[0] < r.series.reqCpu[99]);
 });
 
-test('a gap inside a workload range still drops the cluster bucket', () => {
+test('a gap of two buckets inside a workload range still drops the cluster buckets', () => {
+  const r = model.analyze(doc({ cpu: [1, 1, null, null, 1], mem: [1, 1, 1, 1, 1] }));
+  assert.ok(Number.isNaN(r.series.cur[2]) && Number.isNaN(r.series.cur[3]));
+  assert.ok(Number.isFinite(r.series.cur[4]));
+});
+
+test('one missing bucket draws through on the cluster chart with the value next to it', () => {
   const r = model.analyze(doc({ cpu: [1, 1, null, 1, 1], mem: [1, 1, 1, 1, 1] }));
-  assert.ok(Number.isNaN(r.series.cur[2]));
+  assert.ok(Array.from(r.series.cur).every(Number.isFinite));
+  assert.strictEqual(r.series.cur[2], r.series.cur[1]);
+  // The workload's own figures still leave the bucket out.
+  assert.ok(Number.isNaN(r.workloads[0].series.cur[2]));
+  const whole = model.analyze(doc({ cpu: [1, 1, 1, 1, 1], mem: [1, 1, 1, 1, 1] }));
+  assert.strictEqual(r.totals.spend, whole.totals.spend);
 });
 
 test('a container without usage at a step is not running then and adds no usage or request', () => {
@@ -211,7 +222,9 @@ test('a workload is unknown at a step when none of its containers has usage', ()
   assert.strictEqual(s.t.length, 9);
   assert.strictEqual(s.reqCpu[4], 1);
   assert.strictEqual(s.reqCpu[5], 2);
-  assert.ok(Number.isNaN(r.series.cur[4]));
+  // The workload has no point at step 4; the cluster chart draws through it.
+  assert.strictEqual(r.series.t.length, 10);
+  assert.strictEqual(r.series.cur[4], r.series.cur[3]);
 });
 
 test('a container with only one usage value at a step is not running then', () => {
@@ -235,11 +248,17 @@ test('a small workload with a gap is filled from its nearest bucket, a large one
   assert.ok(Array.from(small.series.cur).every(Number.isFinite));
   assert.strictEqual(small.series.reqCpu[3], 41);
   const large = model.analyze(multi([
+    { name: 'big', replicas: 1, cpu, containers: [{ name: 'a', use: 1, req: 40, off: [3, 4] }] },
+    { name: 'small', replicas: 1, cpu, containers: [{ name: 'a', use: 0.1, req: 1 }] }
+  ]));
+  assert.ok(Number.isNaN(large.series.cur[3]) && Number.isNaN(large.series.cur[4]));
+  assert.strictEqual(large.series.reqCpu[5], 41);
+  const once = model.analyze(multi([
     { name: 'big', replicas: 1, cpu, containers: [{ name: 'a', use: 1, req: 40, off: [3] }] },
     { name: 'small', replicas: 1, cpu, containers: [{ name: 'a', use: 0.1, req: 1 }] }
   ]));
-  assert.ok(Number.isNaN(large.series.cur[3]));
-  assert.strictEqual(large.series.reqCpu[4], 41);
+  assert.ok(Array.from(once.series.cur).every(Number.isFinite));
+  assert.strictEqual(once.series.reqCpu[3], 41);
 });
 
 test('leading buckets where no workload has data are dropped from the cluster series', () => {
@@ -551,4 +570,41 @@ test('nodes are priced from their own cloud table, spot and custom types the way
   ]);
   assert.ok(near(rates.perCore, (0.218756 + 0.192) / 8) && near(rates.perGiB, (0.218756 + 0.192) / 32));
   assert.strictEqual(rates.basis, '2 of 2 nodes at Google Cloud us-central1 and Azure eastus on-demand list prices; nodes outside those regions are priced as if in them');
+});
+
+// A compact file: 15-minute steps summarizing 1-minute readings.
+function compacted(d) {
+  d.resourceMetrics[1].resource.attributes.push(I('thoras.source_step_seconds', 60));
+  return d;
+}
+
+test('charts leave out the last step of a compact file, which the run ended part way through', () => {
+  // The last step holds a minute of readings, so its peak and target read low.
+  const cpu = [1, 1, 1, 0.1], mem = [1, 1, 1, 1];
+  const r = model.analyze(compacted(doc({ cpu, mem, step: 900 })));
+  const w = r.workloads[0];
+  assert.strictEqual(w.series.t.length, 4);
+  assert.strictEqual(w.chart.t.length, 3);
+  assert.strictEqual(r.series.t.length, 3);
+  assert.strictEqual(r.series.t[2], w.series.t[2]);
+  // Totals keep it.
+  const full = model.analyze(doc({ cpu, mem, step: 900 }));
+  assert.strictEqual(full.series.t.length, 4);
+  assert.strictEqual(r.totals.spend, full.totals.spend);
+  assert.strictEqual(r.totals.savings, full.totals.savings);
+});
+
+test('only the cluster\'s last step is left out of the charts', () => {
+  const cpu = Array(6).fill(0);
+  const d = multi([
+    { name: 'stays', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 1 }] },
+    { name: 'gone', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 1, off: [4, 5] }] }
+  ]);
+  d.resourceMetrics.forEach((rm) => { if (rm.resource.attributes.some((a) => a.key === 'k8s.container.name')) rm.resource.attributes.push(I('thoras.source_step_seconds', 60)); });
+  const r = model.analyze(d);
+  const byName = Object.fromEntries(r.workloads.map((w) => [w.name, w]));
+  assert.strictEqual(byName.stays.chart.t.length, byName.stays.series.t.length - 1);
+  // A workload that ended earlier keeps its last point.
+  assert.strictEqual(byName.gone.chart, byName.gone.series);
+  assert.strictEqual(r.series.t.length, 5);
 });

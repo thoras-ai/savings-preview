@@ -90,6 +90,22 @@ test('a short poll says what was read, adds the week-long run and nothing about 
   assert.ok(!out.includes('OOM'), 'no OOM line when nothing was killed');
 });
 
+test('a short window from a store points at the store, not at polling longer', () => {
+  // Two days of Prometheus history.
+  const data = prepare('intermittent.otlp.json');
+  const { r, st } = run(data);
+  assert.strictEqual(summary.thin(r, st), true);
+  const out = text(summary.markup(data, r, st));
+  assert.ok(out.includes('With 14 days of history in your metrics store, the same run gives the full figure.'), out);
+  assert.ok(!out.includes('--duration'), out);
+  assert.ok(!HEDGES.test(out), out.match(HEDGES));
+  // Fourteen days in the store has no such line, even with two days picked on the page.
+  const long = prepare('savings-preview.otlp.json');
+  const picked = run(long, { range: [long.fidelity.start, long.fidelity.start + 2 * 86400] });
+  assert.strictEqual(summary.thin(picked.r, picked.st), true);
+  assert.strictEqual(summary.longer(picked.r, picked.st), null);
+});
+
 test('provenance names the store and the window, and a single reading', () => {
   const r = { fidelity: { snapshot: false, source: 'datadog', start: 0, end: 2 * 86400, spanSeconds: 2 * 86400 } };
   assert.match(summary.provenance(r, state.DEFAULTS), /^From 2 days of your Datadog data\. /);

@@ -71,8 +71,9 @@
   }
 
   function next(r, st) {
+    var more = summary.longer(r, st);
     return '<div class="print-box"><h2>Next step</h2><p>A two-week proof of value on ' + (r.fleet ? 'these clusters' : 'this cluster') + ', read-only, with the same numbers measured live. Book a demo at thoras.ai/book-a-demo.</p>' +
-      (summary.thin(r, st) ? '<p class="print-muted">Run it for a week for a full-month figure: <span class="print-mono">savings-preview run --duration 168h</span></p>' : '') + '</div>';
+      (more ? '<p class="print-muted">' + esc(more.text) + (more.code ? '<span class="print-mono">' + esc(more.code) + '</span>' : '') + '</p>' : '') + '</div>';
   }
 
   // now is the print date; tests pass a fixed one.
