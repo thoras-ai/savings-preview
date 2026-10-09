@@ -122,7 +122,9 @@ func owner(refs []metav1.OwnerReference, kinds ...string) (string, string, bool)
 	return "", "", false
 }
 
-func nodeInfo(n *corev1.Node) NodeInfo {
+// Attrs reads a node's instance type, cloud, region and capacity type from
+// its labels and provider ID, the way the product does.
+func Attrs(n *corev1.Node) NodeAttrs {
 	l := n.Labels
 	capacity := unknown
 	karpenter := strings.ToLower(l["karpenter.sh/capacity-type"])
@@ -150,19 +152,19 @@ func nodeInfo(n *corev1.Node) NodeInfo {
 		}
 		return unknown
 	}
+	return NodeAttrs{
+		Name:         n.Name,
+		InstanceType: first("node.kubernetes.io/instance-type", "beta.kubernetes.io/instance-type"),
+		Provider:     provider,
+		Region:       first("topology.kubernetes.io/region", "failure-domain.beta.kubernetes.io/region"),
+		CapacityType: capacity,
+	}
+}
+
+func nodeInfo(n *corev1.Node) NodeInfo {
 	cpu, _ := nanocores(n.Status.Allocatable)
 	mem, _ := memBytes(n.Status.Allocatable)
-	return NodeInfo{
-		NodeAttrs: NodeAttrs{
-			Name:         n.Name,
-			InstanceType: first("node.kubernetes.io/instance-type", "beta.kubernetes.io/instance-type"),
-			Provider:     provider,
-			Region:       first("topology.kubernetes.io/region", "failure-domain.beta.kubernetes.io/region"),
-			CapacityType: capacity,
-		},
-		CPU:    cpu,
-		Memory: mem,
-	}
+	return NodeInfo{NodeAttrs: Attrs(n), CPU: cpu, Memory: mem}
 }
 
 // Reduce maps pods to their Deployment or StatefulSet through owner

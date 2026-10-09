@@ -63,7 +63,7 @@
 
   function nodesText(p) {
     if (!p.nodes) return 'None in the file';
-    return ui.num(p.nodes) + ' in the file, ' + ui.num(p.priced) + ' with a known list price';
+    return ui.num(p.nodes) + ' in the file, ' + ui.num(p.priced) + ' with a known list price' + (p.mixed ? ', ' + ui.num(p.mixed) + ' priced by the live instance mix' : '');
   }
 
   function pricingText(r, data) {
@@ -142,8 +142,9 @@
   // With rates set under Assumptions the nodes do not set prices, so only the
   // nodes the file could not price are worth naming.
   function nodeItems(nodes, custom) {
-    var out = [], inferred = {};
+    var out = [], inferred = {}, gone = 0;
     nodes.forEach(function (n) {
+      if (model.liveMix(n)) { gone++; return; }
       var name = '<span class="wl-name">' + esc(n.name) + '</span>', p = model.priceNode(n), type = code(n.hostType);
       if (p.reason === 'type') out.push(name + (n.hostType && n.hostType !== 'unknown' ? ' has instance type ' + type + ', which has no list price here,' : ' has no instance type,') + ' so it is not used for pricing.');
       else if (p.reason === 'cloud') out.push(name + ' runs on ' + esc(n.provider) + ', which has no list prices here, so it is not used for pricing.');
@@ -157,6 +158,12 @@
         if (p.otherRegion) out.push(name + ' is in ' + esc(n.region) + ' and priced at ' + cloud + ' ' + esc(model.priceTable[p.cloud].region) + ' list prices.');
       }
     });
+    if (gone) {
+      var live = nodes.length - gone, priced = nodes.some(function (n) { return !model.liveMix(n) && !model.priceNode(n).reason; });
+      out.unshift(ui.num(live) + ' of ' + ui.num(nodes.length) + ' nodes were live; ' + (priced ?
+        'the rest are priced by the live instance mix: each at the average list price, vCPUs and memory of the priced nodes in its pool, or of all priced nodes when its pool has none.' :
+        'the rest had no instance type, and with no node of a known list price, requests are priced with the default node.'));
+    }
     Object.keys(inferred).forEach(function (c) {
       var k = inferred[c];
       out.push(ui.num(k) + ' ' + ui.plural(k, 'node') + ' with no cloud provider in the file ' + (k === 1 ? 'is' : 'are') + ' priced as ' + model.cloudNames[c] + ', the cloud ' + (k === 1 ? 'its instance type belongs' : 'their instance types belong') + ' to.');

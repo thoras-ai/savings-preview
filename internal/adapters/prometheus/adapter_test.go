@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/thoras-ai/savings-preview/internal/contract"
+	"github.com/thoras-ai/savings-preview/internal/livenodes"
 	validator "github.com/thoras-ai/savings-preview/internal/validate"
 )
 
@@ -644,5 +645,53 @@ func TestCapacityTypeLabels(t *testing.T) {
 		if got := capacityType(map[string]string{labelKey(labels[0]): labels[1]}); got != want {
 			t.Errorf("%v: %s, want %s", labels, got, want)
 		}
+	}
+}
+
+// A store without node labels gives the cloud from kube_node_info only; the
+// live node list fills in the rest, and the file stays valid.
+func TestNodesWithoutStoreLabels(t *testing.T) {
+	base := clusterStore(true, true, true)
+	noLabels := func(path string, q url.Values) (int, any) {
+		if strings.Contains(q.Get("query"), "kube_node_labels") {
+			return 200, empty()
+		}
+		return base(path, q)
+	}
+	f, _, err := runAgainst(t, &fakeStore{handle: noLabels})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n *contract.Node
+	for _, r := range f.Resources {
+		if r.Node != nil {
+			n = r.Node
+		}
+	}
+	if want := (contract.Node{Name: "n1", InstanceType: "unknown", Provider: "aws", Region: "unknown", CapacityType: "unknown"}); n == nil || *n != want {
+		t.Fatalf("store node: %+v", n)
+	}
+	if !livenodes.Needed(f) {
+		t.Fatal("an untyped node needs the live list")
+	}
+	res := livenodes.Fill(f, []contract.Node{{Name: "n1", InstanceType: "m5.large", Provider: "aws", Region: "us-east-1", CapacityType: "spot", Pool: "default"}})
+	if want := (contract.Node{Name: "n1", InstanceType: "m5.large", Provider: "aws", Region: "us-east-1", CapacityType: "spot", Pool: "default", TypeSource: contract.TypeFromAPI}); *n != want || res.FromAPI != 1 {
+		t.Errorf("filled node: %+v, %+v", *n, res)
+	}
+	validate(t, f)
+
+	if typed, total, err := NodeTypes(context.Background(), (&fakeStore{handle: noLabels}).client(t), time.Unix(t0, 0)); err != nil || typed != 0 || total != 0 {
+		t.Errorf("no labels: %d of %d, %v", typed, total, err)
+	}
+	labels := func(path string, q url.Values) (int, any) {
+		if q.Get("query") == "kube_node_labels" {
+			return 200, map[string]any{"status": "success", "data": map[string]any{"resultType": "vector", "result": []any{
+				map[string]any{"metric": map[string]string{"node": "a", "label_node_kubernetes_io_instance_type": "m5.large"}, "value": []any{1.0, "1"}},
+				map[string]any{"metric": map[string]string{"node": "b"}, "value": []any{1.0, "1"}}}}}
+		}
+		return base(path, q)
+	}
+	if typed, total, err := NodeTypes(context.Background(), (&fakeStore{handle: labels}).client(t), time.Unix(t0, 0)); err != nil || typed != 1 || total != 2 {
+		t.Errorf("labels: %d of %d, %v", typed, total, err)
 	}
 }

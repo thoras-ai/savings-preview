@@ -90,6 +90,10 @@ type storeCheck struct {
 	UsageFromPods bool      `json:"usage_from_pods,omitempty"`
 	Tier          int       `json:"tier,omitempty"`
 	Warnings      []string  `json:"warnings,omitempty"`
+	// InstanceTypes is where run would take the nodes' instance types from:
+	// store, kubernetes_api or none. Set for a store in the cluster.
+	InstanceTypes     string `json:"instance_types,omitempty"`
+	InstanceTypesNote string `json:"instance_types_note,omitempty"`
 }
 
 type datadogCheck struct {
@@ -133,6 +137,10 @@ type checkEnv struct {
 	// direct opens the store at --url.
 	direct  func(context.Context) (name string, answer func(context.Context) error, probe func(context.Context) (*prometheus.Report, error), err error)
 	datadog func(context.Context) (site string, err error)
+	// storeTypes counts a store's nodes and those it labels with an
+	// instance type; nodes lists the live nodes. Either may be nil.
+	storeTypes func(context.Context, prometheus.Candidate) (typed, total int, err error)
+	nodes      func(context.Context) ([]contract.Node, error)
 }
 
 func runCheck(args []string) int {
@@ -229,6 +237,14 @@ func newCheckEnv(o *runOptions) checkEnv {
 			}
 			return prometheus.Probe(ctx, prometheus.Options{Client: cl, Days: o.days, Step: o.step})
 		}
+		e.storeTypes = func(ctx context.Context, c prometheus.Candidate) (int, int, error) {
+			cl, err := client(c)
+			if err != nil {
+				return 0, 0, err
+			}
+			return prometheus.NodeTypes(ctx, cl, time.Time{})
+		}
+		e.nodes = func(ctx context.Context) ([]contract.Node, error) { return listNodes(ctx, e.conn) }
 	}
 	e.direct = func(ctx context.Context) (string, func(context.Context) error, func(context.Context) (*prometheus.Report, error), error) {
 		g, store, err := o.direct.open(ctx)
@@ -276,8 +292,12 @@ func promAccess(target *prometheus.Candidate, stores []prometheus.Candidate) []k
 	if len(stores) == 0 {
 		out = append(out, kube.Access{Verb: "get", Resource: "services", Subresource: "proxy", AllNamespaces: true})
 	}
-	return out
+	return append(out, nodesAccess)
 }
+
+// nodesAccess lets run read the instance types a store lacks from the live
+// nodes. Without it the nodes are priced from the store's labels only.
+var nodesAccess = kube.Access{Verb: "list", Resource: "nodes"}
 
 // proxyName is the name the API server authorizes a service proxy request
 // by, as in deploy/rbac/prometheus-namespaced.yaml.
@@ -363,9 +383,13 @@ func check(ctx context.Context, o *runOptions, e checkEnv, now time.Time) *check
 		}
 		for _, c := range found {
 			foundBy := c.Reason
-			r.Stores = append(r.Stores, checkStore(ctx, o, now, foundBy, c.String(),
+			s := checkStore(ctx, o, now, foundBy, c.String(),
 				func(ctx context.Context) error { return e.answer(ctx, c) },
-				func(ctx context.Context) (*prometheus.Report, error) { return e.probe(ctx, c) }))
+				func(ctx context.Context) (*prometheus.Report, error) { return e.probe(ctx, c) })
+			if s.Usable {
+				s.InstanceTypes, s.InstanceTypesNote = instanceTypes(ctx, e, c)
+			}
+			r.Stores = append(r.Stores, s)
 		}
 	}
 
@@ -373,7 +397,7 @@ func check(ctx context.Context, o *runOptions, e checkEnv, now time.Time) *check
 	if cluster {
 		if useStore {
 			for _, a := range promAccess(o.target, found) {
-				r.Access = append(r.Access, canI(ctx, e, "prometheus", a, a.Group == "monitoring.coreos.com"))
+				r.Access = append(r.Access, canI(ctx, e, "prometheus", a, a.Group == "monitoring.coreos.com" || a == nodesAccess))
 			}
 		}
 		if usePoll {
@@ -395,6 +419,50 @@ func check(ctx context.Context, o *runOptions, e checkEnv, now time.Time) *check
 
 	decide(r, o, usePoll)
 	return r
+}
+
+// instanceTypes says where run would take the nodes' instance types from
+// when it reads the store c in the cluster: the store's node labels, or the
+// live nodes when the store has none.
+func instanceTypes(ctx context.Context, e checkEnv, c prometheus.Candidate) (source, note string) {
+	if e.storeTypes == nil {
+		return "", ""
+	}
+	typed, total, err := e.storeTypes(ctx, c)
+	if err != nil {
+		return "", "could not count the store's node labels: " + err.Error()
+	}
+	if total > 0 && typed == total {
+		return contract.TypeFromStore, fmt.Sprintf("the store labels all %d nodes with an instance type", total)
+	}
+	stored := fmt.Sprintf("the store labels %d of %d nodes with an instance type", typed, total)
+	if total == 0 {
+		stored = "the store has no node labels (kube_node_labels)"
+	}
+	source = "none"
+	if typed > 0 {
+		source = contract.TypeFromStore
+	}
+	if e.nodes == nil {
+		return source, stored
+	}
+	live, err := e.nodes(ctx)
+	if err != nil {
+		return source, stored + "; the nodes cannot be listed for the rest: " + err.Error()
+	}
+	liveTyped := 0
+	for _, n := range live {
+		if n.InstanceType != "" && n.InstanceType != "unknown" {
+			liveTyped++
+		}
+	}
+	if liveTyped == 0 {
+		if typed == 0 {
+			return "none", stored + fmt.Sprintf(", and none of the %d live nodes has an instance-type label, so workloads would be priced with the default node", len(live))
+		}
+		return source, stored + fmt.Sprintf(", and none of the %d live nodes has an instance-type label", len(live))
+	}
+	return contract.TypeFromAPI, stored + fmt.Sprintf("; %d of %d live nodes have one in the Kubernetes API, and nodes gone from the cluster would be priced by the live instance mix", liveTyped, len(live))
 }
 
 func canI(ctx context.Context, e checkEnv, mode string, a kube.Access, optional bool) accessCheck {
@@ -772,6 +840,13 @@ func printCheck(w io.Writer, r *checkReport, color bool) {
 				fmt.Fprintf(w, "    %s%s; %s; tier %d\n", p.good("answers"), v, hist, s.Tier)
 				if s.UsageFromPods {
 					fmt.Fprintln(w, "    note: no per-container usage series; container usage would be the pod's usage split by requests")
+				}
+				if s.InstanceTypesNote != "" {
+					src := map[string]string{contract.TypeFromStore: "from the store", contract.TypeFromAPI: "from the Kubernetes API", "none": p.warn("none")}[s.InstanceTypes]
+					if src == "" {
+						src = p.warn("unknown")
+					}
+					fmt.Fprintf(w, "    instance types: %s (%s)\n", src, s.InstanceTypesNote)
 				}
 				for _, m := range s.Warnings {
 					fmt.Fprintf(w, "    %s %s\n", p.warn("warning:"), m)

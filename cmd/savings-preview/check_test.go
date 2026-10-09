@@ -136,6 +136,7 @@ func TestCheckReadyWithAStore(t *testing.T) {
 		"prometheus list prometheusagents.monitoring.coreos.com -A",
 		"prometheus get services/proxy prometheus:9090 -n monitoring",
 		"prometheus get services/proxy vm:8428 -n obs",
+		"prometheus list nodes",
 		"poll list pods -A",
 		"poll list replicasets.apps -A",
 		"poll list deployments.apps -A",

@@ -181,3 +181,31 @@ test('in a fleet the method prices each cluster from its own nodes', () => {
   const one = text(method(context(model.prepare(fixture()))));
   assert.ok(one.includes('Here that is $'));
 });
+
+test('nodes gone from the cluster with no instance type are priced by the live instance mix', () => {
+  const doc = fixture();
+  const nodes = doc.resourceMetrics.filter(rm => rm.resource.attributes.some(a => a.key === 'k8s.node.name'));
+  const set = (rm, key, value) => {
+    const a = rm.resource.attributes.find(x => x.key === key);
+    if (a) a.value = { stringValue: value }; else rm.resource.attributes.push({ key, value: { stringValue: value } });
+  };
+  nodes.forEach(rm => set(rm, 'thoras.node.type_source', 'kubernetes_api'));
+  for (let i = 0; i < 3; i++) {
+    const rm = JSON.parse(JSON.stringify(nodes[0]));
+    set(rm, 'k8s.node.name', 'gone-' + i);
+    set(rm, 'host.type', 'unknown');
+    set(rm, 'thoras.node.type_source', 'live_mix');
+    doc.resourceMetrics.push(rm);
+  }
+  const before = context(model.prepare(fixture())), ctx = context(model.prepare(doc));
+  // Without pools the mix gives the live nodes' own rates.
+  assert.ok(Math.abs(ctx.result.pricing.perCore - before.result.pricing.perCore) < 1e-12);
+  assert.ok(Math.abs(ctx.result.totals.spend - before.result.totals.spend) < 1e-6);
+  const out = text(method(ctx));
+  for (const s of [
+    '5 in the file, 2 with a known list price, 3 priced by the live instance mix',
+    '2 of 5 nodes at AWS us-east-1 on-demand and spot list prices and 3 that were gone from the cluster at the live instance mix',
+    '2 of 5 nodes were live; the rest are priced by the live instance mix'
+  ]) assert.ok(out.includes(s), s);
+  assert.ok(!out.includes('gone-0 has no instance type'), out);
+});

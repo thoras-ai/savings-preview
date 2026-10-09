@@ -612,3 +612,24 @@ func TestCompactKeepsPeaksWithoutUsage(t *testing.T) {
 		t.Errorf("cpu peaks %v", got)
 	}
 }
+
+func TestNodePoolAndTypeSourceSurvive(t *testing.T) {
+	pts := []contract.Point{{T: 1_700_000_000, V: 4}, {T: 1_700_000_060, V: 4}}
+	f := contract.File{Resources: []contract.Resource{{
+		Common:  contract.Common{Cluster: "c", Source: "prometheus", StepSeconds: 60, Tier: 1},
+		Node:    &contract.Node{Name: "n", InstanceType: "unknown", Provider: "unknown", Region: "unknown", CapacityType: "unknown", Pool: "batch", TypeSource: "live_mix"},
+		Metrics: []contract.Series{{Name: contract.NodeCPU, Points: pts}, {Name: contract.NodeMemory, Points: pts}},
+	}}}
+	var in, out bytes.Buffer
+	if err := f.Write(&in); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Compact(&in, &out, 900); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{`"thoras.node.pool"`, `"batch"`, `"thoras.node.type_source"`, `"live_mix"`} {
+		if !strings.Contains(out.String(), s) {
+			t.Errorf("compact file lacks %s", s)
+		}
+	}
+}

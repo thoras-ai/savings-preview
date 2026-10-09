@@ -39,7 +39,14 @@ All kinds:
 
 Container and workload resources also take `k8s.namespace.name` and exactly one of `k8s.deployment.name` or `k8s.statefulset.name`. Container resources add `k8s.container.name`.
 
-Node resources add `k8s.node.name`, `host.type` (the instance type), `cloud.provider`, `cloud.region` and `thoras.node.capacity_type` (`on_demand`, `spot` or `unknown`).
+Node resources add `k8s.node.name`, `host.type` (the instance type), `cloud.provider`, `cloud.region` and `thoras.node.capacity_type` (`on_demand`, `spot` or `unknown`). Two node attributes are optional:
+
+| Attribute | Type | Meaning |
+| --- | --- | --- |
+| `thoras.node.pool` | string | The node pool or node group, from the first of the labels `karpenter.sh/nodepool`, `karpenter.sh/provisioner-name`, `eks.amazonaws.com/nodegroup`, `cloud.google.com/gke-nodepool`, `kubernetes.azure.com/agentpool` and `agentpool` the node has. |
+| `thoras.node.type_source` | string | Where `host.type` came from: `store` (the metrics store's node labels) or `kubernetes_api` (the node as the Kubernetes API listed it). `live_mix` marks a node with no instance type that was no longer in the cluster when the cluster was read; it is priced by the instance mix of the others, see [Node prices](node-prices.md#nodes-that-are-gone). Set only when the run listed the cluster's nodes. |
+
+Readers that do not know these attributes ignore them. A file without them is read as before.
 
 ## Metrics
 
