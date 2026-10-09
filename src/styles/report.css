@@ -285,9 +285,9 @@ tr.excluded { color: var(--text-light); }
 .chart-gap .dot-b { fill: var(--primitive-brand-600); }
 [data-theme="dark"] .chart-gap .line-b { stroke: var(--primitive-brand-300); }
 [data-theme="dark"] .chart-gap .dot-b { fill: var(--primitive-brand-300); }
-.legend-gap .swatch-a { border-color: var(--primitive-ruby-500); }
-.legend-gap .swatch-b { border-color: var(--primitive-brand-600); }
-[data-theme="dark"] .legend-gap .swatch-b { border-color: var(--primitive-brand-300); }
+.legend-gap .swatch-a, .chart-gap ~ .tip .swatch-a { border-color: var(--primitive-ruby-500); }
+.legend-gap .swatch-b, .chart-gap ~ .tip .swatch-b { border-color: var(--primitive-brand-600); }
+[data-theme="dark"] .legend-gap .swatch-b, [data-theme="dark"] .chart-gap ~ .tip .swatch-b { border-color: var(--primitive-brand-300); }
 .sum-table td { vertical-align: top; }
 .sum-table a { color: inherit; text-decoration: none; }
 .sum-table a:hover .wl-name { text-decoration: underline; }
