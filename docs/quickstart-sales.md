@@ -143,3 +143,7 @@ Access they need: read access to the cluster through their own `kubectl` login. 
 | An `aws` error about an expired token or SSO session | Run `aws sso login`, then try again. |
 | A `gcloud` error about credentials or reauthentication | Run `gcloud auth login`, then try again. |
 | `forbidden` | The login can't read something the run needs. `savings-preview check --context <context>` shows which line says `no`. |
+
+## Collecting from a customer
+
+When the customer runs it themselves and sends the result back, send them [send-to-thoras.md](send-to-thoras.md). It walks through installing, checking access, `--collect-only` and what the zip contains.
