@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"cmp"
 	"context"
 	"fmt"
@@ -11,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/term"
+	confirmpkg "github.com/thoras-ai/savings-preview/internal/confirm"
 
 	"github.com/thoras-ai/savings-preview/internal/kube"
 	"github.com/thoras-ai/savings-preview/internal/savings"
@@ -24,17 +23,8 @@ const planTimeout = time.Minute
 // timeNow is the time the checks measure history up to; tests replace it.
 var timeNow = time.Now
 
-// interactive reports whether run may wait for Enter: only when stdin,
-// stdout and stderr, where the plan and the prompt go, are all terminals, so
-// scripts, pipes, CI and a redirected log never wait.
-func interactive(files ...*os.File) bool {
-	for _, f := range files {
-		if !term.IsTerminal(int(f.Fd())) {
-			return false
-		}
-	}
-	return true
-}
+// interactive reports whether run may wait for Enter; see confirm.Interactive.
+func interactive(files ...*os.File) bool { return confirmpkg.Interactive(files...) }
 
 // preflight finds each cluster's source as check does, prints the plan and,
 // when ask is set and --yes is not, waits for Enter. It reports whether the
@@ -168,34 +158,8 @@ func storeTitle(from string) string {
 	return name
 }
 
-// confirm waits for Enter, q or Ctrl-C, and reports whether to go on. The end
-// of the input quits.
-func confirm(ctx context.Context, in io.Reader, w io.Writer) bool {
-	r := bufio.NewReader(in)
-	for {
-		fmt.Fprint(w, "\nPress Enter to continue, or q to quit. ")
-		line := make(chan string, 1)
-		go func() {
-			s, err := r.ReadString('\n')
-			if err != nil && s == "" {
-				s = "q"
-			}
-			line <- s
-		}()
-		select {
-		case <-ctx.Done():
-			fmt.Fprintln(w)
-			return false
-		case s := <-line:
-			switch strings.ToLower(strings.TrimSpace(s)) {
-			case "", "y", "yes":
-				return true
-			case "q", "quit", "n", "no":
-				return false
-			}
-		}
-	}
-}
+// confirm waits for Enter, q or Ctrl-C; see confirm.Ask.
+func confirm(ctx context.Context, in io.Reader, w io.Writer) bool { return confirmpkg.Ask(ctx, in, w) }
 
 // printSend says what to do with the zip after a --collect-only run.
 func printSend(w io.Writer, zip string) {

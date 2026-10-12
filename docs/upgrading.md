@@ -38,6 +38,20 @@
 
 `run` writes `savings-preview.compact.otlp.json` next to the output file in addition to the files it wrote before, and serves the compact file to the report. It reads every file it checks as a stream, so its memory stays at a few hundred MB whatever the size of the cluster: under 300 MB for 14 days of 1,000 workload-containers. The new `export` command writes compact copies and takes a report page's data back out. Existing commands and flags were unchanged in that release; [run waits for Enter in a terminal](#run-waits-for-enter-in-a-terminal) describes a later change.
 
+## check, prometheus, poll and datadog wait for Enter in a terminal
+
+**What changes.** Like `run`, the commands that reach a cluster or a metrics API now print what they are about to read and write and wait for Enter: `check`, `prometheus`, `poll` (and `snapshot`) and `datadog`. `q`, Ctrl-C or the end of input exits with status 0 having read nothing. They wait only when stdin, stdout and stderr are all terminals. `poll --export` and `export` read only local files and do not wait.
+
+**Who it affects.** Anyone who drives these commands through a terminal from a program. `check` used to answer at once. Scripts, pipes, cron and CI without a terminal are not affected, and `check --json` piped to another program does not wait.
+
+**Why.** Every command says what it will do to your clusters before it does it.
+
+**How to keep the old behavior.** Pass `--yes` (`-y`), which every one of these commands now accepts.
+
+**How to tell which you have.** The command prints `Press Enter to continue, or q to quit.` after the list of what it will do.
+
+**How to roll back.** Run v0.2.5, or add `--yes`.
+
 ## run waits for Enter in a terminal
 
 **What changes.** Before it reads any history, `run` prints a plan and waits for Enter; `q`, Ctrl-C or the end of input exits with status 0 having read nothing. It waits only when stdin, stdout and stderr are all terminals.

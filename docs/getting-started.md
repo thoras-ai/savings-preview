@@ -75,7 +75,7 @@ The commands below assume `savings-preview` is on your `PATH`. Move it to a dire
 
 ## Check before the first run
 
-`savings-preview check` takes the same flags as `run` and answers in a few seconds whether `run` can work and how well. It shows the identity your kubeconfig gives, whether that identity may make each request, whether metrics-server answers, which stores it finds and how much history they hold, whether Datadog keys are valid, and which source `run` would read. It pulls no history and writes nothing.
+`savings-preview check` takes the same flags as `run` and answers in a few seconds whether `run` can work and how well. It shows the identity your kubeconfig gives, whether that identity may make each request, whether metrics-server answers, which stores it finds and how much history they hold, whether Datadog keys are valid, and which source `run` would read. It pulls no history and writes nothing. In a terminal it first lists what it will ask and waits for Enter; `--yes` skips the wait.
 
     $ savings-preview check --context minikube
     Kubernetes
@@ -260,7 +260,7 @@ It prints its plan and waits for Enter, reads and writes the same files as `run`
 
     Send savings-preview.zip to your Thoras contact. It holds the report and the data, and nothing else from your environment.
 
-To run it from a script, add `--yes`, which starts without waiting for Enter. Without a terminal it never waits.
+To run it from a script, add `--yes`, which starts without waiting for Enter. Without a terminal it never waits. `check`, `prometheus`, `poll` and `datadog` print what they will do and wait the same way, and take `--yes` too.
 
 ## Troubleshooting
 

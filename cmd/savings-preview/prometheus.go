@@ -31,7 +31,9 @@ func runPrometheus(args []string) error {
 		list        = fs.Bool("list", false, "print what discovery finds and exit")
 		concurrency = fs.Int("concurrency", 2, "queries in flight at once")
 		verbose     = fs.Bool("v", false, "log each query")
+		yes         = fs.Bool("yes", false, "start without waiting for Enter after printing what it will do")
 	)
+	fs.BoolVar(yes, "y", false, "same as --yes")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -47,6 +49,9 @@ func runPrometheus(args []string) error {
 	matchers, err := prometheus.ParseSelector(*selector)
 	if err != nil {
 		return fmt.Errorf("--selector: %w", err)
+	}
+	if !gate(prometheusPlan(*kctx, direct.url, *target, *out, *days, *list), *yes) {
+		return nil
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()

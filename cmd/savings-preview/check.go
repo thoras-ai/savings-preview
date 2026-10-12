@@ -159,6 +159,10 @@ metrics-server answers, which Prometheus-compatible stores answer and how much
 history they hold, and whether the Datadog keys are valid. It only reads, and
 pulls no history.
 
+Before it reads anything, it prints what it will ask and waits for Enter; q
+or Ctrl-C quits with status 0. It waits only when stdin, stdout and stderr are
+terminals; --yes starts without waiting.
+
 Exit status: 0 ready, 1 usable but limited, 2 cannot run. Flags that only
 change what run writes, such as --out and --no-open, are accepted and ignored.
 
@@ -184,6 +188,9 @@ change what run writes, such as --out and --no-open, are accepted and ignored.
 	if *timeout <= 0 {
 		fmt.Fprintln(os.Stderr, "error: --timeout must be positive")
 		return checkBlocked
+	}
+	if !gate(checkPlan(o), o.yes) {
+		return 0
 	}
 	if o.fleet {
 		return checkFleet(context.Background(), o, *timeout, *asJSON, useColor(*color, os.Stdout), os.Stdout)
