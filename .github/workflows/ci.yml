@@ -12,8 +12,11 @@ on:
 permissions:
   contents: read
 
+# A pull request's new push cancels its older run. Each push to main gets
+# its own group, so back-to-back merges run side by side instead of queueing
+# behind each other; releases look up the CI result of the tagged commit.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
