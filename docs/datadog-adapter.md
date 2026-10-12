@@ -69,7 +69,7 @@ DD_API_KEY=... DD_APP_KEY=... savings-preview datadog --site us1 [--selector kub
 
 Before querying, the adapter checks both keys with `GET /api/v2/validate_keys`, which needs no scope. A 401 or 403 there means a key is wrong or belongs to an organization on another site. A 403 on a query means the application key lacks `timeseries_query`.
 
-## Setup for testing without a customer organization
+## Setup for a test organization
 
 1. **Start a trial** at datadoghq.com and pick the US1 site. The trial lasts 14 days.
 2. **Create the keys and save them to files** as in steps 2 to 4 above. The trial creates an API key at sign-up.

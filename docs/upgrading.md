@@ -58,7 +58,7 @@
 
 **Who it affects.** Anyone who drives `run` through a terminal from a program: expect scripts, `tmux send-keys`, terminal recordings. The run sits at the prompt. Scripts, pipes, cron and CI without a terminal are not affected: they print the plan and go on.
 
-**Why.** The first thing a prospect's engineer sees is what the tool is about to read and write, before it reads anything.
+**Why.** The first thing you see is what the tool is about to read and write, before it reads anything.
 
 **How to keep the old behavior.** Pass `--yes` (`-y`).
 
@@ -70,11 +70,11 @@
 
 **What changes.** Besides `summary.json` and `report.html`, the zip holds the compact data as plain files: `savings-preview.compact.otlp.json` for one cluster, or `savings-preview.clusters/NAME.compact.otlp.json` for each cluster read in a run of several. They are the files the run leaves on disk. The full-resolution files stay out of the zip. `summary.json` and `report.html` are unchanged.
 
-**Who it affects.** Tools that list a zip's entries and expect exactly two. An upload page built before this change also opens a new fleet zip wrongly: it reads the first `.otlp.json` entry, so it shows one cluster's figures as if they were the whole report, with no error. A single-cluster zip opens correctly there.
+**Who it affects.** Tools that list a zip's entries and expect exactly two. A report page from an earlier release also opens a new fleet zip wrongly: it reads the first `.otlp.json` entry, so it shows one cluster's figures as if they were the whole report, with no error. A single-cluster zip opens correctly there.
 
-**Why.** Thoras can take the data out of a zip a customer sends without running `export`, and drop either the zip or the files on the upload page.
+**Why.** The data can be taken out of the zip without running `export`, and either the zip or the files can be opened on the report page.
 
-**How to upgrade.** Deploy the upload page from this release before handing out the CLI. Until then, open a new fleet zip by opening the `report.html` inside it, or on the current upload page.
+**How to upgrade.** Open a new fleet zip with the report page of this release or later, or open the `report.html` inside it.
 
 **How to tell which you have.** `unzip -l` lists `.compact.otlp.json` entries in a new zip. A fleet zip shown on an older page has one cluster in the header, where it should say the number of clusters, and no Clusters filter under Assumptions.
 
@@ -86,7 +86,7 @@
 
 **Who it affects.** People who have both Datadog keys in their shell environment for other tools and run `run` without `--source`. Their report now comes from Datadog, and `--selector` is read as Datadog tag filters. `--step` must then be a whole number of minutes. When Datadog has no usable data and the run falls back to a store in the cluster that holds several clusters, label matchers for that store can be passed only with `--source prometheus`.
 
-**Why.** A prospect that already sends metrics to Datadog gets 14 days of history in one command instead of starting a poll.
+**Why.** If you already send metrics to Datadog, you get 14 days of history in one command instead of starting a poll.
 
 **How to keep the old behavior.** Unset either key for the run, for example `env -u DD_API_KEY savings-preview run`; the run then looks for a store and polls when there is none, as before. `--source prometheus` and `--source poll` also skip Datadog, but each reads only one source and does not fall back to the other.
 

@@ -125,7 +125,7 @@ savings-preview prometheus --url https://mimir.example.com --tenant TENANT --clu
 - **URL:** the gateway, query-frontend or monolithic Mimir. The Prometheus API is under `/prometheus`, which is added when the URL has no path. Give the path explicitly when the operator changed `prometheus_http_prefix` or a gateway maps it elsewhere. Cortex serves the API under `/api/prom`, so a Cortex URL needs that path.
 - **Tenant:** `--tenant` sets `X-Scope-OrgID`. It is not needed when multi-tenancy is off. A multi-tenant Mimir answers `401 no org id` without it.
 - **Gateway auth:** whatever the gateway in front of Mimir uses, as basic auth, a bearer token or headers. Mimir itself does no authentication.
-- **What the customer provides:** the URL, the tenant ID that holds the cluster's metrics, and gateway credentials with read access to that tenant.
+- **What you provide:** the URL, the tenant ID that holds the cluster's metrics, and gateway credentials with read access to that tenant.
 - **Limits:** Mimir has no range limit by default. When the operator set `max_total_query_length` or `max_partial_query_length`, the store rejects queries longer than that with `err-mimir-max-query-length`; pass the same limit as `--max-query-range`. It counts range selectors in instant queries too.
 
 ### Grafana Cloud
@@ -137,7 +137,7 @@ savings-preview prometheus --url https://prometheus-prod-NN-prod-REGION.grafana.
 
 - **URL:** the Prometheus endpoint of the stack, from the stack's Prometheus details page. `/api/prom` is added when the URL has no path, and the remote-write URL (`/api/prom/push`) is accepted.
 - **Credentials:** basic auth, the Prometheus instance ID (the numeric user on the same page) as user and an access policy token as password.
-- **What the customer creates:** an access policy scoped to the stack with the `metrics:read` scope, and a token for it. No other scope is needed.
+- **What you create:** an access policy scoped to the stack with the `metrics:read` scope, and a token for it. No other scope is needed.
 - **Limits:** a range selector may cover at most 32 days; a longer one fails with `err-mimir-max-query-length`. Range queries are split by day, and the instant queries that look back over the whole `--days` window are split into pieces of at most 32 days, so `--days` beyond 32 works.
 - **Adaptive Metrics:** an aggregation rule can drop the `pod`, `container` or other labels from cAdvisor and kube-state-metrics series. The run then stops and names the metric and the labels, instead of producing usage that cannot be attributed to workloads. A cluster whose container runtime does not label cAdvisor series (older containerd setups, minikube) stops the same way on Grafana Cloud, since its pod-level series cannot be told apart from aggregated ones. On Grafana Cloud usage is never split from pod-level series: there a series without a `container` label may be the sum of all of a pod's containers and the pod total, which would double the usage. The fix is to exclude the metric from Adaptive Metrics recommendations, or to keep the labels in its rule, and run again once new data has arrived.
 - **Container series dropped at collection:** the Grafana k8s-monitoring chart drops cAdvisor series without a `container` label by default, so on such a runtime the store has no container usage at all. The run stops and says so when it finds `machine_memory_bytes` but no container series. The kubelet's resource endpoint labels containers on such runtimes; the minikube values below show how to collect it, although its series carry no `image` label, which the adapter needs and those values add.
@@ -162,7 +162,7 @@ savings-preview prometheus --url https://prometheus-prod-NN-prod-REGION.grafana.
    python3 scripts/validate_contract.py savings-preview.otlp.json
    ```
 
-#### Setup for testing without a customer stack
+#### Setup for a test stack
 
 1. **Start a trial** at grafana.com. It creates a stack with a Prometheus endpoint.
 2. **Create a token and save it** as in steps 1 to 3 above, with the scopes `metrics:read` and `metrics:write`: the collector writes with it and the adapter reads with it. Keep the instance ID.
@@ -277,7 +277,7 @@ AWS_PROFILE=readonly savings-preview prometheus \
 
 - **URL:** the workspace endpoint, `https://aps-workspaces.REGION.amazonaws.com/workspaces/WORKSPACE_ID`. The workspace page in the console shows it as the query URL, which ends in `/api/v1/query`, and as the remote write URL, which ends in `/api/v1/remote_write`; both are accepted. The region comes from the host. VPC endpoint host names (`*.aps-workspaces.REGION.vpce.amazonaws.com`) are recognized too. For any other host, pass `--backend amp --aws-region REGION`.
 - **Credentials:** every request is signed with SigV4 for the `aps` service. Credentials come from the standard AWS chain: environment variables, `AWS_PROFILE` with the shared config and credentials files (including SSO and assumed roles), web identity, and the container or instance role. Bearer tokens and basic auth are refused for this backend.
-- **What the customer grants:** an IAM identity with this policy. `aps:QueryMetrics` covers `/api/v1/query` and `/api/v1/query_range`, the only workspace APIs the queries use. The adapter also asks for `/api/v1/status/buildinfo` to print the store's version; a refusal there is ignored.
+- **What you grant:** an IAM identity with this policy. `aps:QueryMetrics` covers `/api/v1/query` and `/api/v1/query_range`, the only workspace APIs the queries use. The adapter also asks for `/api/v1/status/buildinfo` to print the store's version; a refusal there is ignored.
 
   ```json
   {
@@ -304,7 +304,7 @@ AWS_PROFILE=readonly savings-preview prometheus --backend cloudwatch --aws-regio
 - **What it reads:** CloudWatch answers PromQL for metrics sent to it over OTLP, which include OTel Container Insights on EKS: the `amazon-cloudwatch-observability` EKS add-on, version 6.2.0 or later, with `otelContainerInsights.enabled` set to `true`. That setting is off by default. The add-on sends cAdvisor and kube-state-metrics series under their Prometheus names and labels (`container_cpu_usage_seconds_total`, `kube_pod_owner` and so on), so the run uses the same queries as for any other store and maps them to the contract in the same way. Container Insights without the OTel setting (classic, or enhanced observability) writes to the `ContainerInsights` namespace, which PromQL does not read. When the account has no OTel Container Insights metrics in the region, the run stops and says how to turn them on.
 - **URL:** `https://monitoring.REGION.amazonaws.com`, with no path. `--backend cloudwatch --aws-region REGION` builds it, so `--url` can be left out. With `--url`, the region comes from the host, and VPC endpoint host names (`*.monitoring.REGION.vpce.amazonaws.com`) are recognized too; for any other host, pass `--backend cloudwatch --aws-region REGION`. PromQL is available only in the [regions the CloudWatch documentation lists](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-PromQL.html#CloudWatch-PromQL-Regions).
 - **Credentials:** every request is signed with SigV4 for the `monitoring` service, with credentials from the standard AWS chain, as for Amazon Managed Prometheus. Bearer tokens, basic auth and `--tenant` are refused for this backend.
-- **What the customer grants:** an IAM identity with this policy. The PromQL query APIs need both actions, which take no resource ARN.
+- **What you grant:** an IAM identity with this policy. The PromQL query APIs need both actions, which take no resource ARN.
 
   ```json
   {
@@ -336,7 +336,7 @@ savings-preview prometheus --url https://WORKSPACE.REGION.prometheus.monitor.azu
   3. The Azure CLI login, through `az account get-access-token`, in the tenant of `--azure-tenant-id` or `AZURE_TENANT_ID` when one is set. This covers a user's `az login`, a service principal, and a managed identity signed in with `az login --identity`. `AZURE_CLIENT_ID` without a secret does not select an app registration.
 
   `--tenant` is refused for this backend, and so are an app registration and a token given directly together.
-- **What the customer grants:** the Monitoring Data Reader role on the Azure Monitor workspace, for a user or an app registration. For an app registration:
+- **What you grant:** the Monitoring Data Reader role on the Azure Monitor workspace, for a user or an app registration. For an app registration:
 
   ```
   az ad sp create-for-rbac --name savings-preview --role "Monitoring Data Reader" \
@@ -369,13 +369,13 @@ savings-preview run --project PROJECT_ID --selector 'cluster_name="prod-us"'
 
 Google Cloud Monitoring answers PromQL for a whole project at `https://monitoring.googleapis.com/v1/projects/PROJECT_ID/location/global/prometheus`. `--project` builds that URL; the URL itself, or the query URL the console shows, works as `--url` too. The same endpoint serves two kinds of data, and `--gke-metrics` picks one:
 
-- **Managed Prometheus series** (`prometheus`): cAdvisor and kube-state-metrics series collected by Managed Prometheus, read with the same queries as any other store. GKE's managed kube-state-metrics package does not include `kube_pod_owner`, so this needs a kube-state-metrics the customer runs and scrapes with Managed Prometheus.
+- **Managed Prometheus series** (`prometheus`): cAdvisor and kube-state-metrics series collected by Managed Prometheus, read with the same queries as any other store. GKE's managed kube-state-metrics package does not include `kube_pod_owner`, so this needs a kube-state-metrics you run and scrapes with Managed Prometheus.
 - **GKE system metrics** (`system`): the `kubernetes.io/container/*` and `kubernetes.io/node/*` metrics GKE writes to Cloud Monitoring, free and on by default. In PromQL they are named `kubernetes_io:container_cpu_core_usage_time` and so on.
 
 With `auto`, the default, the run reads Managed Prometheus series when the project has both cAdvisor usage and `kube_pod_owner`, and GKE system metrics otherwise. Most GKE projects end up on system metrics.
 
 - **Credentials:** a bearer token, basic auth or `Authorization` header given as for any other store is used as is, for example a token from `gcloud auth print-access-token` in `--bearer-token-file`; such a token expires after about an hour. Otherwise, an OAuth access token from Google Application Default Credentials: `GOOGLE_APPLICATION_CREDENTIALS` (a service account key, or a workload identity federation configuration), the `gcloud auth application-default login` user, or the metadata server, which is how workload identity on GKE and a VM's service account are reached. `--google-credentials-file` names a service account key instead; it must be a key of type `service_account`. The token has the `monitoring.read` scope. `--google-credentials-file` together with a token given directly, and `--tenant`, are refused for this backend. Headers from `--header-file` are still sent, for example `X-Goog-User-Project` to bill queries to another project.
-- **What the customer grants:** the Monitoring Viewer role (`roles/monitoring.viewer`) on the project that holds the cluster's metrics, for a service account or a user. For a key file:
+- **What you grant:** the Monitoring Viewer role (`roles/monitoring.viewer`) on the project that holds the cluster's metrics, for a service account or a user. For a key file:
 
   ```
   gcloud iam service-accounts create savings-preview --project PROJECT_ID

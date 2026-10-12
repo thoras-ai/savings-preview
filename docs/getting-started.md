@@ -112,13 +112,28 @@ The commands below assume `savings-preview` is on your `PATH`. Move it to a dire
 
     limited: run reads metrics-server, by polling; expect tier 3 (limited history): polling gives tier 3 until it has 7 days of readings
 
-The last line sums it up. The exit status is 0 when `run` would read 14 days at 1-minute steps, 1 when it would read something less, such as polling or a store with less history, and 2 when there is nothing it can read. A `no` in the access table names the request your identity is missing; a role in [deploy/rbac/](../deploy/rbac/README.md) grants it.
+The last line sums it up. `--json` prints the same as JSON, and `--color never` (or `NO_COLOR`) leaves out the colors. The exit status is 0 when `run` would read 14 days at 1-minute steps, 1 when it would read something less, such as polling or a store with less history, and 2 when there is nothing it can read. A `no` in the access table names the request your identity is missing; a role in [deploy/rbac/](../deploy/rbac/README.md) grants it.
 
 ## Run
 
 `savings-preview run` uses your current kubeconfig context, or `--context`. Before it reads any history it finds each cluster's source, as `check` does, and prints a plan: where it will read each cluster from, or why it cannot, what it reads, the files it writes and where, and whether it opens a browser. Then it waits: Enter goes on, and `q` or Ctrl-C quits without reading anything. It then reads, writes the files, and opens the report in your browser. Ctrl-C stops it.
 
 It waits only when stdin, stdout and stderr are all terminals. Run from a script, a pipe or CI, or with its output sent to a file, it prints the plan and goes on. `--yes` (`-y`) skips the wait in a terminal too.
+
+### What run does
+
+After the plan, `run`:
+
+1. When Datadog keys are given (`DD_API_KEY` and `DD_APP_KEY`, or `--api-key-file` and `--app-key-file`), pulls 14 days of usage from Datadog, taking the `datadog` command's `--site` and `--selector`. If Datadog has no usable data, it says why and goes on to the next step. Several clusters in the organization stop the run until `--selector` picks one.
+2. Otherwise looks for a Prometheus-compatible store and pulls 14 days of usage from it (`--days`, `--step`, `--target` to name the store). `--url` reads a store outside the cluster instead, such as Mimir, Grafana Cloud, Amazon Managed Prometheus, Amazon CloudWatch (OTel Container Insights), Azure Monitor managed Prometheus or Google Managed Prometheus, with the `prometheus` command's `--backend`, `--tenant`, `--bearer-token-file`, `--basic-auth-file`, `--header-file`, `--aws-region`, `--project`, `--google-credentials-file`, `--gke-metrics`, `--azure-tenant-id`, `--azure-client-id`, `--azure-client-secret-file`, `--max-query-range` and `--selector`, and the same credential environment variables. A store named with `--url` or `--target` that fails stops the run.
+3. If there is no store, none answers, or the store lacks the per-container usage and request series, it says why and polls metrics-server instead, every `--interval` until `--duration` passes or Ctrl-C. It takes the same `--keep-raw`, `--rollup` and `--write-every` flags as `poll`. Fewer than 7 days of readings give a tier 3 (limited history) report. `--source datadog`, `--source prometheus` or `--source poll` skips the choice and does not fall back.
+4. Writes `savings-preview.otlp.json` (`--out` or `-o`) at full resolution, then a compact copy next to it, `savings-preview.compact.otlp.json`, at 15-minute steps that keep the peak and the mean of usage. The savings math takes its target from 15-minute peaks, so totals from the compact file come within about 1% of the full file's while it stays small enough for a browser: 14 days of 1-minute data for 1,000 workload-containers is about 6.3 GB in full and 330 MB compact. It checks the compact file against the [contract](contract.md).
+5. Serves the report on the compact file on 127.0.0.1 on a random port and opens the browser; `--no-open` only prints the address. Ctrl-C stops the server.
+6. Writes `savings-preview.zip` next to the file: `summary.json` (cluster, time span, tier, totals, and the name and size of the full file), `report.html`, a copy of the report with the compact file inside that opens from disk, and the compact file itself (each cluster's, in `savings-preview.clusters/`, for several clusters). The full file stays on disk and is not in the zip. Nothing is uploaded.
+
+`--collect-only` reads and writes the same files, then exits instead of serving the report or opening a browser; see [Sending us your results](#sending-us-your-results).
+
+`savings-preview export --compact FILE` writes the compact copy of any contract file, of a poll's readings directory (`FILE.readings`), or of the data in a report page, reading it as a stream. [contract.md](contract.md#compact-files) describes compact files and how their totals compare with the full file. [upgrading.md](upgrading.md) lists what changed in the zip and `summary.json` since v0.1.0. `savings-preview --version` prints the version.
 
 ### No metrics store
 
@@ -232,7 +247,7 @@ The report opens on one page:
 
 A report of several clusters opens on the fleet: the headline and Today and with Thoras add up every cluster, each priced from its own nodes, the gap chart sums them over the window, a table lists each cluster's spend today and with Thoras, the biggest saving first, and Across your fleet counts the clusters that have workloads in the figures. Select a cluster to see page one for it alone; Show all clusters goes back. Under Assumptions, Clusters includes or excludes clusters from every figure, and the link keeps the choice. Namespaces are named `cluster/namespace`, since clusters often share namespace names.
 
-The target for each workload is 1.1 times its highest use in any 15 minutes. Waste is the request above the target. Nodes are priced the way the Thoras product prices them: by instance type from the list prices of the node's cloud (AWS us-east-1, Google Cloud us-central1 or Azure eastus), with spot nodes at the spot price. With no node priced, the report uses a 4-core, 16 GiB, $0.192 per hour node. See [Node prices](node-prices.md).
+The target for each workload is 1.1 times its highest use in any 15 minutes. Waste is the request above the target. A workload costs the larger of its CPU cost and its memory cost, at per-core and per-GiB rates taken from the cluster's nodes. Utilization is usage over requests, CPU and memory weighted by price, with each workload's usage counted up to its request. A container missing a required series is listed but not counted. Nodes are priced the way the Thoras product prices them: by instance type from the list prices of the node's cloud (AWS us-east-1, Google Cloud us-central1 or Azure eastus), with spot nodes at the spot price. With no node priced, the report uses a 4-core, 16 GiB, $0.192 per hour node. See [Node prices](node-prices.md).
 
 Details for engineers, under page one, opens the other sections:
 
@@ -243,6 +258,28 @@ Details for engineers, under page one, opens the other sections:
 - **Data and method** describes the file (source, window, resolution, tier, pricing), lists the workloads, containers and nodes the totals leave out or price differently and why, and spells out the calculation with the current settings. DaemonSets and bare pods are not counted.
 
 The page address keeps the settings, so **Copy link** in the header gives a link that opens the same view. **Print summary** prints page one under the current settings.
+
+### Links to a view
+
+The settings live in the part of the address after `#`, so a link opens the same view. Each key is written only when it differs from its default:
+
+| Key | Meaning | Default |
+| --- | --- | --- |
+| `section` | Section to open: `summary`, `money`, `workloads`, `cluster`, `assumptions` or `method` | `summary` |
+| `cpu`, `gib` | Price in USD per core-hour and per GiB-hour, both or neither | From the nodes |
+| `node` | Instance type the rates came from, as `cloud/region/type`; read only with `cpu` and `gib` | None |
+| `discount` | Spot or committed-use discount on the rates, in percent | `0` |
+| `headroom` | Target headroom over the peak, in percent | `10` |
+| `peak` | Rolling peak window, in minutes | `15` |
+| `ns` | Namespaces to count, comma separated | All |
+| `cluster` | Clusters to count, in a report of several, comma separated | All |
+| `from`, `to` | Time range, in Unix seconds | The whole file |
+| `cost` | Loaded cost of an engineer per year, in USD | `200000` |
+| `bill` | Annual cloud bill, in USD | None |
+| `clusters` | Clusters like this one, for the fleet figure on page one of a single-cluster report | `1` |
+| `workload` | Workload whose drill-down the workloads section shows, as `namespace/kind/name` | None |
+
+For example, `report.html#section=workloads&headroom=20&ns=shop,data`. A value that does not parse is ignored. With the defaults, the totals match the CLI's `summary.json`.
 
 ## Share the results
 
