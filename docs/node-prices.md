@@ -1,23 +1,10 @@
 # Node prices
 
-The report and `summary.json` price nodes the way the Thoras product does, from a copy of the product's price table: `internal/savings/node_prices.json`. The Go summary embeds it, and both page builders inline it ahead of `src/js/model.js`, so the page and the CLI read the same prices.
-
-## Where the table comes from
-
-The product loads its `instance_pricing` table from SQL migrations in the platform repository's `go/db/migrations`. `scripts/import_node_prices.py` reads the newest file of each kind:
-
-| Migration | What it holds |
-| --- | --- |
-| `*_aws_pricing.sql` | AWS on-demand prices and spot discounts, us-east-1 |
-| `*_gcp_pricing.sql` | Google Cloud on-demand prices and spot discounts, us-central1 |
-| `*_azure_pricing.sql` | Azure on-demand prices and spot discounts, eastus |
-| `*_gcp_custom_node_pricing.sql` | Google Cloud custom machine types, per vCPU and per GiB, on-demand and spot |
-
-The platform generates the first three with `scripts/generate-cloud-pricing`, one region per cloud, and stores every row under region `default`. The import keeps Linux rows only, since the product prices every node as Linux, and computes each spot price as the migrations do: on-demand × (100 − discount) / 100, rounded to 10 decimal places. `source` in the JSON names the files it read.
+The report and `summary.json` price nodes the way the Thoras product does, from a copy of the product's price table: on-demand and spot list prices by instance type for AWS (us-east-1), Google Cloud (us-central1) and Azure (eastus), and per-vCPU and per-GiB prices for Google Cloud custom machine types. The table ships inside the tool, so the report page and the CLI read the same prices. Only Linux prices are used, since the product prices every node as Linux. A spot price is the on-demand price less the cloud's spot discount for that type.
 
 ## How a node is priced
 
-The rules follow `CurrentAverageNode` in the platform's `go/internal/repositories/node_details.go`.
+The rules follow the pricing rules of the Thoras product.
 
 1. **Cloud.** `cloud.provider` picks the table: `aws`, `gcp` or `azure`, which the adapters take from the node's provider ID (`aws://`, `gce://`, `azure://`). A node on any other cloud is not priced. When the file does not name the cloud (`unknown`, as some stores report it), the cloud whose table has the instance type is used. No type is in more than one table.
 2. **Instance type.** `host.type` is looked up in that cloud's table. A match gives the listed vCPUs, memory and hourly price.
@@ -55,12 +42,3 @@ Over a 14-day window an autoscaled cluster replaces many nodes, and the ones rep
 - For a custom machine type the product reads the node's CPU and memory capacity. The preview reads the size from the type name, which the capacity matches for CPU; memory capacity can be a little below the size in the name.
 - The product always knows a node's cloud. The preview infers it from the instance type when the file does not say.
 - The product reads every node it prices from the cluster. The preview prices the nodes that left the cluster during the window, when the store does not type them, by the live instance mix.
-
-## Refreshing the table
-
-When the platform adds a pricing migration, import it from an up-to-date checkout of the platform repository (its default branch) and commit the result with the changed figures noted in the CHANGELOG:
-
-    python3 scripts/import_node_prices.py /path/to/platform
-    make test
-
-The script writes `internal/savings/node_prices.json` and prints how many types each cloud has. Tests that check figures against the table (`internal/savings/savings_test.go`, `tests/report_model.test.js`) name the instance types and prices they use, so a price change shows up there.

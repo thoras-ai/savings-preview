@@ -1,6 +1,8 @@
 # Savings Preview quickstart
 
-Savings Preview shows what Thoras would save on a Kubernetes cluster, using the usage history the cluster already keeps, or a live sample when it keeps none. It is read-only and runs on your laptop: nothing is installed in the cluster and nothing is uploaded.
+Savings Preview shows what Thoras would save on your Kubernetes clusters, using the usage history the clusters already keep, or a live sample when they keep none. It is read-only and runs on your machine: nothing is installed in the cluster and nothing is uploaded.
+
+This page is the short version. [getting-started.md](getting-started.md) covers each source, the report and troubleshooting in full.
 
 ## 1. Install
 
@@ -15,6 +17,8 @@ Without Homebrew, with Node.js 20 or later, put `npx @thoras-ai/savings-preview@
 Or use the install script:
 
     curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | sh
+
+To install from a release archive by hand instead, see [Install from the archive](getting-started.md#install-from-the-archive).
 
 Check it worked:
 
@@ -59,7 +63,7 @@ It first prints what it found and what it will do, and waits:
 
 Press Enter, and it reads the usage and opens the report in your browser. Leave the terminal open while you look at the report; Ctrl-C closes it. In a script, add `--yes` to start without waiting.
 
-If the cluster keeps no usage history, it says `Falling back to polling metrics-server` and samples the cluster once a minute instead, so no report opens yet. Press Ctrl-C once to build the report from what it has read so far, and again to close it. On a call, add `--duration 10m` to have the report open by itself after ten minutes.
+If the cluster keeps no usage history, it says `Falling back to polling metrics-server` and samples the cluster once a minute instead, so no report opens yet. Press Ctrl-C once to build the report from what it has read so far, and again to close it. Add `--duration 10m` to have the report open by itself after ten minutes. A longer poll gives a better report: 7 days of readings cover a full week of demand.
 
     $ savings-preview --context minikube
     ...
@@ -101,39 +105,19 @@ The files land in the folder you ran it from:
 | File | What it is |
 | --- | --- |
 | `savings-preview.zip` | The one to send. Holds `report.html`, a short summary and the compact data. |
-| `savings-preview.compact.otlp.json` | The data, small enough to open on the upload page. |
-| `savings-preview.otlp.json` | The full data. It stays on the laptop. |
+| `savings-preview.compact.otlp.json` | The data at 15-minute steps, small enough for the report page to open in a browser. |
+| `savings-preview.otlp.json` | The full data. It stays on your machine and is not in the zip. |
 | `savings-preview.clusters/` | With several clusters, each cluster's own files. |
 
-## 4. Share the result
+## 4. Look at the result
 
-- **Send `savings-preview.zip`**, or just the `report.html` inside it. `report.html` opens in any browser, with no install.
-- **Open it on the upload page**: https://curly-dollop-gw8yzn1.pages.github.io/ takes `savings-preview.compact.otlp.json`, the zip or `report.html`. Drop several at once to combine clusters into one report. The page needs a GitHub login in the thoras-ai organization.
-- **Show the demo without a cluster**: https://curly-dollop-gw8yzn1.pages.github.io/#sample=demo opens a 60-workload sample cluster. [demo.md](demo.md) walks through it in five minutes.
-- **Show a fleet without a cluster**: https://updog.link/thoras-savings-preview opens a sample report across several clusters.
+The report opens in your browser while the command runs. To open it again later, unzip `savings-preview.zip` and open the `report.html` inside it. It opens in any browser, with no install, and makes no network requests. **Open another file** in its header, or dropping files on the page, opens other `.json`, `.zip` or `report.html` files from runs of one cluster each, together as one report.
 
-## Sending us your results
+[Read the report](getting-started.md#read-the-report) describes each section.
 
-When a customer runs it on their own, without a call, have them add `--collect-only`. It reads and writes the same files, does not open a browser or serve the report, and exits when done. Its last lines say what to send:
+## 5. Access you need
 
-    savings-preview --context <their context> --collect-only
-
-    Send savings-preview.zip to your Thoras contact. It holds the report and the data, and nothing else from your environment.
-
-The zip holds `report.html`, `summary.json` and the compact data: `savings-preview.compact.otlp.json` for one cluster, or one `NAME.compact.otlp.json` per cluster under `savings-preview.clusters/`. Drop the zip on the upload page as it is, or take the JSON files out and open them there. The full-resolution data stays on their laptop.
-
-## 5. On a call with a prospect's engineer
-
-The download needs a thoras-ai GitHub login, so send them the file for their laptop from the [latest release](https://github.com/thoras-ai/savings-preview/releases/latest): `savings-preview_<version>_darwin_arm64.tar.gz` for an Apple silicon Mac, `darwin_amd64` for an Intel Mac, `linux_amd64` or `linux_arm64` for Linux.
-
-Then have them paste these two commands in the folder where they saved it, with only one copy of the file there. The first unpacks it (and clears the macOS download flag, which otherwise stops it from running):
-
-    xattr -c savings-preview_*.tar.gz 2>/dev/null; tar -xzf savings-preview_*.tar.gz && cd savings-preview_*/
-    ./savings-preview --context <their context>
-
-The report opens on their screen; ask them to share it. If it says it is polling, see the note on polling in step 3. Afterwards, ask them to send you `savings-preview.zip`.
-
-Access they need: read access to the cluster through their own `kubectl` login. With Prometheus in the cluster, it lists services to find it and queries it through the services proxy. Without one, it lists pods, deployments, statefulsets, replicasets and nodes, and reads metrics-server. It never reads secrets, config maps or logs. If their security team wants the full list, send [security.md](security.md).
+Read access to the cluster through your own `kubectl` login. With Prometheus in the cluster, it lists services to find it and queries it through the services proxy. Without one, it lists pods, deployments, statefulsets, replicasets and nodes, and reads metrics-server. It never reads secrets, config maps or logs. [security.md](security.md) has the full list, and [deploy/rbac/](../deploy/rbac/README.md) has read-only ServiceAccounts if you would rather not use your own credentials.
 
 ## 6. Common problems
 
@@ -144,6 +128,6 @@ Access they need: read access to the cluster through their own `kubectl` login. 
 | A `gcloud` error about credentials or reauthentication | Run `gcloud auth login`, then try again. |
 | `forbidden` | The login can't read something the run needs. `savings-preview check --context <context>` shows which line says `no`. |
 
-## Collecting from a customer
+## Sending results to Thoras
 
-When the customer runs it themselves and sends the result back, send them [send-to-thoras.md](send-to-thoras.md). It walks through installing, checking access, `--collect-only` and what the zip contains.
+To send the result to Thoras, add `--collect-only`: it reads and writes the same files, then exits without opening a browser, and its last line says which file to send. [send-to-thoras.md](send-to-thoras.md) walks through installing, checking access, collecting and what `savings-preview.zip` contains.

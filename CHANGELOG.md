@@ -2,6 +2,12 @@
 
 Each release's section here is its release notes on GitHub. `scripts/release_notes.py` reads the section for a tag, and the release workflow fails when there is none.
 
+## Unreleased
+
+### Changed
+
+- The docs are reorganized for customers. The [README](README.md) leads with installing and using the tool, the one-page quickstart is [docs/quickstart.md](docs/quickstart.md), and notes on building, the report page, fixtures and tests moved to [docs/development.md](docs/development.md).
+
 ## v0.2.6
 
 ### New
@@ -88,7 +94,7 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 - Contract 1.4.0: a file may hold several clusters, and a cluster resource with `thoras.cluster.error` records a cluster that could not be read. The change is additive. Files with one cluster are still written as 1.0.0, and the validators, `export` and the report read both versions. Releases up to v0.2.0 refuse a 1.4.0 file with a message naming its version.
 - A link to the published page can open a sample: `#sample=` with `demo`, `synthetic`, `minikube` or `fleet`, together with the other settings in the link, such as `#sample=demo&section=workloads`. Opening a sample writes its id into the page link, and opening your own file clears it.
 - The published page lists a Fleet of clusters sample (`#sample=fleet`), written by `go run ./scripts/gen_demo -fleet`.
-- [docs/quickstart-sales.md](docs/quickstart-sales.md): one page for sales on installing, running on one or several clusters, sharing the result, running it with a prospect's engineer, and common problems.
+- [docs/quickstart-sales.md](docs/quickstart.md) (now `docs/quickstart.md`): one page for sales on installing, running on one or several clusters, sharing the result, running it with a prospect's engineer, and common problems.
 - The README's Install section shows how to install when gh has several accounts and the active one cannot read the repository: export `GH_TOKEN` for an account that can, which also reaches the gh calls inside `install.sh`.
 
 ### Changed messages
@@ -149,7 +155,7 @@ No flag was removed or renamed, and no flag default changed.
 - The report draws peak and mean usage, shows fidelity notes and short spans, has an Auto, Light and Dark theme switch, and opens a dropped `.otlp.json`, `savings-preview.zip` or `report.html`. It is also published on GitHub Pages with three samples.
 - Azure Monitor managed Prometheus: the `prometheus` command, `run --url` and `check` read an Azure Monitor workspace with `--backend azure`, which a `prometheus.monitor.azure.com` URL selects. Each query reads one metric, as the workspace requires, and the adapter joins the results by workload. Without a token given directly, the run gets an Entra ID token from an app registration (`--azure-tenant-id`, `--azure-client-id` and `--azure-client-secret-file`, or the `AZURE_*` variables) or the Azure CLI. See [prometheus-adapter.md](docs/prometheus-adapter.md#azure-monitor-managed-prometheus).
 - Amazon CloudWatch: the `prometheus` command, `run --url` and `check` read CloudWatch's PromQL endpoint for EKS clusters with OTel Container Insights, with `--backend cloudwatch --aws-region REGION` or a `monitoring.REGION.amazonaws.com` URL. Requests are signed with SigV4 from the standard AWS credential chain. Queries stay within CloudWatch's 7-day range and 500-series limits, and a truncated result stops the run with a suggested `--selector`. See [prometheus-adapter.md](docs/prometheus-adapter.md#amazon-cloudwatch-promql-otel-container-insights).
-- A demo cluster sample: `go run ./scripts/gen_demo` (or `make demo`) writes a 60-workload, 14-day compact file, and the published page lists it first. [demo.md](docs/demo.md) is a five-minute walk through the report with it.
+- A demo cluster sample: `go run ./scripts/gen_demo` (or `make demo`) writes a 60-workload, 14-day compact file, and the published page lists it first. `docs/demo.md` was a five-minute walk through the report with it.
 - Each release carries `install.sh`, which installs the right binary after checking it against `checksums.txt`, and a Homebrew formula, `savings-preview.rb`. Since the repository is private, `install.sh` needs a logged-in `gh` or `GITHUB_TOKEN` or `GH_TOKEN`, and the formula needs `HOMEBREW_GITHUB_API_TOKEN`. The Homebrew tap is not published yet. See the README and [releasing.md](docs/releasing.md).
 - Each archive has a CycloneDX SBOM next to it, `savings-preview_<tag>_<os>_<arch>.cdx.json`, listing the Go modules and Go release in its binary. `checksums.txt` lists the SBOMs as well as the archives, so check a partial download with `shasum -a 256 -c --ignore-missing checksums.txt`. See [releasing.md](docs/releasing.md#sboms).
 - CI runs `govulncheck` on every pull request, push to `main`, nightly run and release, and `make vulncheck` runs it locally. Dependabot opens weekly updates for the actions and Go modules. The Go jobs share one build cache, so a pull request's checks take about 30 seconds instead of two and a half minutes.
