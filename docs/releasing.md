@@ -6,9 +6,9 @@ Pushing a tag that starts with `v` runs `.github/workflows/release.yml`:
 2. **checks** runs the CI workflow (`.github/workflows/ci.yml`): `go vet`, `go test`, `go test -race`, `govulncheck`, the Python and Node tests, and the fixture check against the contract. It runs only when CI on `main` did not pass for the tagged commit: it failed, was cancelled, never ran, or was still running after the wait. Pull requests run the same jobs except `go test -race`, which runs on pushes to `main`, nightly, on demand and here, so a release never skips it.
 3. **build** runs once per platform, `darwin/amd64`, `darwin/arm64`, `linux/amd64` and `linux/arm64`, at the same time as **preflight**. Each job restores the Go build cache that CI saves on `main`, without ever saving one. The CI `vet` job compiles the release binaries into that cache with `scripts/release.sh build`, so a release build mostly only links. The job runs `scripts/release.sh build <tag> <os>/<arch>`, which cross-compiles the binary with `CGO_ENABLED=0` and the tag passed as `-X main.version=<tag>`. It then runs `scripts/release.sh package <tag> <os>/<arch>`, which writes the platform's archive and its SBOM, and uploads both as the `release-<os>-<arch>` workflow artifact. CI and the release use the latest Go 1.26 patch release, not the minimum version in `go.mod`; change `go-version` in both workflows when moving to a new minor version.
 4. **govulncheck** runs `govulncheck ./...` on the tagged commit with the vulnerability database downloaded from `vuln.go.dev` at that moment. It runs alongside the builds, whether or not CI on `main` is reused.
-5. **publish** runs once **build** passed for every platform, **govulncheck** passed, and either CI passed on `main` or **checks** passed. It downloads the archives and SBOMs, runs `scripts/release.sh checksums <tag>`, which writes `checksums.txt` and copies `install.sh`, and creates a draft GitHub release for the tag. `scripts/release_notes.py` takes the release notes from the tag's `CHANGELOG.md` section, rewriting relative links to point at the tag; a prerelease tag such as `v1.2.0-rc.1` uses its own section when there is one and the `v1.2.0` section otherwise. It then fills in the Homebrew formula from the draft's asset URLs and `checksums.txt` with `scripts/homebrew_formula.py`, attaches it, and publishes the release. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a prerelease.
+5. **publish** runs once **build** passed for every platform, **govulncheck** passed, and either CI passed on `main` or **checks** passed. It downloads the archives and SBOMs, runs `scripts/release.sh checksums <tag>`, which writes `checksums.txt` and copies `install.sh`, and creates a draft GitHub release for the tag. `scripts/release_notes.py` takes the release notes from the tag's `CHANGELOG.md` section, rewriting relative links to point at the tag; a prerelease tag such as `v1.2.0-rc.1` uses its own section when there is one and the `v1.2.0` section otherwise. It then fills in the Homebrew formula from the release's download URLs and `checksums.txt` with `scripts/homebrew_formula.py`, attaches it, and publishes the release. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a prerelease.
 6. **homebrew-tap** runs after **publish**, except for a prerelease. It downloads the formula from the release and commits it to `Formula/savings-preview.rb` in `thoras-ai/homebrew-tap` with `scripts/update_tap.sh`, using the `HOMEBREW_TAP_TOKEN` secret. Without that secret it does nothing and says so in a notice.
-7. **npm** runs after **publish**. It sets the version of the package in `packaging/npm` to the tag without its `v` and publishes it to npm with the `NPM_TOKEN` secret, a prerelease under the `next` dist-tag. Without that secret it does nothing and says so in a notice. Once the repository is public it also publishes the package's provenance, which npm records only for public repositories.
+7. **npm** runs after **publish**. It sets the version of the package in `packaging/npm` to the tag without its `v` and publishes it to npm with the `NPM_TOKEN` secret, a prerelease under the `next` dist-tag. It publishes with provenance. Without that secret it does nothing and says so in a notice. [Secrets to create](#secrets-to-create) lists both secrets.
 
 A tag pushed after CI passed on `main` skips **checks**, and the four builds and **govulncheck** run side by side while **preflight** looks up the CI result.
 
@@ -74,63 +74,56 @@ Dependabot (`.github/dependabot.yml`) opens pull requests each week for the acti
 
 `scripts/install.sh` is attached to every release as `install.sh`. Users run it with:
 
-    gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh
+    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | sh
 
-It detects the OS and architecture, downloads the matching archive and `checksums.txt` from the latest release (or the tag in `VERSION`), verifies the archive, and installs the binary into `INSTALL_DIR`, `~/.local/bin` when that is on `PATH`, or `/usr/local/bin`, asking before it uses sudo. It downloads through gh when gh is installed and logged in, and otherwise through the GitHub API with `curl` and `GITHUB_TOKEN` or `GH_TOKEN`. Any checksum problem stops it before it installs anything. The script needs only POSIX `sh` and the usual base tools (`awk`, `sed`, `tar`, and `sha256sum` or `shasum`).
+It detects the OS and architecture, downloads the matching archive and `checksums.txt` from the latest release (or the tag in `VERSION`), verifies the archive, and installs the binary into `INSTALL_DIR`, `~/.local/bin` when that is on `PATH`, or `/usr/local/bin`, asking before it uses sudo. It downloads through gh when gh is installed and logged in, and otherwise through the GitHub API with `curl`, sending `GITHUB_TOKEN` or `GH_TOKEN` when one is set. No credentials are needed; a token only raises the API's limit of 60 requests an hour. Any checksum problem stops it before it installs anything. The script needs only POSIX `sh` and the usual base tools (`awk`, `sed`, `tar`, and `sha256sum` or `shasum`).
 
 `tests/test_install_script.py` runs it against a fake release with fake `gh`, `curl`, `uname` and `sudo` commands, so it needs no network.
 
 ## Homebrew
 
-`packaging/homebrew/savings-preview.rb` is the formula template. For each release, `scripts/homebrew_formula.py` replaces its `@...@` placeholders with the version, the API URL of each platform's archive and the archive's SHA-256, and fails if any archive or checksum is missing. The formula downloads through the GitHub API because the repository is private; it sends `HOMEBREW_GITHUB_API_TOKEN` when that is set.
+`packaging/homebrew/savings-preview.rb` is the formula template. For each release, `scripts/homebrew_formula.py` replaces its `@...@` placeholders with the version, the public download URL of each platform's archive (`https://github.com/thoras-ai/savings-preview/releases/download/<tag>/<archive>`) and the archive's SHA-256, and fails if any archive is missing from the release or from `checksums.txt`. The formula needs no token.
 
 To render it by hand for an existing release:
 
-    gh release download v0.2.0 -p checksums.txt
-    gh release view v0.2.0 --json tagName,assets > release.json
-    scripts/homebrew_formula.py v0.2.0 checksums.txt release.json > savings-preview.rb
+    gh release download v0.2.3 -R thoras-ai/savings-preview -p checksums.txt
+    gh release view v0.2.3 -R thoras-ai/savings-preview --json tagName,assets > release.json
+    scripts/homebrew_formula.py v0.2.3 checksums.txt release.json > savings-preview.rb
 
 ### Publishing to the tap
 
-The formula is published from a separate tap repository, `thoras-ai/homebrew-tap`. Homebrew maps `brew tap thoras-ai/tap` to a repository named `homebrew-tap`. To set it up once:
+The formula is published from the public tap repository `thoras-ai/homebrew-tap`, as `Formula/savings-preview.rb`. Homebrew maps `thoras-ai/tap` to a repository named `homebrew-tap`, so users install with:
 
-1. Create `thoras-ai/homebrew-tap` with a `Formula/` directory, private while this repository is private. Give the people who will install read access to both it and `thoras-ai/savings-preview`.
-2. Create a fine-grained token with read and write access to the contents of `thoras-ai/homebrew-tap` only, and store it in this repository as the Actions secret `HOMEBREW_TAP_TOKEN`.
+    brew install thoras-ai/tap/savings-preview
 
-From then on, **homebrew-tap** commits the formula of each release to the tap. To publish one by hand, or when the job is not set up:
+**homebrew-tap** commits the formula of each release to the tap once the `HOMEBREW_TAP_TOKEN` secret is set. To publish one by hand, or while the secret is not set:
 
-    gh release download v0.2.0 -R thoras-ai/savings-preview -p savings-preview.rb
-    GH_TOKEN=<token with write access to the tap> scripts/update_tap.sh v0.2.0 savings-preview.rb
+    gh release download v0.2.3 -R thoras-ai/savings-preview -p savings-preview.rb
+    GH_TOKEN=<token with write access to the tap> scripts/update_tap.sh v0.2.3 savings-preview.rb
 
-`update_tap.sh` writes `Formula/savings-preview.rb` on the tap's default branch through the GitHub API, and leaves the tap alone when it already holds the same formula. Check the result with `brew update`, then `HOMEBREW_GITHUB_API_TOKEN=$(gh auth token) brew upgrade savings-preview` (or `brew install thoras-ai/tap/savings-preview`), then `brew test savings-preview`.
-
-Users install with:
-
-    brew tap thoras-ai/tap https://github.com/thoras-ai/homebrew-tap
-    HOMEBREW_GITHUB_API_TOKEN=$(gh auth token) brew install thoras-ai/tap/savings-preview
-
-`brew tap` clones over HTTPS, so git needs credentials for GitHub; `gh auth setup-git` configures them. Without `HOMEBREW_GITHUB_API_TOKEN`, the download fails with a 404.
-
-If this repository and the tap become public, both commands work without credentials: the tap clones anonymously, and the formula's API asset URLs answer without a token. Anonymous API requests share a limit of 60 an hour per IP address, so `homebrew_formula.py` can then switch to the assets' `browser_download_url`, which has no such limit.
+`update_tap.sh` writes `Formula/savings-preview.rb` on the tap's default branch through the GitHub API, and leaves the tap alone when it already holds the same formula. Check the result with `brew update`, then `brew upgrade savings-preview` (or `brew install thoras-ai/tap/savings-preview`), then `brew test savings-preview`.
 
 ## npm
 
-`packaging/npm` is the `@thoras/savings-preview` package. It holds no binary. Its `savings-preview` command downloads the release archive for the machine (macOS or Linux, x64 or arm64) of the tag `v<package version>`, checks it against the release's `checksums.txt`, unpacks the binary into the user cache directory (`~/Library/Caches/savings-preview/<tag>/<os>_<arch>` on macOS, `$XDG_CACHE_HOME/savings-preview` or `~/.cache/savings-preview` on Linux, `SAVINGS_PREVIEW_CACHE` to override), and runs it with the same arguments, passing on its exit code. A checksum problem stops it before anything is unpacked.
+`packaging/npm` is the `@thoras/savings-preview` package. It holds no binary. Its `savings-preview` command downloads the release archive for the machine (macOS or Linux, x64 or arm64) of the tag `v<package version>` from the release's public download URLs, checks it against the release's `checksums.txt`, unpacks the binary into the user cache directory (`~/Library/Caches/savings-preview/<tag>/<os>_<arch>` on macOS, `$XDG_CACHE_HOME/savings-preview` or `~/.cache/savings-preview` on Linux, `SAVINGS_PREVIEW_CACHE` to override), and runs it with the same arguments, passing on its exit code. A checksum problem stops it before anything is unpacked.
 
-With `GITHUB_TOKEN`, `GH_TOKEN` or a logged-in gh, it downloads through the GitHub API, which serves private repositories. Without a token it downloads from the release's public download URLs, which work once the repository is public. Redirects are followed by the launcher itself, and the token is never sent to the storage host a release asset redirects to.
-
-To set up publishing once:
-
-1. Create the `@thoras` scope on npm, or change `name` in `packaging/npm/package.json` to a scope the publishing account owns.
-2. Create an npm automation token that can publish to it, and store it in this repository as the Actions secret `NPM_TOKEN`.
+**npm** publishes it with provenance, which links the package on npmjs.com to the workflow run and commit that built it. The job copies `LICENSE` into the package before publishing.
 
 To publish by hand:
 
     cd packaging/npm
-    npm version 0.2.0 --no-git-tag-version
+    cp ../../LICENSE .
+    npm version 0.2.3 --no-git-tag-version
     npm publish --access public
 
-Check a release with `npx @thoras/savings-preview@0.2.0 --version`. To try the package before publishing it, run `npm pack` after `npm version` and then `npx --yes ./thoras-savings-preview-0.2.0.tgz --version`. `tests/npm_launcher.test.js` runs the launcher against a local server that serves a release the way GitHub does.
+A package published by hand has no provenance. Check a release with `npx @thoras/savings-preview@0.2.3 --version`. To try the package before publishing it, run `npm pack` after `npm version` and then `npx --yes ./thoras-savings-preview-0.2.3.tgz --version`. `tests/npm_launcher.test.js` runs the launcher against a local server that serves a release the way GitHub does.
+
+## Secrets to create
+
+The **homebrew-tap** and **npm** jobs do nothing until their secrets exist. Create these once, as Actions secrets in `thoras-ai/savings-preview`:
+
+- `HOMEBREW_TAP_TOKEN`: a fine-grained personal access token with the resource owner `thoras-ai`, access to the repository `thoras-ai/homebrew-tap` only, and the repository permission Contents set to read and write. No other permissions.
+- `NPM_TOKEN`: an npm automation token from an account that can publish to the `@thoras` scope. Create the `@thoras` organization on npm first if it does not exist.
 
 ## Adding signing or notarization
 

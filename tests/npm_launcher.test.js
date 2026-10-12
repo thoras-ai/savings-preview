@@ -35,12 +35,12 @@ function listen(handler) {
   });
 }
 
-// release serves the assets the way GitHub does: public download URLs, and an
-// API that redirects asset downloads to a storage host on another origin.
+// release serves the assets the way GitHub does: public download URLs that
+// redirect to a storage host on another origin.
 async function release(assets) {
   const seen = [];
   const storage = await listen((req, res) => {
-    seen.push({ host: 'storage', url: req.url, auth: req.headers.authorization });
+    seen.push({ host: 'storage', url: req.url });
     const name = decodeURIComponent(req.url.slice(1));
     if (!(name in assets)) { res.writeHead(404).end(); return; }
     res.writeHead(200).end(assets[name]);
@@ -52,25 +52,10 @@ async function release(assets) {
     if (!(name in assets)) { res.writeHead(404).end(); return; }
     res.writeHead(302, { location: `${storage.url}/${name}` }).end();
   });
-  const api = await listen((req, res) => {
-    seen.push({ host: 'api', url: req.url, auth: req.headers.authorization, accept: req.headers.accept });
-    if (req.headers.authorization !== 'Bearer secret') { res.writeHead(404).end(); return; }
-    if (req.url === `/repos/thoras-ai/savings-preview/releases/tags/${TAG}`) {
-      const list = Object.keys(assets).map((name, i) => ({ name, url: `${api.url}/assets/${i}` }));
-      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ tag_name: TAG, assets: list }));
-      return;
-    }
-    const m = req.url.match(/^\/assets\/(\d+)$/);
-    if (m && req.headers.accept === 'application/octet-stream') {
-      res.writeHead(302, { location: `${storage.url}/${Object.keys(assets)[Number(m[1])]}` }).end();
-      return;
-    }
-    res.writeHead(404).end();
-  });
   return {
     seen,
-    opts: { api: api.url, web: web.url, plat: PLAT },
-    close: () => [storage, web, api].forEach((s) => s.server.close()),
+    opts: { web: web.url, plat: PLAT },
+    close: () => [storage, web].forEach((s) => s.server.close()),
   };
 }
 
@@ -103,14 +88,14 @@ test('puts the cache under the platform cache directory', () => {
   assert.strictEqual(launcher.cacheRoot({ SAVINGS_PREVIEW_CACHE: '/c' }, 'linux', '/h'), '/c');
 });
 
-test('downloads from the public URLs without a token, checks and caches the binary', async (t) => {
+test('downloads from the public URLs, checks and caches the binary', async (t) => {
   const dir = tmpdir(t);
   const tgz = archive(dir);
   const r = await release({ [ARCHIVE]: tgz, 'checksums.txt': `${sha(tgz)}  ${ARCHIVE}\n` });
   t.after(r.close);
   const root = path.join(dir, 'cache');
 
-  const bin = await launcher.ensureBinary('1.2.3', { ...r.opts, root, tok: '' });
+  const bin = await launcher.ensureBinary('1.2.3', { ...r.opts, root });
   assert.strictEqual(bin, path.join(root, TAG, PLAT, 'savings-preview'));
   assert.strictEqual(execFileSync(bin, ['check', '--context', 'x'], { encoding: 'utf8' }), 'ran check --context x\n');
   assert.deepStrictEqual(r.seen.filter((s) => s.host === 'web').map((s) => s.url.split('/').pop()), [ARCHIVE, 'checksums.txt']);
@@ -118,23 +103,8 @@ test('downloads from the public URLs without a token, checks and caches the bina
   assert.deepStrictEqual(fs.readdirSync(path.join(root, TAG)), [PLAT]);
 
   r.seen.length = 0;
-  assert.strictEqual(await launcher.ensureBinary('1.2.3', { ...r.opts, root, tok: '' }), bin);
+  assert.strictEqual(await launcher.ensureBinary('1.2.3', { ...r.opts, root }), bin);
   assert.deepStrictEqual(r.seen, []);
-});
-
-test('downloads through the API with a token and never sends it to the storage host', async (t) => {
-  const dir = tmpdir(t);
-  const tgz = archive(dir);
-  const r = await release({ [ARCHIVE]: tgz, 'checksums.txt': `${sha(tgz)}  ${ARCHIVE}\n` });
-  t.after(r.close);
-
-  const bin = await launcher.ensureBinary('1.2.3', { ...r.opts, root: path.join(dir, 'cache'), tok: 'secret' });
-  assert.ok(fs.existsSync(bin));
-  assert.ok(r.seen.filter((s) => s.host === 'api').every((s) => s.auth === 'Bearer secret'));
-  const stored = r.seen.filter((s) => s.host === 'storage');
-  assert.strictEqual(stored.length, 2);
-  assert.ok(stored.every((s) => s.auth === undefined));
-  assert.ok(!r.seen.some((s) => s.host === 'web'));
 });
 
 test('installs nothing when the checksum does not match', async (t) => {
@@ -144,7 +114,7 @@ test('installs nothing when the checksum does not match', async (t) => {
   t.after(r.close);
   const root = path.join(dir, 'cache');
 
-  await assert.rejects(launcher.ensureBinary('1.2.3', { ...r.opts, root, tok: '' }), /checksum mismatch/);
+  await assert.rejects(launcher.ensureBinary('1.2.3', { ...r.opts, root }), /checksum mismatch/);
   assert.deepStrictEqual(fs.readdirSync(path.join(root, TAG)), []);
 });
 
@@ -154,18 +124,16 @@ test('installs nothing when checksums.txt does not list the archive', async (t) 
   const r = await release({ [ARCHIVE]: tgz, 'checksums.txt': `${sha(tgz)}  other.tar.gz\n` });
   t.after(r.close);
 
-  await assert.rejects(launcher.ensureBinary('1.2.3', { ...r.opts, root: path.join(dir, 'cache'), tok: '' }), /no entry for/);
+  await assert.rejects(launcher.ensureBinary('1.2.3', { ...r.opts, root: path.join(dir, 'cache') }), /no entry for/);
 });
 
-test('says how to authenticate when a release is not found without a token', async (t) => {
+test('names the missing asset when a release is not found', async (t) => {
   const dir = tmpdir(t);
   const r = await release({});
   t.after(r.close);
 
-  await assert.rejects(launcher.ensureBinary('1.2.3', { ...r.opts, root: path.join(dir, 'cache'), tok: '' }),
-    /not found\. If the repository is private, log in with gh or set GITHUB_TOKEN/);
-  await assert.rejects(launcher.ensureBinary('1.2.3', { ...r.opts, root: path.join(dir, 'cache'), tok: 'wrong' }),
-    /not found, or the token cannot read it/);
+  await assert.rejects(launcher.ensureBinary('1.2.3', { ...r.opts, root: path.join(dir, 'cache') }),
+    { message: `release ${TAG} of thoras-ai/savings-preview has no asset named ${ARCHIVE}` });
 });
 
 test('the command runs the cached binary and passes on its exit code', (t) => {
@@ -186,7 +154,7 @@ test('the command runs the cached binary and passes on its exit code', (t) => {
 test('reports a download that cannot connect as an error, not a crash', async () => {
   const { server, url } = await listen(() => {});
   server.close();
-  await assert.rejects(launcher.fetchAssets(TAG, [ARCHIVE], { web: url, tok: '' }),
+  await assert.rejects(launcher.fetchAssets(TAG, [ARCHIVE], { web: url }),
     (e) => e instanceof launcher.LaunchError && /^fetching http:\/\/127\.0\.0\.1:\d+\/.*: fetch failed \(ECONNREFUSED\)$/.test(e.message));
 });
 
@@ -195,7 +163,7 @@ test('the command reports a cache it cannot write without a stack trace', (t) =>
   fs.writeFileSync(path.join(dir, 'file'), '');
   const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'packaging', 'npm', 'bin', 'savings-preview.js'), '--version'], {
     encoding: 'utf8',
-    env: { ...process.env, SAVINGS_PREVIEW_CACHE: path.join(dir, 'file', 'cache'), GITHUB_TOKEN: '', GH_TOKEN: '', PATH: path.dirname(process.execPath) },
+    env: { ...process.env, SAVINGS_PREVIEW_CACHE: path.join(dir, 'file', 'cache') },
   });
   assert.strictEqual(r.status, 1);
   assert.match(r.stderr, /^savings-preview: .*ENOTDIR/m);

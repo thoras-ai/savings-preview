@@ -12,36 +12,25 @@ The report page is also published at https://curly-dollop-gw8yzn1.pages.github.i
 
 ## Install
 
-The repository is private, so every download needs a GitHub login or token with access to it. With [gh](https://cli.github.com) logged in as an account that can read it, any of these works.
+With [Homebrew](https://brew.sh), on macOS or Linux:
 
-With Homebrew, on macOS or Linux:
+    brew install thoras-ai/tap/savings-preview
 
-    brew tap thoras-ai/tap https://github.com/thoras-ai/homebrew-tap
-    HOMEBREW_GITHUB_API_TOKEN=$(gh auth token) brew install thoras-ai/tap/savings-preview
+Upgrade with `brew upgrade savings-preview`.
 
-`brew tap` clones over HTTPS, so git needs GitHub credentials; `gh auth setup-git` configures them. Pass the token again on `brew upgrade savings-preview`. Without it, the download fails with a 404.
-
-With npx, which needs Node.js 20 or later:
+Or run it with npx, which needs Node.js 20 or later:
 
     npx @thoras/savings-preview check --context my-cluster
 
-The package downloads the release binary of the same version on first use, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux (`SAVINGS_PREVIEW_CACHE` to change). It downloads with `GITHUB_TOKEN`, `GH_TOKEN` or the token of a logged-in gh, in that order. `npm install -g @thoras/savings-preview` puts `savings-preview` on `PATH` instead.
+The package downloads the release binary of the same version on first use, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux (`SAVINGS_PREVIEW_CACHE` to change). `npm install -g @thoras/savings-preview` puts `savings-preview` on `PATH` instead.
 
-With the install script:
+Or use the install script:
 
-    gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh
+    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | sh
 
-If gh has several accounts and says "release not found", set `GH_TOKEN` to an account that can read the repository. Exporting it also reaches the gh calls inside `install.sh`:
+`install.sh` picks the archive for this machine (macOS or Linux, amd64 or arm64), checks it against the release's `checksums.txt`, and installs `savings-preview` into `~/.local/bin` when that is on `PATH`, or `/usr/local/bin` otherwise. It asks before using sudo, and stops without installing anything when a checksum is missing or does not match. Set `VERSION=v0.2.3` to install a release other than the latest, and `INSTALL_DIR` to install somewhere else:
 
-    (export GH_TOKEN="$(gh auth token -h github.com -u <account>)"; gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh)
-
-`install.sh` picks the archive for this machine (macOS or Linux, amd64 or arm64), checks it against the release's `checksums.txt`, and installs `savings-preview` into `~/.local/bin` when that is on `PATH`, or `/usr/local/bin` otherwise. It asks before using sudo, and stops without installing anything when a checksum is missing or does not match. Set `VERSION=v0.2.0` to install a release other than the latest, and `INSTALL_DIR` to install somewhere else:
-
-    gh release download -R thoras-ai/savings-preview -p install.sh -O - | VERSION=v0.2.0 INSTALL_DIR=~/bin sh
-
-Without gh, download `install.sh` from the release page and run it with a token. The script then downloads through the GitHub API with `curl`, using `GITHUB_TOKEN` or `GH_TOKEN`. The token needs read access to the repository's contents.
-
-    GITHUB_TOKEN=<token> sh install.sh
+    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | VERSION=v0.2.3 INSTALL_DIR=~/bin sh
 
 Or download an archive from the release page, check it with `shasum -a 256 -c checksums.txt --ignore-missing`, and put the `savings-preview` binary on `PATH`.
 

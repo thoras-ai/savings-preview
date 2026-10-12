@@ -381,7 +381,6 @@ class InstallScriptTest(unittest.TestCase):
             with self.subTest(var=var):
                 r = self.run_script(FAKE_REQUIRE_TOKEN="t0k", **{var: "t0k"})
                 self.assertInstalled(r, "savings-preview v0.2.0 darwin_arm64")
-                self.assertNotIn("trying without credentials", r.stderr)
 
     def test_github_token_wins_over_gh_token(self):
         r = self.run_script(FAKE_REQUIRE_TOKEN="a", GITHUB_TOKEN="a", GH_TOKEN="b")
@@ -390,12 +389,11 @@ class InstallScriptTest(unittest.TestCase):
     def test_curl_without_token(self):
         r = self.run_script()
         self.assertInstalled(r, "savings-preview v0.2.0 darwin_arm64")
-        self.assertIn("trying without credentials", r.stderr)
         self.assertFalse(any("Authorization" in c for c in self.calls("curl")))
 
-    def test_private_repository_without_credentials(self):
+    def test_release_unreadable_without_a_token(self):
         r = self.run_script(FAKE_REQUIRE_TOKEN="t0k")
-        self.assertFailed(r, "log in with gh, or set GITHUB_TOKEN")
+        self.assertFailed(r, "Check that the release exists. The API allows 60 requests an hour without a token")
 
     def test_gh_not_logged_in_falls_back_to_curl(self):
         r = self.run_script(gh=False, GITHUB_TOKEN="t0k", FAKE_REQUIRE_TOKEN="t0k")

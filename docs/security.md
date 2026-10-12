@@ -103,7 +103,7 @@ It contains no Secrets, environment variables, logs, images, annotations, labels
 
 Nowhere, unless you send it. The program makes no network requests other than to the API server, the `--url` store, Google Cloud Monitoring and Google's token endpoint with `--project`, Entra ID's token endpoint for an Azure Monitor workspace, CloudWatch with `--backend cloudwatch`, or the Datadog API. The report page (`scripts/build_report.py`, also built into the binary) is one offline HTML file that reads the output file in the browser and makes no network requests. The copy published on GitHub Pages (`build_report.py --site`) also fetches its sample files from the same site when one is picked; a file opened there is read in the browser and not uploaded. `run` serves the page and the compact file on 127.0.0.1 on a random port until you press Ctrl-C; the server answers only requests addressed to that address, so it cannot be reached from other machines or read by a web page under another name. Sharing the output file or the zip with Thoras is a separate step that you choose to take.
 
-The npm package's `savings-preview` command also downloads the release archive and `checksums.txt` from `github.com`, or through `api.github.com` with a token, the first time it runs a version. It takes the token from `GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token`, and sends it only to `api.github.com`. Later runs start the cached binary and make no requests of their own.
+The npm package's `savings-preview` command also downloads the release archive and `checksums.txt` from the release's download URLs on `github.com` the first time it runs a version. It sends no credentials. Later runs start the cached binary and make no requests of their own.
 
 ## How releases are built
 

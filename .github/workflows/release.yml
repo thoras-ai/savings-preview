@@ -197,9 +197,9 @@ jobs:
           gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" -p savings-preview.rb -D "$RUNNER_TEMP"
           GH_TOKEN=$TAP_TOKEN scripts/update_tap.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/savings-preview.rb"
 
-  # Publishes packaging/npm at the release's version, a prerelease under the
-  # next dist-tag. Does nothing until the NPM_TOKEN secret is set. See
-  # docs/releasing.md.
+  # Publishes packaging/npm at the release's version with provenance, a
+  # prerelease under the next dist-tag. Does nothing until the NPM_TOKEN secret
+  # is set. See docs/releasing.md.
   npm:
     needs: publish
     runs-on: ubuntu-24.04
@@ -217,15 +217,13 @@ jobs:
       - working-directory: packaging/npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          PRIVATE_REPO: ${{ github.event.repository.private }}
         run: |
           if [[ -z $NODE_AUTH_TOKEN ]]; then
             echo "::notice::NPM_TOKEN is not set; the npm package was not published"
             exit 0
           fi
+          cp ../../LICENSE .
           npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
-          args=(--access public)
+          args=(--access public --provenance)
           if [[ $GITHUB_REF_NAME == *-* ]]; then args+=(--tag next); fi
-          # npm records provenance only for packages built from a public repository.
-          if [[ $PRIVATE_REPO == false ]]; then args+=(--provenance); fi
           npm publish "${args[@]}"

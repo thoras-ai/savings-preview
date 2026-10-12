@@ -12,7 +12,6 @@ const { spawn, spawnSync } = require('node:child_process');
 const REPO = 'thoras-ai/savings-preview';
 const BINARY = 'savings-preview';
 const DEFAULTS = {
-  api: 'https://api.github.com',
   web: 'https://github.com',
 };
 
@@ -49,73 +48,22 @@ function cacheRoot(env = process.env, p = process.platform, home = os.homedir())
   return path.join(env.XDG_CACHE_HOME || path.join(home, '.cache'), BINARY);
 }
 
-// token returns GITHUB_TOKEN, GH_TOKEN or the token of a logged-in gh, in that
-// order, or an empty string.
-function token(env = process.env) {
-  if (env.GITHUB_TOKEN) return env.GITHUB_TOKEN;
-  if (env.GH_TOKEN) return env.GH_TOKEN;
+async function get(url) {
   try {
-    const r = spawnSync('gh', ['auth', 'token', '-h', 'github.com'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-    if (r.status === 0) return r.stdout.trim();
-  } catch {
-    // gh is not installed.
+    return await fetch(url);
+  } catch (e) {
+    // fetch reports DNS, connection and TLS failures as "fetch failed" with the reason in cause.
+    const cause = e.cause && (e.cause.code || e.cause.message);
+    throw new LaunchError(`fetching ${url}: ${e.message}${cause ? ` (${cause})` : ''}`);
   }
-  return '';
 }
 
-// get fetches url and follows redirects itself, so the token never goes to the
-// storage host a release asset redirects to.
-async function get(url, headers) {
-  for (let i = 0; i < 5; i++) {
-    let res;
-    try {
-      res = await fetch(url, { headers, redirect: 'manual' });
-    } catch (e) {
-      // fetch reports DNS, connection and TLS failures as "fetch failed" with the reason in cause.
-      const cause = e.cause && (e.cause.code || e.cause.message);
-      throw new LaunchError(`fetching ${new URL(url).origin}${new URL(url).pathname}: ${e.message}${cause ? ` (${cause})` : ''}`);
-    }
-    if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
-      const next = new URL(res.headers.get('location'), url);
-      if (next.origin !== new URL(url).origin) {
-        headers = Object.fromEntries(Object.entries(headers).filter(([k]) => k.toLowerCase() !== 'authorization'));
-      }
-      url = next.href;
-      continue;
-    }
-    return res;
-  }
-  throw new LaunchError(`too many redirects fetching ${url}`);
-}
-
-// fetchAssets downloads the named release assets. Without a token they come
-// from the public download URLs; with one, through the GitHub API, which also
-// serves private repositories.
-async function fetchAssets(tag, names, { tok, api = DEFAULTS.api, web = DEFAULTS.web } = {}) {
+// fetchAssets downloads the named assets from the release's public download URLs.
+async function fetchAssets(tag, names, { web = DEFAULTS.web } = {}) {
   const out = {};
-  if (!tok) {
-    for (const name of names) {
-      const url = `${web}/${REPO}/releases/download/${tag}/${name}`;
-      const res = await get(url, {});
-      if (res.status === 404) {
-        throw new LaunchError(
-          `release ${tag} of ${REPO} or its asset ${name} was not found. If the repository is private, ` +
-          'log in with gh or set GITHUB_TOKEN to a token that can read it.');
-      }
-      if (!res.ok) throw new LaunchError(`downloading ${name} from release ${tag}: HTTP ${res.status}`);
-      out[name] = Buffer.from(await res.arrayBuffer());
-    }
-    return out;
-  }
-  const headers = { Authorization: `Bearer ${tok}`, 'X-GitHub-Api-Version': '2022-11-28' };
-  const rel = await get(`${api}/repos/${REPO}/releases/tags/${tag}`, { ...headers, Accept: 'application/vnd.github+json' });
-  if (rel.status === 404) throw new LaunchError(`release ${tag} of ${REPO} was not found, or the token cannot read it`);
-  if (!rel.ok) throw new LaunchError(`reading release ${tag} of ${REPO}: HTTP ${rel.status}`);
-  const assets = (await rel.json()).assets || [];
   for (const name of names) {
-    const asset = assets.find((a) => a.name === name);
-    if (!asset) throw new LaunchError(`release ${tag} of ${REPO} has no asset named ${name}`);
-    const res = await get(asset.url, { ...headers, Accept: 'application/octet-stream' });
+    const res = await get(`${web}/${REPO}/releases/download/${tag}/${name}`);
+    if (res.status === 404) throw new LaunchError(`release ${tag} of ${REPO} has no asset named ${name}`);
     if (!res.ok) throw new LaunchError(`downloading ${name} from release ${tag}: HTTP ${res.status}`);
     out[name] = Buffer.from(await res.arrayBuffer());
   }
@@ -133,8 +81,7 @@ async function ensureBinary(version, { root = cacheRoot(), plat = platform(), lo
   fs.mkdirSync(path.dirname(dir), { recursive: true });
   const archive = archiveName(tag, plat);
   log(`Downloading ${BINARY} ${tag} for ${plat}`);
-  const tok = 'tok' in opts ? opts.tok : token();
-  const files = await fetchAssets(tag, [archive, 'checksums.txt'], { ...opts, tok });
+  const files = await fetchAssets(tag, [archive, 'checksums.txt'], opts);
   const want = checksumFor(files['checksums.txt'].toString('utf8'), archive);
   const got = crypto.createHash('sha256').update(files[archive]).digest('hex');
   if (got !== want) throw new LaunchError(`checksum mismatch for ${archive}: expected ${want}, got ${got}`);
@@ -195,4 +142,4 @@ async function main(args) {
   }
 }
 
-module.exports = { LaunchError, archiveName, cacheRoot, checksumFor, ensureBinary, fetchAssets, main, platform, token };
+module.exports = { LaunchError, archiveName, cacheRoot, checksumFor, ensureBinary, fetchAssets, main, platform };

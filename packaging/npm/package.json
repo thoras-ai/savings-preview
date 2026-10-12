@@ -8,7 +8,7 @@
     "url": "git+https://github.com/thoras-ai/savings-preview.git",
     "directory": "packaging/npm"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "bin": {
     "savings-preview": "bin/savings-preview.js"
   },
