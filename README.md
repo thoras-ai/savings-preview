@@ -2,6 +2,8 @@
 
 A read-only CLI that reads a cluster's existing usage history, writes it as one OTel metrics file, and shows what Thoras would have saved.
 
+Savings preview is a free tool from [Thoras](https://www.thoras.ai). The source is public so the tool installs with one command and anyone can read exactly what it runs. It is licensed under [Apache 2.0](LICENSE). It is not a community project, so pull requests are not accepted.
+
 To run it on your cluster, start with [docs/getting-started.md](docs/getting-started.md). The one-page version for sales and live calls is [docs/quickstart-sales.md](docs/quickstart-sales.md).
 
 ![The report page with the synthetic sample: the summary section](docs/images/report.png)

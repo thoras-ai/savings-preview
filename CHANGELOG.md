@@ -2,6 +2,12 @@
 
 Each release's section here is its release notes on GitHub. `scripts/release_notes.py` reads the section for a tag, and the release workflow fails when there is none.
 
+## Unreleased
+
+### Changed
+
+- Savings preview is licensed under Apache 2.0 ([LICENSE](LICENSE)), so its source can be public and it installs without a GitHub login.
+
 ## v0.2.3
 
 ### Fixes
@@ -23,7 +29,6 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 - `check` says, for each usable store in the cluster, where `run` would take the nodes' instance types from: the store's node labels, the Kubernetes API, or neither. `check --json` adds `instance_types` (`store`, `kubernetes_api` or `none`) and `instance_types_note` to each entry in `stores`, and the access list adds `list nodes` under `prometheus`, marked optional. No field changed.
 - Contract files may carry two optional node attributes, `thoras.node.pool` and `thoras.node.type_source`. Files without them are read as before, and earlier releases ignore them. See [contract.md](docs/contract.md#resource-attributes).
 
-- [Team demo slides](docs/team-demo/README.md): the slides from the internal team demo, with speaker notes, opened from `docs/team-demo/index.html`.
 
 ### Changed messages
 
