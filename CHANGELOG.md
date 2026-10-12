@@ -2,6 +2,12 @@
 
 Each release's section here is its release notes on GitHub. `scripts/release_notes.py` reads the section for a tag, and the release workflow fails when there is none.
 
+## v0.2.5
+
+### Fixes
+
+- Releases update the Homebrew tap and publish the npm package again. v0.2.4 skipped both because its release reused CI from `main`, so `brew install thoras-ai/tap/savings-preview` and `npx @thoras-ai/savings-preview` stayed on v0.2.3. v0.2.5 has the same code as v0.2.4.
+
 ## v0.2.4
 
 ### New

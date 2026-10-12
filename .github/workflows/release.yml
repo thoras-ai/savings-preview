@@ -181,7 +181,9 @@ jobs:
   # set. See docs/releasing.md.
   homebrew-tap:
     needs: publish
-    if: ${{ !contains(github.ref_name, '-') }}
+    # publish runs after checks, which is skipped when CI on main passed, and
+    # a job after a skipped one is skipped too unless its if says otherwise.
+    if: ${{ !cancelled() && needs.publish.result == 'success' && !contains(github.ref_name, '-') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -213,6 +215,7 @@ jobs:
   # See docs/releasing.md.
   npm:
     needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
