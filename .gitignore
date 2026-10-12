@@ -5,3 +5,9 @@ dist/
 _site/
 /fixtures/demo-cluster.compact.otlp.json
 /fixtures/fleet.compact.otlp.json
+
+# Output of running savings-preview in the repository
+/savings-preview.otlp.json
+/savings-preview.compact.otlp.json
+/savings-preview.clusters/
+/savings-preview.zip
