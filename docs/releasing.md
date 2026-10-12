@@ -7,7 +7,7 @@ Pushing a tag that starts with `v` runs `.github/workflows/release.yml`:
 3. **build** runs once per platform, `darwin/amd64`, `darwin/arm64`, `linux/amd64` and `linux/arm64`, at the same time as **preflight**. Each job restores the Go build cache that CI saves on `main`, without ever saving one. The CI `vet` job compiles the release binaries into that cache with `scripts/release.sh build`, so a release build mostly only links. The job runs `scripts/release.sh build <tag> <os>/<arch>`, which cross-compiles the binary with `CGO_ENABLED=0` and the tag passed as `-X main.version=<tag>`. It then runs `scripts/release.sh package <tag> <os>/<arch>`, which writes the platform's archive and its SBOM, and uploads both as the `release-<os>-<arch>` workflow artifact. CI and the release use the latest Go 1.26 patch release, not the minimum version in `go.mod`; change `go-version` in both workflows when moving to a new minor version.
 4. **govulncheck** runs `govulncheck ./...` on the tagged commit with the vulnerability database downloaded from `vuln.go.dev` at that moment. It runs alongside the builds, whether or not CI on `main` is reused.
 5. **publish** runs once **build** passed for every platform, **govulncheck** passed, and either CI passed on `main` or **checks** passed. It downloads the archives and SBOMs, runs `scripts/release.sh checksums <tag>`, which writes `checksums.txt` and copies `install.sh`, and creates a draft GitHub release for the tag. `scripts/release_notes.py` takes the release notes from the tag's `CHANGELOG.md` section, rewriting relative links to point at the tag; a prerelease tag such as `v1.2.0-rc.1` uses its own section when there is one and the `v1.2.0` section otherwise. It then fills in the Homebrew formula from the release's download URLs and `checksums.txt` with `scripts/homebrew_formula.py`, attaches it, and publishes the release. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a prerelease.
-6. **homebrew-tap** runs after **publish**, except for a prerelease. It downloads the formula from the release and commits it to `Formula/savings-preview.rb` in `thoras-ai/homebrew-tap` with `scripts/update_tap.sh`, using the `HOMEBREW_TAP_TOKEN` secret. Without that secret it does nothing and says so in a notice.
+6. **homebrew-tap** runs after **publish**, except for a prerelease. It downloads the formula from the release and commits it to `Formula/savings-preview.rb` in `thoras-ai/homebrew-tap` with `scripts/update_tap.sh`, pushing with the deploy key in the `HOMEBREW_TAP_DEPLOY_KEY` secret. Without that secret it does nothing and says so in a notice.
 7. **npm** runs after **publish**. It sets the version of the package in `packaging/npm` to the tag without its `v` and publishes it to npm, a prerelease under the `next` dist-tag. It uses npm trusted publishing, so it needs no secret. Until the package exists on npm it does nothing and says so in a notice. See [npm](#npm).
 
 A tag pushed after CI passed on `main` skips **checks**, and the four builds and **govulncheck** run side by side while **preflight** looks up the CI result.
@@ -96,12 +96,12 @@ The formula is published from the public tap repository `thoras-ai/homebrew-tap`
 
     brew install thoras-ai/tap/savings-preview
 
-**homebrew-tap** commits the formula of each release to the tap once the `HOMEBREW_TAP_TOKEN` secret is set. To publish one by hand, or while the secret is not set:
+**homebrew-tap** commits the formula of each release to the tap once the `HOMEBREW_TAP_DEPLOY_KEY` secret is set. To publish one by hand, or while the secret is not set, with your own push access to the tap:
 
     gh release download v0.2.3 -R thoras-ai/savings-preview -p savings-preview.rb
-    GH_TOKEN=<token with write access to the tap> scripts/update_tap.sh v0.2.3 savings-preview.rb
+    scripts/update_tap.sh v0.2.3 savings-preview.rb
 
-`update_tap.sh` writes `Formula/savings-preview.rb` on the tap's default branch through the GitHub API, and leaves the tap alone when it already holds the same formula. Check the result with `brew update`, then `brew upgrade savings-preview` (or `brew install thoras-ai/tap/savings-preview`), then `brew test savings-preview`.
+`update_tap.sh` clones the tap (`TAP_URL`, by default `git@github.com:thoras-ai/homebrew-tap.git`), writes `Formula/savings-preview.rb` on its default branch and pushes, and leaves the tap alone when it already holds the same formula. Check the result with `brew update`, then `brew upgrade savings-preview` (or `brew install thoras-ai/tap/savings-preview`), then `brew test savings-preview`.
 
 ## npm
 
@@ -129,7 +129,12 @@ A package published by hand has no provenance. Check a release with `npx @thoras
 
 The **homebrew-tap** job does nothing until its secret exists. Create it once, as an Actions secret in `thoras-ai/savings-preview`:
 
-- `HOMEBREW_TAP_TOKEN`: a fine-grained personal access token with the resource owner `thoras-ai`, access to the repository `thoras-ai/homebrew-tap` only, and the repository permission Contents set to read and write. No other permissions.
+- `HOMEBREW_TAP_DEPLOY_KEY`: the private half of an SSH deploy key with write access on `thoras-ai/homebrew-tap`. A deploy key works on that one repository only, does not expire and needs no organization approval. To create it, as an admin of the tap:
+
+      ssh-keygen -t ed25519 -N '' -C savings-preview-release -f tap_key
+      gh repo deploy-key add tap_key.pub -R thoras-ai/homebrew-tap --allow-write -t savings-preview-release
+      gh secret set HOMEBREW_TAP_DEPLOY_KEY -R thoras-ai/savings-preview <tap_key
+      rm tap_key tap_key.pub
 
 The **npm** job needs no secret; see [npm](#npm).
 
