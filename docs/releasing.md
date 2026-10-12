@@ -8,7 +8,7 @@ Pushing a tag that starts with `v` runs `.github/workflows/release.yml`:
 4. **govulncheck** runs `govulncheck ./...` on the tagged commit with the vulnerability database downloaded from `vuln.go.dev` at that moment. It runs alongside the builds, whether or not CI on `main` is reused.
 5. **publish** runs once **build** passed for every platform, **govulncheck** passed, and either CI passed on `main` or **checks** passed. It downloads the archives and SBOMs, runs `scripts/release.sh checksums <tag>`, which writes `checksums.txt` and copies `install.sh`, and creates a draft GitHub release for the tag. `scripts/release_notes.py` takes the release notes from the tag's `CHANGELOG.md` section, rewriting relative links to point at the tag; a prerelease tag such as `v1.2.0-rc.1` uses its own section when there is one and the `v1.2.0` section otherwise. It then fills in the Homebrew formula from the release's download URLs and `checksums.txt` with `scripts/homebrew_formula.py`, attaches it, and publishes the release. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a prerelease.
 6. **homebrew-tap** runs after **publish**, except for a prerelease. It downloads the formula from the release and commits it to `Formula/savings-preview.rb` in `thoras-ai/homebrew-tap` with `scripts/update_tap.sh`, using the `HOMEBREW_TAP_TOKEN` secret. Without that secret it does nothing and says so in a notice.
-7. **npm** runs after **publish**. It sets the version of the package in `packaging/npm` to the tag without its `v` and publishes it to npm with the `NPM_TOKEN` secret, a prerelease under the `next` dist-tag. It publishes with provenance. Without that secret it does nothing and says so in a notice. [Secrets to create](#secrets-to-create) lists both secrets.
+7. **npm** runs after **publish**. It sets the version of the package in `packaging/npm` to the tag without its `v` and publishes it to npm, a prerelease under the `next` dist-tag. It uses npm trusted publishing, so it needs no secret. Until the package exists on npm it does nothing and says so in a notice. See [npm](#npm).
 
 A tag pushed after CI passed on `main` skips **checks**, and the four builds and **govulncheck** run side by side while **preflight** looks up the CI result.
 
@@ -33,7 +33,7 @@ Tag a commit on `main` that passed CI and has that section, and push the tag:
 
 Follow the run under the repository's Actions tab. If it fails before **publish**, delete the tag, fix the cause and tag again. If **publish** fails after creating the draft release, delete the draft and the tag before retrying.
 
-Then check that **homebrew-tap** and **npm** published the formula and the package, or publish them by hand as described below when their secrets are not set. Both run after the release is published, so rerun only the failed job when one fails. npm refuses to publish a version twice, so a rerun of **npm** after a successful publish fails without changing anything.
+Then check that **homebrew-tap** and **npm** published the formula and the package, or publish them by hand as described below when they are not set up. Both run after the release is published, so rerun only the failed job when one fails. npm refuses to publish a version twice, so a rerun of **npm** after a successful publish fails without changing anything.
 
 ## Building the release locally
 
@@ -105,25 +105,33 @@ The formula is published from the public tap repository `thoras-ai/homebrew-tap`
 
 ## npm
 
-`packaging/npm` is the `@thoras/savings-preview` package. It holds no binary. Its `savings-preview` command downloads the release archive for the machine (macOS or Linux, x64 or arm64) of the tag `v<package version>` from the release's public download URLs, checks it against the release's `checksums.txt`, unpacks the binary into the user cache directory (`~/Library/Caches/savings-preview/<tag>/<os>_<arch>` on macOS, `$XDG_CACHE_HOME/savings-preview` or `~/.cache/savings-preview` on Linux, `SAVINGS_PREVIEW_CACHE` to override), and runs it with the same arguments, passing on its exit code. A checksum problem stops it before anything is unpacked.
+`packaging/npm` is the `@thoras-ai/savings-preview` package. It holds no binary. Its `savings-preview` command downloads the release archive for the machine (macOS or Linux, x64 or arm64) of the tag `v<package version>` from the release's public download URLs, checks it against the release's `checksums.txt`, unpacks the binary into the user cache directory (`~/Library/Caches/savings-preview/<tag>/<os>_<arch>` on macOS, `$XDG_CACHE_HOME/savings-preview` or `~/.cache/savings-preview` on Linux, `SAVINGS_PREVIEW_CACHE` to override), and runs it with the same arguments, passing on its exit code. A checksum problem stops it before anything is unpacked.
 
-**npm** publishes it with provenance, which links the package on npmjs.com to the workflow run and commit that built it. The job copies `LICENSE` into the package before publishing.
+**npm** publishes it with npm [trusted publishing](https://docs.npmjs.com/trusted-publishers): GitHub Actions proves to npm with a short-lived OIDC token that the run is `release.yml` in `thoras-ai/savings-preview`, so there is no npm token to store or rotate, and npm adds provenance, which links the package on npmjs.com to the workflow run and commit that built it. The job copies `LICENSE` into the package before publishing.
+
+npm sets up a trusted publisher only for a package that already exists, so the first version is published by hand. To set it up once:
+
+1. Publish the current release by hand as below, from an npm account that is a member of the `thoras-ai` npm organization.
+2. On npmjs.com, open the package's **Settings**, add a trusted publisher for GitHub Actions with the organization `thoras-ai`, the repository `savings-preview` and the workflow `release.yml`, and save.
+3. Under **Publishing access**, choose to require two-factor authentication and disallow tokens. Trusted publishing still works.
 
 To publish by hand:
 
     cd packaging/npm
     cp ../../LICENSE .
     npm version 0.2.3 --no-git-tag-version
+    npm login
     npm publish --access public
 
-A package published by hand has no provenance. Check a release with `npx @thoras/savings-preview@0.2.3 --version`. To try the package before publishing it, run `npm pack` after `npm version` and then `npx --yes ./thoras-savings-preview-0.2.3.tgz --version`. `tests/npm_launcher.test.js` runs the launcher against a local server that serves a release the way GitHub does.
+A package published by hand has no provenance. Check a release with `npx @thoras-ai/savings-preview@0.2.3 --version`. To try the package before publishing it, run `npm pack` after `npm version` and then `npx --yes ./thoras-ai-savings-preview-0.2.3.tgz --version`. `tests/npm_launcher.test.js` runs the launcher against a local server that serves a release the way GitHub does.
 
 ## Secrets to create
 
-The **homebrew-tap** and **npm** jobs do nothing until their secrets exist. Create these once, as Actions secrets in `thoras-ai/savings-preview`:
+The **homebrew-tap** job does nothing until its secret exists. Create it once, as an Actions secret in `thoras-ai/savings-preview`:
 
 - `HOMEBREW_TAP_TOKEN`: a fine-grained personal access token with the resource owner `thoras-ai`, access to the repository `thoras-ai/homebrew-tap` only, and the repository permission Contents set to read and write. No other permissions.
-- `NPM_TOKEN`: an npm automation token from an account that can publish to the `@thoras` scope. Create the `@thoras` organization on npm first if it does not exist.
+
+The **npm** job needs no secret; see [npm](#npm).
 
 ## Adding signing or notarization
 

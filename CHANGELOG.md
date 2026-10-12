@@ -6,7 +6,7 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 
 ### New
 
-- **Install with Homebrew or npx.** Each release now updates the `thoras-ai/homebrew-tap` formula, so `brew install thoras-ai/tap/savings-preview` installs the latest release, and publishes `@thoras/savings-preview` to npm: `npx @thoras/savings-preview` downloads the release binary of its version, checks it against `checksums.txt` and runs it. See [Getting started](docs/getting-started.md#install).
+- **Install with Homebrew or npx.** Each release now updates the `thoras-ai/homebrew-tap` formula, so `brew install thoras-ai/tap/savings-preview` installs the latest release, and publishes `@thoras-ai/savings-preview` to npm: `npx @thoras-ai/savings-preview` downloads the release binary of its version, checks it against `checksums.txt` and runs it. See [Getting started](docs/getting-started.md#install).
 
 ### Changed
 

@@ -24,9 +24,9 @@ Homebrew checks the archive against the checksum in the formula. Upgrade with `b
 
 With Node.js 20 or later, run the CLI without installing it:
 
-    npx @thoras/savings-preview check --context my-cluster
+    npx @thoras-ai/savings-preview check --context my-cluster
 
-The first run downloads the release binary of the package's version for your machine, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux. Later runs start it from there. Pin a version with `npx @thoras/savings-preview@0.2.3`, or install it with `npm install -g @thoras/savings-preview` to get a `savings-preview` command.
+The first run downloads the release binary of the package's version for your machine, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux. Later runs start it from there. Pin a version with `npx @thoras-ai/savings-preview@0.2.3`, or install it with `npm install -g @thoras-ai/savings-preview` to get a `savings-preview` command.
 
 | Variable | Use |
 | --- | --- |

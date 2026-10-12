@@ -1,5 +1,5 @@
 {
-  "name": "@thoras/savings-preview",
+  "name": "@thoras-ai/savings-preview",
   "version": "0.0.0",
   "description": "Read a cluster's usage history and show what Thoras would have saved",
   "homepage": "https://github.com/thoras-ai/savings-preview",

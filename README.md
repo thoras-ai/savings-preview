@@ -20,9 +20,9 @@ Upgrade with `brew upgrade savings-preview`.
 
 Or run it with npx, which needs Node.js 20 or later:
 
-    npx @thoras/savings-preview check --context my-cluster
+    npx @thoras-ai/savings-preview check --context my-cluster
 
-The package downloads the release binary of the same version on first use, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux (`SAVINGS_PREVIEW_CACHE` to change). `npm install -g @thoras/savings-preview` puts `savings-preview` on `PATH` instead.
+The package downloads the release binary of the same version on first use, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux (`SAVINGS_PREVIEW_CACHE` to change). `npm install -g @thoras-ai/savings-preview` puts `savings-preview` on `PATH` instead.
 
 Or use the install script:
 
