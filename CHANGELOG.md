@@ -8,6 +8,7 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 
 - `run` and `check` say when a newer release is out, and how to upgrade for the way the tool was installed: `brew upgrade savings-preview`, `npx @thoras-ai/savings-preview@latest`, or the install script. They look up the latest release with one request to `github.com` while they work, only in a terminal, and print nothing when the lookup fails. Set `SAVINGS_PREVIEW_NO_UPDATE_CHECK=1` to turn it off. See [security.md](docs/security.md).
 - `check`, `prometheus`, `poll` (and `snapshot`) and `datadog` say what they are about to read and write and wait for Enter, as `run` does: `q` or Ctrl-C quits having read nothing. They wait only when stdin, stdout and stderr are terminals, and all take `--yes` (`-y`) to start without waiting. Anything that drives `check` through a terminal now needs `--yes`; see [docs/upgrading.md](docs/upgrading.md#check-prometheus-poll-and-datadog-wait-for-enter-in-a-terminal).
+- [docs/send-to-thoras.md](docs/send-to-thoras.md) is a step-by-step guide for a customer who collects the data from their own clusters and sends the zip to Thoras.
 - The docs' npx commands use `@latest`, so npx looks up the newest version each time instead of running one it cached.
 
 ## v0.2.5
