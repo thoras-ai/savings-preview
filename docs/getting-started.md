@@ -6,7 +6,7 @@ Savings Preview runs on your machine with your existing kubeconfig. It reads the
 >
 > - Reads only: queries to your metrics store or Datadog, `list` on services and Prometheus Operator resources to find a store, `get` on `services/proxy` to query it, and, when it polls, `list` on pods, ReplicaSets, Deployments, StatefulSets, nodes and metrics-server usage. `check` also asks the API server who you are and what you may do. Never Secrets, ConfigMaps or logs.
 > - Writes nothing in the cluster. On your machine it writes the data file, a compact copy, `savings-preview.zip` and, when it polls, a `savings-preview.otlp.json.readings/` directory.
-> - Sends nothing anywhere except requests to your API server, the store you name with `--url`, or the Datadog API when you give it keys.
+> - Sends nothing anywhere except requests to your API server, the store you name with `--url`, or the Datadog API when you give it keys, plus, in a terminal, one lookup of the latest release on `github.com` that carries nothing about your clusters (`SAVINGS_PREVIEW_NO_UPDATE_CHECK=1` turns it off).
 >
 > [security.md](security.md) lists every request and what the output contains. [deploy/rbac/](../deploy/rbac/) has read-only ServiceAccounts for each source if you would rather not use your own credentials.
 
@@ -24,9 +24,9 @@ Homebrew checks the archive against the checksum in the formula. Upgrade with `b
 
 With Node.js 20 or later, run the CLI without installing it:
 
-    npx @thoras-ai/savings-preview check --context my-cluster
+    npx @thoras-ai/savings-preview@latest check --context my-cluster
 
-The first run downloads the release binary of the package's version for your machine, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux. Later runs start it from there. Pin a version with `npx @thoras-ai/savings-preview@0.2.5`, or install it with `npm install -g @thoras-ai/savings-preview` to get a `savings-preview` command.
+The first run downloads the release binary of the package's version for your machine, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux. Later runs start it from there. `@latest` makes npx look up the newest version each time; without it, npx can keep running a version it cached earlier. Pin a version with `npx @thoras-ai/savings-preview@0.2.5`, or install it with `npm install -g @thoras-ai/savings-preview` to get a `savings-preview` command, and upgrade that with `npm update -g @thoras-ai/savings-preview`.
 
 | Variable | Use |
 | --- | --- |

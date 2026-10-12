@@ -8,9 +8,9 @@ With [Homebrew](https://brew.sh):
 
     brew install thoras-ai/tap/savings-preview
 
-Without Homebrew, with Node.js 20 or later, put `npx @thoras-ai/savings-preview` wherever the steps below say `savings-preview`:
+Without Homebrew, with Node.js 20 or later, put `npx @thoras-ai/savings-preview@latest` wherever the steps below say `savings-preview`:
 
-    npx @thoras-ai/savings-preview --version
+    npx @thoras-ai/savings-preview@latest --version
 
 Or use the install script:
 
