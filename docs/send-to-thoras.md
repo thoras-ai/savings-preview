@@ -1,12 +1,13 @@
 # Sending Thoras your savings preview data
 
+Savings preview estimates how much Thoras would save on your Kubernetes clusters. It reads the CPU and memory usage history your clusters already keep, compares what each workload requests with what it actually uses, and works out what the clusters would cost with Thoras sizing those requests.
+
 These steps produce one file, `savings-preview.zip`, that Thoras turns into your savings report. They take about 10 minutes, most of it waiting. The tool only reads: it installs nothing in your clusters and changes nothing there, and it uploads nothing. You send the zip yourself.
 
 ## What you need
 
 - A Mac or Linux machine with the `kubectl` access you already use for the clusters
 - Homebrew, Node.js 20 or later, or `curl`
-- About 1 GB of free disk space. The full-resolution files stay on your machine and can be a few hundred MB per cluster; the zip you send is a few MB.
 
 ## 1. Install
 
