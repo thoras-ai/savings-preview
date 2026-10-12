@@ -19,7 +19,7 @@ Or use the install script:
 Check it worked:
 
     $ savings-preview --version
-    savings-preview v0.2.3
+    savings-preview v0.2.4
 
 ## 2. Before you run
 
