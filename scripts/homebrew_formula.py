@@ -5,9 +5,9 @@
     scripts/homebrew_formula.py v0.2.0 dist/release/checksums.txt release.json > savings-preview.rb
 
 The release JSON comes from `gh release view --json tagName,assets` or from the
-GitHub REST API. The formula downloads each archive from its API asset URL,
-which works for a private repository with a token, and pins it to the SHA-256
-in checksums.txt.
+GitHub REST API, and is used to check that every archive is attached to the
+release. The formula downloads each archive from the release's public download
+URL and pins it to the SHA-256 in checksums.txt.
 """
 
 import argparse
@@ -18,6 +18,7 @@ from pathlib import Path
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "packaging" / "homebrew" / "savings-preview.rb"
 PLATFORMS = ["darwin_amd64", "darwin_arm64", "linux_amd64", "linux_arm64"]
+DOWNLOAD = "https://github.com/thoras-ai/savings-preview/releases/download"
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -41,19 +42,19 @@ def read_checksums(text):
 
 
 def render(template, tag, checksums, release):
-    # gh names the fields tagName and apiUrl, the REST API tag_name and url.
+    # gh names the field tagName, the REST API tag_name.
     found = release.get("tagName", release.get("tag_name"))
     if found != tag:
         raise FormulaError(f"release JSON is for {found!r}, not {tag!r}")
-    urls = {a["name"]: a.get("apiUrl", a.get("url")) for a in release.get("assets", [])}
+    assets = {a["name"] for a in release.get("assets", [])}
     values = {"VERSION": tag.removeprefix("v")}
     for platform in PLATFORMS:
         name = f"savings-preview_{tag}_{platform}.tar.gz"
         if name not in checksums:
             raise FormulaError(f"checksums.txt has no entry for {name}")
-        if name not in urls:
+        if name not in assets:
             raise FormulaError(f"release {tag} has no asset named {name}")
-        values[f"URL_{platform.upper()}"] = urls[name]
+        values[f"URL_{platform.upper()}"] = f"{DOWNLOAD}/{tag}/{name}"
         values[f"SHA256_{platform.upper()}"] = checksums[name]
 
     def fill(m):

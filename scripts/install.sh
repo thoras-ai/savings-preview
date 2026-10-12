@@ -1,17 +1,18 @@
 #!/bin/sh
 # Install the savings-preview CLI from a GitHub release.
 #
-#   gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh
+#   curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | sh
 #
 # Environment:
 #   VERSION       release tag to install, such as v0.2.0 (default: the latest release)
 #   INSTALL_DIR   directory to install into (default: ~/.local/bin when it is on
 #                 PATH, /usr/local/bin otherwise)
-#   GITHUB_TOKEN  token for downloading without gh (GH_TOKEN is read too)
+#   GITHUB_TOKEN  optional token for the GitHub API when gh is not used
+#                 (GH_TOKEN is read too)
 #
-# The repository is private, so downloads need GitHub credentials. With gh
-# installed and logged in, the script downloads through gh. Otherwise it uses
-# curl and the GitHub API, with GITHUB_TOKEN or GH_TOKEN when set.
+# With gh installed and logged in, the script downloads through gh. Otherwise
+# it uses curl and the GitHub API, sending GITHUB_TOKEN or GH_TOKEN when set.
+# Neither needs credentials; a token only raises the API's hourly request limit.
 #
 # The archive is checked against the release's checksums.txt before anything is
 # installed. A missing or wrong checksum stops the install.
@@ -119,21 +120,19 @@ download() {
 	if use_gh; then
 		if [ -z "$tag" ]; then
 			tag=$(gh release view -R "$REPO" --json tagName --jq .tagName) ||
-				die "gh could not read the latest release of $REPO. Check that the account gh uses can read it (gh auth status), or set GH_TOKEN to a token that can."
+				die "gh could not read the latest release of $REPO. Check gh auth status, or log out of gh to download with curl."
 		fi
 		archive=$(printf '%s' "$archive" | sed "s/@TAG@/$tag/")
 		gh release download "$tag" -R "$REPO" -D "$dir" -p "$archive" -p checksums.txt >&2 ||
-			die "gh could not download $archive from release $tag of $REPO. Check that the release exists and that the account gh uses can read it (gh auth status)."
+			die "gh could not download $archive from release $tag of $REPO. Check that the release exists and gh auth status."
 	else
 		command -v curl >/dev/null 2>&1 ||
 			die "install gh (https://cli.github.com) or curl to download releases"
-		[ -n "$(token)" ] ||
-			say "gh is not installed or not logged in, and GITHUB_TOKEN is not set; trying without credentials."
 		if ! release_json "$tag" "$dir/release.json"; then
 			if [ -n "$(token)" ]; then
 				die "release ${tag:-latest} of $REPO was not found, or the token cannot read it."
 			fi
-			die "could not read release ${tag:-latest} of $REPO from the GitHub API. The repository is private: log in with gh, or set GITHUB_TOKEN to a token that can read it."
+			die "could not read release ${tag:-latest} of $REPO from the GitHub API. Check that the release exists. The API allows 60 requests an hour without a token; set GITHUB_TOKEN to raise the limit."
 		fi
 		if [ -z "$tag" ]; then
 			tag=$(sed -n 's/^"tag_name"[[:space:]]*:[[:space:]]*"\(.*\)"$/\1/p' "$dir/release.json" | head -n 1)

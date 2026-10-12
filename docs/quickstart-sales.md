@@ -4,18 +4,22 @@ Savings Preview shows what Thoras would save on a Kubernetes cluster, using the 
 
 ## 1. Install
 
-With [gh](https://cli.github.com) logged in to an account in the thoras-ai organization:
+With [Homebrew](https://brew.sh):
 
-    gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh
+    brew install thoras-ai/tap/savings-preview
 
-If gh has several accounts and says `release not found`, run it as your thoras-ai account instead (replace `<account>` with your GitHub login):
+Without Homebrew, with Node.js 20 or later, put `npx @thoras-ai/savings-preview` wherever the steps below say `savings-preview`:
 
-    (export GH_TOKEN="$(gh auth token -h github.com -u <account>)"; gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh)
+    npx @thoras-ai/savings-preview --version
+
+Or use the install script:
+
+    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | sh
 
 Check it worked:
 
     $ savings-preview --version
-    savings-preview v0.2.0
+    savings-preview v0.2.3
 
 ## 2. Before you run
 
@@ -135,7 +139,6 @@ Access they need: read access to the cluster through their own `kubectl` login. 
 
 | What you see | What to do |
 | --- | --- |
-| `release not found` when installing | gh is using an account outside thoras-ai. Use the `GH_TOKEN` line in step 1. |
 | `the kubeconfig sets no current context`, or `no configuration has been provided` | Pass `--context`, with a name from `kubectl config get-contexts`. |
 | An `aws` error about an expired token or SSO session | Run `aws sso login`, then try again. |
 | A `gcloud` error about credentials or reauthentication | Run `gcloud auth login`, then try again. |

@@ -12,25 +12,25 @@ The report page is also published at https://curly-dollop-gw8yzn1.pages.github.i
 
 ## Install
 
-The repository is private, so every download needs a GitHub login or token with access to it.
+With [Homebrew](https://brew.sh), on macOS or Linux:
 
-With [gh](https://cli.github.com) logged in:
+    brew install thoras-ai/tap/savings-preview
 
-    gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh
+Upgrade with `brew upgrade savings-preview`.
 
-If gh has several accounts and says "release not found", set `GH_TOKEN` to an account that can read the repository. Exporting it also reaches the gh calls inside `install.sh`:
+Or run it with npx, which needs Node.js 20 or later:
 
-    (export GH_TOKEN="$(gh auth token -h github.com -u <account>)"; gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh)
+    npx @thoras-ai/savings-preview check --context my-cluster
 
-`install.sh` picks the archive for this machine (macOS or Linux, amd64 or arm64), checks it against the release's `checksums.txt`, and installs `savings-preview` into `~/.local/bin` when that is on `PATH`, or `/usr/local/bin` otherwise. It asks before using sudo, and stops without installing anything when a checksum is missing or does not match. Set `VERSION=v0.2.0` to install a release other than the latest, and `INSTALL_DIR` to install somewhere else:
+The package downloads the release binary of the same version on first use, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux (`SAVINGS_PREVIEW_CACHE` to change). `npm install -g @thoras-ai/savings-preview` puts `savings-preview` on `PATH` instead.
 
-    gh release download -R thoras-ai/savings-preview -p install.sh -O - | VERSION=v0.2.0 INSTALL_DIR=~/bin sh
+Or use the install script:
 
-Without gh, download `install.sh` from the release page and run it with a token. The script then downloads through the GitHub API with `curl`, using `GITHUB_TOKEN` or `GH_TOKEN`. The token needs read access to the repository's contents.
+    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | sh
 
-    GITHUB_TOKEN=<token> sh install.sh
+`install.sh` picks the archive for this machine (macOS or Linux, amd64 or arm64), checks it against the release's `checksums.txt`, and installs `savings-preview` into `~/.local/bin` when that is on `PATH`, or `/usr/local/bin` otherwise. It asks before using sudo, and stops without installing anything when a checksum is missing or does not match. Set `VERSION=v0.2.3` to install a release other than the latest, and `INSTALL_DIR` to install somewhere else:
 
-A Homebrew release is coming.
+    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | VERSION=v0.2.3 INSTALL_DIR=~/bin sh
 
 Or download an archive from the release page, check it with `shasum -a 256 -c checksums.txt --ignore-missing`, and put the `savings-preview` binary on `PATH`.
 
@@ -82,12 +82,12 @@ It prints the identity the kubeconfig gives, the result of `kubectl auth can-i` 
 - `docs/prometheus-adapter.md`: the Prometheus adapter. Build it with `go build -o bin/savings-preview ./cmd/savings-preview`.
 - `CHANGELOG.md`: what changed in each release; each section is that release's notes. `docs/upgrading.md` has the upgrade steps.
 - `docs/releasing.md`: how a `v*` tag becomes a GitHub release with binaries, SBOMs, checksums, the install script and the Homebrew formula, and how to publish the formula to the tap.
-- `scripts/install.sh` and `packaging/homebrew/savings-preview.rb`: the install script and the Homebrew formula template that each release carries.
+- `scripts/install.sh` and `packaging/homebrew/savings-preview.rb`: the install script and the Homebrew formula template that each release carries. `packaging/npm/`: the npm package that downloads and runs the release binary.
 - `docs/poll-adapter.md`: the poll adapter, for clusters with no usage history. It reads the cluster at an interval and keeps the readings on disk.
 - `docs/datadog-adapter.md`: the Datadog adapter. It reads the history from the Datadog metrics query API with an API key and an application key.
 - `docs/design.md`: the design rules the report page follows, and how to re-sync the design tokens in `design/`.
 
-Run every test with `make test`, or the Go tests with `go test ./...`, the contract, install script and formula tests with `python3 -m unittest discover -s tests`, and the page tests with `node --test 'tests/**/*.test.js'`. `make test-all` also runs `go vet` and the Go tests under the race detector. The scripts need Python 3 and the standard library only.
+Run every test with `make test`, or the Go tests with `go test ./...`, the contract, install script and formula tests with `python3 -m unittest discover -s tests`, and the page and npm package tests with `node --test 'tests/**/*.test.js'`. `make test-all` also runs `go vet` and the Go tests under the race detector. The scripts need Python 3 and the standard library only.
 
 ## Report page
 

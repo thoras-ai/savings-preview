@@ -12,9 +12,30 @@ Savings Preview runs on your machine with your existing kubeconfig. It reads the
 
 ## Install
 
-The release is in a private GitHub repository, so the download needs a GitHub login or token with read access to it. With [gh](https://cli.github.com) logged in, install the latest release with:
+### Homebrew
 
-    gh release download -R thoras-ai/savings-preview -p install.sh -O - | sh
+On macOS or Linux:
+
+    brew install thoras-ai/tap/savings-preview
+
+Homebrew checks the archive against the checksum in the formula. Upgrade with `brew upgrade savings-preview`.
+
+### npx
+
+With Node.js 20 or later, run the CLI without installing it:
+
+    npx @thoras-ai/savings-preview check --context my-cluster
+
+The first run downloads the release binary of the package's version for your machine, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux. Later runs start it from there. Pin a version with `npx @thoras-ai/savings-preview@0.2.3`, or install it with `npm install -g @thoras-ai/savings-preview` to get a `savings-preview` command.
+
+| Variable | Use |
+| --- | --- |
+| `SAVINGS_PREVIEW_CACHE` | Directory to keep the binaries in. |
+| `NODE_USE_ENV_PROXY` | Set to `1` to download through the proxy in `HTTPS_PROXY`. Node.js ignores the proxy variables without it, and reads it from version 22.21 and 24. |
+
+### Install script
+
+    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | sh
 
 `install.sh` picks the archive for your machine (macOS or Linux, amd64 or arm64), checks it against the release's `checksums.txt`, and installs `savings-preview` into `~/.local/bin` when that is on your `PATH`, or `/usr/local/bin` otherwise. It asks before using sudo. When the archive has no checksum or its checksum does not match, it stops without installing anything.
 
@@ -22,23 +43,17 @@ It reads these environment variables:
 
 | Variable | Use |
 | --- | --- |
-| `VERSION` | Release to install, such as `v0.2.0`. Default: the latest release. |
+| `VERSION` | Release to install, such as `v0.2.3`. Default: the latest release. |
 | `INSTALL_DIR` | Directory to install into. |
-| `GITHUB_TOKEN` or `GH_TOKEN` | Token to download with when gh is not installed or not logged in. It needs read access to the repository's contents. |
+| `GITHUB_TOKEN` or `GH_TOKEN` | Optional. Sent to the GitHub API when gh is not installed or not logged in, which raises its limit of 60 requests an hour. |
 
 For example:
 
-    gh release download -R thoras-ai/savings-preview -p install.sh -O - | VERSION=v0.2.0 INSTALL_DIR=~/bin sh
-
-Without gh, download `install.sh` from the release page and run it with a token:
-
-    GITHUB_TOKEN=<token> sh install.sh
+    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | VERSION=v0.2.3 INSTALL_DIR=~/bin sh
 
 Then check the install:
 
     savings-preview --version
-
-A Homebrew release is coming.
 
 ### Install from the archive
 

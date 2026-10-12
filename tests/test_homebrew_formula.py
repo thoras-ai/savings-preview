@@ -14,6 +14,12 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import homebrew_formula as hf  # noqa: E402
 
 TAG = "v1.2.3"
+TAP_0_2_3_SHA256 = {
+    "darwin_amd64": "e6a2d1187f9baed4aa6444a2d07fc3b91389b0a8e8352bc6f77efd325dfc9aaa",
+    "darwin_arm64": "908e2eb822d45ebb422835d2c2f3fc793c325896185ec78049a941a2cd55667a",
+    "linux_amd64": "fbc6986a46e566c7dbda39c8163d086a820e233b939e13cbd3d23e433acc11b6",
+    "linux_arm64": "d811df141bcbca233675a738474ad576d422caf7797978ae704e61158ff846a5",
+}
 API = "https://api.github.com/repos/thoras-ai/savings-preview/releases/assets"
 
 
@@ -40,7 +46,16 @@ class RenderTest(unittest.TestCase):
         self.assertNotIn("@", out.replace("#{", ""))
         self.assertIn('version "1.2.3"', out)
         for i, p in enumerate(hf.PLATFORMS):
-            self.assertIn(f'url "{API}/{10 + i}", headers: HEADERS\n      sha256 "{str(i + 1) * 64}"', out)
+            name = f"savings-preview_{TAG}_{p}.tar.gz"
+            self.assertIn(f'url "{hf.DOWNLOAD}/{TAG}/{name}"\n      sha256 "{str(i + 1) * 64}"', out)
+
+    def test_matches_the_formula_in_the_tap(self):
+        # The 0.2.3 formula as committed to thoras-ai/homebrew-tap by hand.
+        tag = "v0.2.3"
+        sums = "".join(f"{h}  savings-preview_{tag}_{p}.tar.gz\n" for p, h in TAP_0_2_3_SHA256.items())
+        rel = {"tag_name": tag, "assets": [{"name": f"savings-preview_{tag}_{p}.tar.gz"} for p in hf.PLATFORMS]}
+        out = hf.render(hf.TEMPLATE.read_text(), tag, hf.read_checksums(sums), rel)
+        self.assertEqual(out, (ROOT / "tests" / "golden" / "homebrew-tap-savings-preview-0.2.3.rb").read_text())
 
     def test_gh_release_view_json(self):
         rel = release()
@@ -115,8 +130,8 @@ class CommandTest(unittest.TestCase):
     def test_writes_the_formula(self):
         r = self.run_cmd()
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertTrue(r.stdout.startswith("# Homebrew formula"))
-        self.assertIn("class SavingsPreview < Formula", r.stdout)
+        self.assertTrue(r.stdout.startswith("class SavingsPreview < Formula\n"))
+        self.assertNotIn("HOMEBREW_GITHUB_API_TOKEN", r.stdout)
 
     def test_error_exits_nonzero_with_no_output(self):
         r = self.run_cmd(tag="v9.9.9")

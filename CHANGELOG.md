@@ -4,9 +4,15 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 
 ## Unreleased
 
+### New
+
+- **Install with Homebrew or npx.** Each release now updates the `thoras-ai/homebrew-tap` formula, so `brew install thoras-ai/tap/savings-preview` installs the latest release, and publishes `@thoras-ai/savings-preview` to npm: `npx @thoras-ai/savings-preview` downloads the release binary of its version, checks it against `checksums.txt` and runs it. See [Getting started](docs/getting-started.md#install).
+
 ### Changed
 
 - Savings preview is licensed under Apache 2.0 ([LICENSE](LICENSE)), so its source can be public and it installs without a GitHub login.
+- The Homebrew formula attached to each release downloads the archives from the release's public download URLs and declares the Apache 2.0 license. It no longer reads `HOMEBREW_GITHUB_API_TOKEN`; setting it does no harm.
+- `install.sh` installs with `curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | sh` and needs no login. `GITHUB_TOKEN` and `GH_TOKEN` still work and only raise the GitHub API's hourly limit. Its error messages no longer ask for credentials, and it no longer prints a note when it runs without them.
 
 ## v0.2.3
 
