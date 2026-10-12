@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/thoras-ai/savings-preview/internal/confirm"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
@@ -365,6 +367,8 @@ func Main(name string, args []string) error {
 	rollup := fs.Duration("rollup", 5*time.Minute, "step of rolled-up readings, which keep the mean and the peak")
 	once := fs.Bool("once", false, "take one reading, write the file and exit; nothing is saved")
 	export := fs.Bool("export", false, "write the file from the readings saved so far and exit, without reading the cluster")
+	yes := fs.Bool("yes", false, "start without waiting for Enter after printing what it will do")
+	fs.BoolVar(yes, "y", false, "same as --yes")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), `usage: savings-preview %s [flags]
 
@@ -404,6 +408,9 @@ at any time.
 		KeepRaw: *keepRaw, Rollup: *rollup, Once: *once, Export: *export}
 	if *export {
 		return Run(context.Background(), opts, nil, realClock{}, os.Stderr)
+	}
+	if !confirm.Stdio(context.Background(), plan(name, *kubeContext, opts), *yes) {
+		return nil
 	}
 	conn, err := kube.Connect(*kubeconfig, *kubeContext)
 	if err != nil {

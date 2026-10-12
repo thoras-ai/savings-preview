@@ -84,7 +84,7 @@ func addRunFlags(fs *flag.FlagSet) (o *runOptions, finish func() error) {
 	fs.DurationVar(&o.keepRaw, "keep-raw", 48*time.Hour, "when polling, keep readings at --interval for this long, then roll them up to --rollup (0: never roll up)")
 	fs.DurationVar(&o.rollup, "rollup", 5*time.Minute, "when polling, step of rolled-up readings, which keep the mean and the peak")
 	fs.BoolVar(&o.noOpen, "no-open", false, "print the report URL instead of opening a browser")
-	fs.BoolVar(&o.yes, "yes", false, "start without waiting for Enter after printing the plan; for scripts (check ignores it)")
+	fs.BoolVar(&o.yes, "yes", false, "start without waiting for Enter after printing the plan; for scripts")
 	fs.BoolVar(&o.yes, "y", false, "same as --yes")
 	fs.BoolVar(&o.collectOnly, "collect-only", false, "write the files and the zip, then exit without serving the report or opening a browser (check ignores it)")
 	return o, func() error {

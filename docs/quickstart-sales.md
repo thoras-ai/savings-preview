@@ -29,7 +29,7 @@ Find the context name for the cluster:
 
     kubectl config get-contexts
 
-See what it will read, in a few seconds. This reads no history and writes nothing:
+See what it will read, in a few seconds. This reads no history and writes nothing. It lists what it will ask and waits for Enter first:
 
     savings-preview check --context <context>
 

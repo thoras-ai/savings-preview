@@ -27,11 +27,16 @@ func TestLatestTagReadsTheRedirect(t *testing.T) {
 
 func TestLatestTagFailsWithoutARedirectToATag(t *testing.T) {
 	for name, h := range map[string]http.HandlerFunc{
-		"ok":       func(w http.ResponseWriter, r *http.Request) {},
-		"not tag":  func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/login", http.StatusFound) },
-		"error":    func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusInternalServerError) },
-		"rc":       func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/tag/v0.3.0-rc.1", http.StatusFound) },
-		"no slash": func(w http.ResponseWriter, r *http.Request) { w.Header().Set("Location", "x"); w.WriteHeader(http.StatusFound) },
+		"ok":      func(w http.ResponseWriter, r *http.Request) {},
+		"not tag": func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/login", http.StatusFound) },
+		"error":   func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusInternalServerError) },
+		"rc": func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/tag/v0.3.0-rc.1", http.StatusFound)
+		},
+		"no slash": func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Location", "x")
+			w.WriteHeader(http.StatusFound)
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			srv := httptest.NewServer(h)

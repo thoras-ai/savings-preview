@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/thoras-ai/savings-preview/internal/confirm"
 )
 
 // Environment variables that hold the keys, as an alternative to the files.
@@ -36,7 +38,9 @@ func Main(args []string) error {
 		list        = fs.Bool("list", false, "print the metrics and clusters found and exit")
 		concurrency = fs.Int("concurrency", 2, "requests in flight at once")
 		verbose     = fs.Bool("v", false, "log each query")
+		yes         = fs.Bool("yes", false, "start without waiting for Enter after printing what it will do")
 	)
+	fs.BoolVar(yes, "y", false, "same as --yes")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `usage: savings-preview datadog [flags]
 
@@ -81,7 +85,9 @@ files or environment variables, never from flags.
 			fmt.Fprintf(os.Stderr, f+"\n", a...)
 		}
 	}
-	fmt.Fprintf(os.Stderr, "using Datadog API at %s\n", c.Base)
+	if !confirm.Stdio(ctx, plan(c.Base, *selector, *out, *days, *list), *yes) {
+		return nil
+	}
 	o := Options{Client: c, Filters: filters, Cluster: *cluster, Days: *days, Step: *step, Concurrency: *concurrency, Log: logf}
 	if *list {
 		return Hint(List(ctx, o, os.Stdout))
