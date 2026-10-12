@@ -42,6 +42,9 @@ func main() {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		cmd, args = args[0], args[1:]
 	}
+	if cmd == "run" || cmd == "check" {
+		pendingUpdate = startUpdateCheck(versionString(), interactive(os.Stderr), os.Getenv)
+	}
 	var err error
 	switch cmd {
 	case "run":
@@ -55,7 +58,9 @@ func main() {
 	case "export":
 		err = runExport(args)
 	case "check":
-		os.Exit(runCheck(args))
+		code := runCheck(args)
+		reportUpdate(os.Stderr)
+		os.Exit(code)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", cmd, usage)
 		os.Exit(2)

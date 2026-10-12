@@ -112,7 +112,7 @@ async function ensureBinary(version, { root = cacheRoot(), plat = platform(), lo
 }
 
 function run(bin, args) {
-  const child = spawn(bin, args, { stdio: 'inherit' });
+  const child = spawn(bin, args, { stdio: 'inherit', env: { ...process.env, SAVINGS_PREVIEW_VIA_NPM: '1' } });
   // The terminal sends Ctrl-C to the binary as well; it decides when to exit.
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
     process.on(sig, () => { if (sig !== 'SIGINT') child.kill(sig); });

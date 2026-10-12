@@ -2,6 +2,13 @@
 
 Each release's section here is its release notes on GitHub. `scripts/release_notes.py` reads the section for a tag, and the release workflow fails when there is none.
 
+## Unreleased
+
+### New
+
+- `run` and `check` say when a newer release is out, and how to upgrade for the way the tool was installed: `brew upgrade savings-preview`, `npx @thoras-ai/savings-preview@latest`, or the install script. They look up the latest release with one request to `github.com` while they work, only in a terminal, and print nothing when the lookup fails. Set `SAVINGS_PREVIEW_NO_UPDATE_CHECK=1` to turn it off. See [security.md](docs/security.md).
+- The docs' npx commands use `@latest`, so npx looks up the newest version each time instead of running one it cached.
+
 ## v0.2.5
 
 ### Fixes

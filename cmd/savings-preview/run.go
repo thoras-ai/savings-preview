@@ -227,6 +227,7 @@ func runWith(args []string, in io.Reader, w io.Writer, ask bool) error {
 	if err != nil {
 		return err
 	}
+	reportUpdate(w)
 	if o.collectOnly {
 		printSend(w, b.zip)
 		return nil
