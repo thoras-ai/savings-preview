@@ -1,61 +1,47 @@
-# Load on your cluster
+# Impact on your cluster
 
-Savings Preview never touches your workloads. Its reads land in one of three places, depending on the source: your metrics store, your Kubernetes API server, or the Datadog API. This page explains how much each read costs, how that cost grows with cluster size, and how to limit it on a large cluster.
+Savings Preview does not affect your production workloads. It runs on your laptop, installs nothing in the cluster, and never connects to your pods, nodes or applications. It only reads monitoring data that already exists, the same way a dashboard does.
 
-| Source | What carries the load | How it grows | Worst case |
-| --- | --- | --- | --- |
-| `prometheus` | The metrics store (Prometheus, Thanos Query, Mimir, managed stores) | Number of running containers in the cluster | The store refuses an oversized query and the run stops |
-| `poll` | The API server and metrics-server | Number of pods and ReplicaSets, once per `--interval` | Repeated cluster-wide list calls on a very large cluster |
-| `datadog` | The Datadog API | Number of workload containers | Datadog rate limits slow the run |
+## What the tool does
 
-## Prometheus-compatible stores
+A run makes read-only requests to one of three places, depending on where your usage history lives:
 
-A run with the defaults (`--days 14`, `--step 1m`, `--concurrency 2`) sends about 250 range queries:
+| Source | Where the reads go | What they look like |
+| --- | --- | --- |
+| Prometheus-compatible store (Prometheus, Thanos, Mimir, managed services) | Your metrics store, through the Kubernetes API server | About 250 range queries over 14 days, two at a time, like opening a few 14-day dashboards one after another |
+| No store (polling) | The Kubernetes API server and metrics-server | A handful of `list` calls once a minute, like running `kubectl get pods -A` |
+| Datadog | The Datadog API | About 110 queries to Datadog; nothing is sent to your cluster |
 
-- Up to 18 queries: 8 for Deployments, 8 for StatefulSets, 2 for nodes.
-- Each query split into one-day chunks, which is 14 or 15 chunks.
-- A few instant queries to find the store and check which metrics exist.
+## What the tool does not do
 
-Two queries run at a time, one after another, so the store never sees more than two of them at once.
+- It does not create, change or delete anything in the cluster. Every request is a read: `list` on resources, and `GET` on the store's query API. [security.md](security.md) lists every request.
+- It does not run anything in the cluster: no agent, DaemonSet, sidecar or job.
+- It does not contact your workloads or nodes. Requests go to the API server, the metrics store or the Datadog API only.
+- It does not keep running. A run against a metrics store takes a minute or two and then stops. Polling runs only as long as you leave it running, and Ctrl-C stops it.
 
-What comes back is small. Every result is aggregated in the store by namespace, workload and container, so the run receives one series per workload container and never one per pod.
+## Why production workloads are not affected
 
-What the store has to read is larger. To attribute pods to their workloads, each query reads the per-pod container series (`container_cpu_usage_seconds_total`, `container_memory_working_set_bytes`, `kube_pod_container_resource_requests` and their limits) and joins them to `kube_pod_owner`. The work for one query is about:
+- **The reads go to your monitoring stack, not to your applications.** Your workloads serve traffic exactly as before; the tool never sends them a request.
+- **The load is small and bounded.** Against a metrics store, the tool runs at most two queries at a time, each covering one day of history, and every result is aggregated in the store, so only one series per workload container comes back. When several clusters are read in one run, three are read at a time.
+- **Your store protects itself.** Prometheus and Thanos refuse any query that would load more than their configured limit (`--query.max-samples`, 50 million points by default). If a query is too large, the store returns an error, the run stops and says which query failed, and nothing else is affected. Managed stores enforce their own limits the same way.
+- **You can stop it at any time.** Ctrl-C ends a run immediately. Every command says what it will read and waits for Enter before it starts.
 
-```
-containers running in the cluster × 1,440 points (one day at 1 minute)
-```
+## Very large clusters
 
-For example, a cluster with 5,000 containers needs about 7 million points per query. A cluster with 50,000 containers needs about 72 million.
+On most clusters the defaults are fine. On a cluster with tens of thousands of containers, or a metrics store that is already close to its memory limit, you can make the reads lighter. These options can be combined:
 
-Prometheus and Thanos Query stop any query that would load more than `--query.max-samples` points (50 million by default). When that happens, the store returns an error, the run stops and says which query failed, and nothing else is affected. Below that limit, the store holds the query in memory while it runs. On a Prometheus that is already close to its memory limit, run on part of the cluster first; see below.
-
-Stores that cap the series a query may return (CloudWatch) are split into groups of namespaces automatically, so each query stays under the cap. A result that reaches a store's series limit fails the run rather than giving incomplete figures.
-
-### Running on a large cluster
-
-Each of these flags reduces the work per query. They can be combined.
-
-| Flag | Effect |
+| Option | Effect |
 | --- | --- |
-| `--selector 'namespace=~"team-a\|team-b"'` | Reads only the matching namespaces. Run once per group of namespaces to cover the cluster in parts. |
-| `--step 5m` | One fifth of the points per query, at a coarser resolution. |
-| `--days 3` | Fewer chunks, so fewer queries in total. The work per query is the same. |
-| `--concurrency 1` | One query at a time. |
+| `--selector 'namespace=~"team-a\|team-b"'` | Reads only the matching namespaces. Run once per group to cover the cluster in parts. |
+| `--step 5m` | One fifth of the data per query, at a coarser resolution. |
+| `--days 3` | Three days of history instead of 14, so fewer queries. |
+| `--interval 5m` (polling) | One reading every 5 minutes instead of every minute. The savings math uses 15-minute peaks, so this still gives three readings per window. |
+| `savings-preview prometheus --concurrency 1` | One query at a time instead of two. |
 
-On a cluster with tens of thousands of containers, start with one or two namespaces and `--days 3`, watch the store's query latency and memory, then widen.
+A good start on a very large cluster is one or two namespaces with `--days 3`. Check the store's query latency and memory, then widen.
 
-## Polling (no metrics store)
+### How the store's work grows
 
-`savings-preview poll` reads the cluster once per `--interval` (1 minute by default). Each reading makes five list calls across all namespaces (Pods, ReplicaSets, Deployments, StatefulSets, Nodes) and reads metrics-server's pod usage list. Each call returns every object of its kind in one response.
+For each query, the store reads the per-container usage and request series for the day it covers and groups them by workload. Its work is about the number of running containers × 1,440 points (one day at 1-minute steps): about 7 million points for 5,000 containers, and about 72 million for 50,000. That is why the largest clusters can reach the store's default 50-million-point limit, and why the options above help.
 
-On small and medium clusters this is light: about the same as a few `kubectl get pods -A` per minute. On a cluster with tens of thousands of pods, or many old ReplicaSets kept for rollback history, each reading is several large list responses per minute for as long as the poll runs. Kubernetes 1.31 and later serve these lists from the API server's cache. Older versions read them from etcd.
-
-On a large cluster:
-
-- Use a metrics store if one exists. It reads history that is already there instead of collecting it.
-- Otherwise, raise `--interval`, for example `--interval 5m`. The savings math uses 15-minute peaks, so 5-minute readings still give each window three samples.
-
-## Datadog
-
-`savings-preview datadog` sends about 110 requests to the Datadog metrics query API for a 14-day run at 1 minute, plus one probe per metric. Queries are grouped in Datadog by namespace, workload and container. Nothing is sent to your cluster. Large accounts may hit Datadog's per-organization rate limits; the run waits and retries.
+For polling, each reading is five cluster-wide `list` calls (Pods, ReplicaSets, Deployments, StatefulSets, Nodes) and one metrics-server read. Kubernetes 1.31 and later answer these from the API server's cache. On clusters with tens of thousands of pods, use a metrics store if you have one, or a longer `--interval`.
