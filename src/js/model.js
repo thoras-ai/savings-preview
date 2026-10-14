@@ -542,18 +542,23 @@
     return out;
   }
 
-  // Whether a namespace, as its cluster names it, is one of Thoras's own:
-  // thoras, or a name starting with thoras-. Their workloads are Thoras, not
-  // the customer's, so they are left out unless includeThoras is set.
-  // internal/savings IsThorasNamespace is the Go port.
+  // Thoras's own namespaces, exactly. Others that start with thoras-, such
+  // as thoras-example, hold sample workloads Thoras right-sizes, and count.
+  var THORAS_NAMESPACES = ['thoras', 'thoras-console'];
+
+  // Whether a namespace, as its cluster names it, is one of Thoras's own.
+  // Their workloads are Thoras, not the customer's, so they are left out
+  // unless includeThoras is set. internal/savings IsThorasNamespace is the
+  // Go port.
   function isThoras(ns) {
-    return ns === 'thoras' || String(ns || '').indexOf('thoras-') === 0;
+    return THORAS_NAMESPACES.indexOf(ns) >= 0;
   }
 
-  // Thoras's own namespaces the figures leave out under these levers: none
-  // when includeThoras is set or the file has none.
+  // Thoras's own namespaces the figures leave out under these levers, as the
+  // page names them (thorasLabels): none when includeThoras is set or the
+  // file has none.
   function thorasLeftOut(data, includeThoras) {
-    return includeThoras ? [] : (data.thorasNamespaces || []);
+    return includeThoras ? [] : (data.thorasLabels || []);
   }
 
   // Weight of a cluster's covered points in [range[0], range[1]], or of all
@@ -865,6 +870,7 @@
       if (namespaces.indexOf(w.ns) < 0) namespaces.push(w.ns);
       if (isThoras(w.nsName) && thoras.indexOf(w.ns) < 0) thoras.push(w.ns);
     });
+    thoras.sort();
     var labels = displayNames(data.clusters.concat(data.failed.map(function (f) { return f.name; })));
     var clusters = data.clusters.map(function (name) {
       var mine = function (r) { return r.cluster === name; };
@@ -882,8 +888,14 @@
       pricing: multi ? fleetPricing(clusters, data.nodes) : clusters[0].pricing, nodes: data.nodes,
       namespaces: namespaces.sort(), workloads: workloads,
       clusters: clusters, failed: data.failed, dropped: (opts && opts.dropped) || [], multi: multi, labels: labels,
-      // Thoras's own namespaces in the file, as namespaces names them.
-      thorasNamespaces: thoras.sort()
+      // Thoras's own namespaces in the file, as namespaces names them, and
+      // as the page shows them: in a fleet, with the cluster's short name.
+      thorasNamespaces: thoras,
+      thorasLabels: thoras.map(function (ns) {
+        if (!multi) return ns;
+        var w = workloads.filter(function (x) { return x.ns === ns; })[0];
+        return (labels[w.cluster] || w.cluster) + '/' + w.nsName;
+      })
     };
   }
 
@@ -909,7 +921,7 @@
   //   clusters    clusters to count, or null for all
   //   range       [from, to] in Unix seconds, or null for the whole file
   //   includeThoras  count Thoras's own namespaces (false): thoras and
-  //                  thoras-*; left out, they are not in totals, workloads
+  //                  thoras-console; left out, they are not in totals, workloads
   //                  or the chart, and add no covered time
   function compute(data, levers) {
     var lv = Object.assign({}, DEFAULT_LEVERS, levers);

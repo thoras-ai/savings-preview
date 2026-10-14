@@ -257,7 +257,7 @@ func collectAndBuild(ctx context.Context, o *runOptions, w io.Writer) (*builtRep
 	fmt.Fprintf(w, "\n%s: %s a year in requests, %s a year in savings (%d of %d workloads counted, tier %d, %s)\n",
 		cmp.Or(sum.DisplayName, sum.Cluster), money(sum.Totals.AnnualSpend), money(sum.Totals.AnnualSavings), sum.Totals.Counted, sum.Totals.Workloads,
 		sum.Tier, spanText(time.Duration(sum.SpanSeconds)*time.Second))
-	printExcluded(w, sum)
+	printExcluded(w, sum.ExcludedNamespaces)
 	fmt.Fprintf(w, "wrote %s with a summary, report.html, a copy of the report that opens without this tool, and the compact file\n", b.zip)
 	fmt.Fprintf(w, "the full-resolution file stays at %s (%s); it is not in the zip\n", o.out, megabytes(b.full.Bytes))
 	return b, nil

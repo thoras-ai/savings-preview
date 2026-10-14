@@ -63,9 +63,9 @@ type Summary struct {
 	Totals             Totals    `json:"totals"`
 	// FidelityNotes is every thoras.fidelity_notes value in the file, sorted.
 	FidelityNotes []string `json:"fidelity_notes,omitempty"`
-	// ExcludedNamespaces are Thoras's own namespaces in the file, named
-	// thoras or starting with thoras-, whose workloads the totals leave out,
-	// sorted. For a fleet it lists every cluster's, each name once.
+	// ExcludedNamespaces are Thoras's own namespaces in the file, thoras and
+	// thoras-console, whose workloads the totals leave out, sorted. For a
+	// fleet it lists every cluster's, each name once.
 	ExcludedNamespaces []string `json:"excluded_namespaces,omitempty"`
 	// Clusters is set for a file with several clusters, or with a cluster
 	// that could not be read. The figures above are then the fleet's: totals
@@ -166,11 +166,12 @@ func AnalyzeWith(doc []byte, opts Options) (*Summary, error) {
 	return AnalyzeReaderWith(bytes.NewReader(doc), opts)
 }
 
-// IsThorasNamespace reports whether a namespace is one of Thoras's own:
-// thoras, or a name starting with thoras-. isThoras in src/js/model.js is
-// the JS port.
+// IsThorasNamespace reports whether a namespace is one of Thoras's own,
+// thoras or thoras-console, exactly. Others that start with thoras-, such as
+// thoras-example, hold sample workloads Thoras right-sizes, and count.
+// isThoras in src/js/model.js is the JS port.
 func IsThorasNamespace(ns string) bool {
-	return ns == "thoras" || strings.HasPrefix(ns, "thoras-")
+	return ns == "thoras" || ns == "thoras-console"
 }
 
 // AnalyzeReader is Analyze for a file read from r. It decodes one resource at

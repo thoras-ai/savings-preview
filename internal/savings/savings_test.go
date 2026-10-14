@@ -883,9 +883,9 @@ func TestHalfTheTimeCostsHalf(t *testing.T) {
 	}
 }
 
-// thorasDoc has 20 steps of 300 seconds. shop/app and thorasbank/ledger run
-// the last 10; thoras/metrics-collector and thoras-console/console run all
-// 20. thorasbank is not a Thoras namespace.
+// thorasDoc has 20 steps of 300 seconds. shop/app and thoras-example/ledger
+// run the last 10; thoras/metrics-collector and thoras-console/console run
+// all 20. thoras-example holds a sample workload, not Thoras, so it counts.
 func thorasDoc() map[string]any {
 	n, step := 20, 300
 	base := common(step, 2, "prometheus")
@@ -896,7 +896,7 @@ func thorasDoc() map[string]any {
 		reqCPU   float64
 	}{
 		{"shop", "app", 10, 2},
-		{"thorasbank", "ledger", 10, 1},
+		{"thoras-example", "ledger", 10, 1},
 		{"thoras", "metrics-collector", 0, 0.5},
 		{"thoras-console", "console", 0, 0.25},
 	} {
@@ -959,12 +959,12 @@ func TestThorasNamespacesAreLeftOut(t *testing.T) {
 	if _, ok := written(all)["excluded_namespaces"]; ok {
 		t.Error("excluded_namespaces written with nothing left out")
 	}
-	for _, ns := range []string{"thoras", "thoras-console", "thoras-x"} {
+	for _, ns := range []string{"thoras", "thoras-console"} {
 		if !IsThorasNamespace(ns) {
 			t.Errorf("%s is Thoras's", ns)
 		}
 	}
-	for _, ns := range []string{"thorasbank", "my-thoras", "Thoras", ""} {
+	for _, ns := range []string{"thoras-example", "thoras-trial", "thoras-workload-ref-example", "thorasbank", "my-thoras", "Thoras", ""} {
 		if IsThorasNamespace(ns) {
 			t.Errorf("%s is not Thoras's", ns)
 		}

@@ -247,7 +247,7 @@ The report opens on one page:
 
 A report of several clusters opens on the fleet: the headline and Today and with Thoras add up every cluster, each priced from its own nodes, the gap chart sums them over the window, a table lists each cluster's spend today and with Thoras, the biggest saving first, and Across your fleet counts the clusters that have workloads in the figures. Select a cluster to see page one for it alone; Show all clusters goes back. Under Assumptions, Clusters includes or excludes clusters from every figure, and the link keeps the choice. Namespaces are named `cluster/namespace`, since clusters often share namespace names.
 
-The target for each workload is 1.1 times its highest use in any 15 minutes. Waste is the request above the target. A workload counts only while it runs, and each cluster's yearly figures are its average over the time observed. Workloads in Thoras's own namespaces, `thoras` and any starting with `thoras-`, are left out, so a cluster that already runs Thoras shows only its own workloads; Assumptions can include them. A workload costs the larger of its CPU cost and its memory cost, at per-core and per-GiB rates taken from the cluster's nodes. Utilization is usage over requests, CPU and memory weighted by price, with each workload's usage counted up to its request. A container missing a required series is listed but not counted. Nodes are priced the way the Thoras product prices them: by instance type from the list prices of the node's cloud (AWS us-east-1, Google Cloud us-central1 or Azure eastus), with spot nodes at the spot price. With no node priced, the report uses a 4-core, 16 GiB, $0.192 per hour node. See [Node prices](node-prices.md).
+The target for each workload is 1.1 times its highest use in any 15 minutes. Waste is the request above the target. A workload counts only while it runs, and each cluster's yearly figures are its average over the time observed. Workloads in Thoras's own namespaces, `thoras` and `thoras-console`, are left out, so a cluster that already runs Thoras shows only its own workloads; Assumptions can include them. A workload costs the larger of its CPU cost and its memory cost, at per-core and per-GiB rates taken from the cluster's nodes. Utilization is usage over requests, CPU and memory weighted by price, with each workload's usage counted up to its request. A container missing a required series is listed but not counted. Nodes are priced the way the Thoras product prices them: by instance type from the list prices of the node's cloud (AWS us-east-1, Google Cloud us-central1 or Azure eastus), with spot nodes at the spot price. With no node priced, the report uses a 4-core, 16 GiB, $0.192 per hour node. See [Node prices](node-prices.md).
 
 Details for engineers, under page one, opens the other sections:
 
@@ -272,7 +272,7 @@ The settings live in the part of the address after `#`, so a link opens the same
 | `headroom` | Target headroom over the peak, in percent | `10` |
 | `peak` | Rolling peak window, in minutes | `15` |
 | `ns` | Namespaces to count, comma separated | All |
-| `thoras` | `1` to count Thoras's own namespaces, `thoras` and `thoras-*` | Left out |
+| `thoras` | `1` to count Thoras's own namespaces, `thoras` and `thoras-console` | Left out |
 | `cluster` | Clusters to count, in a report of several, comma separated | All |
 | `from`, `to` | Time range, in Unix seconds | The whole file |
 | `cost` | Loaded cost of an engineer per year, in USD | `200000` |

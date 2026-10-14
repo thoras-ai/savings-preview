@@ -10,7 +10,7 @@
  *   headroom  target headroom over the peak, in percent (10)
  *   peak      rolling peak window, in minutes (15)
  *   ns        namespaces to count, comma separated (all)
- *   thoras    1 to count Thoras's own namespaces, thoras and thoras-* (left out)
+ *   thoras    1 to count Thoras's own namespaces, thoras and thoras-console (left out)
  *   cluster   clusters to count, in a file with several, comma separated (all)
  *   from, to  time range, Unix seconds (the whole file)
  *   cost      loaded cost of an engineer per year, in USD (200000)

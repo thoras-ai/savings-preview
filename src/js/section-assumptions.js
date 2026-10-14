@@ -322,8 +322,8 @@
       thoras.checked = !!st.includeThoras;
       thoras.parentNode.classList.toggle('off', !thoras.checked);
       q(host, '[data-note="thoras"]').textContent = st.includeThoras ?
-        'Thoras’s own ' + ui.plural(data.thorasNamespaces.length, 'namespace') + ' (' + data.thorasNamespaces.join(', ') + ') ' + (data.thorasNamespaces.length === 1 ? 'is' : 'are') + ' counted.' :
-        ui.thorasNote(data.thorasNamespaces) + ' ' + (data.thorasNamespaces.length === 1 ? 'It runs' : 'They run') + ' Thoras, not your workloads.';
+        'Thoras’s own ' + ui.plural(data.thorasLabels.length, 'namespace') + ' (' + data.thorasLabels.join(', ') + ') ' + (data.thorasLabels.length === 1 ? 'is' : 'are') + ' counted.' :
+        ui.thorasNote(data.thorasLabels) + ' ' + (data.thorasLabels.length === 1 ? 'It runs' : 'They run') + ' Thoras, not your workloads.';
     }
 
     // Clusters.

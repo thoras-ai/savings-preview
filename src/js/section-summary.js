@@ -190,14 +190,12 @@
     return 'Thoras would cut this cluster’s compute spend by ' + ui.money(fig.savings) + ' a year, ' + ui.pct(fig.share) + '.';
   }
 
-  // labels maps cluster names to the names shown, when the page has them;
-  // thoras lists Thoras's own namespaces left out (model.thorasLeftOut).
-  function method(st, labels, thoras) {
+  // labels maps cluster names to the names shown, when the page has them.
+  function method(st, labels) {
     var shown = st.onlyClusters && st.onlyClusters.map(function (n) { return (labels && labels[n]) || n; });
     return 'Target is ' + ui.num(1 + st.headroom, 2) + ' × the highest usage in any ' + st.peakMinutes + '-minute window; waste is the request above it.' +
       (st.onlyClusters ? ' Only the ' + ui.plural(st.onlyClusters.length, 'cluster') + ' ' + shown.join(', ') + ' ' + (st.onlyClusters.length === 1 ? 'is' : 'are') + ' included.' : '') +
-      (st.namespaces ? ' Only the ' + ui.plural(st.namespaces.length, 'namespace') + ' ' + st.namespaces.join(', ') + ' ' + (st.namespaces.length === 1 ? 'is' : 'are') + ' included.' : '') +
-      (thoras && thoras.length ? ' ' + ui.thorasNote(thoras) : '');
+      (st.namespaces ? ' Only the ' + ui.plural(st.namespaces.length, 'namespace') + ' ' + st.namespaces.join(', ') + ' ' + (st.namespaces.length === 1 ? 'is' : 'are') + ' included.' : '');
   }
 
   // Plain text for pasting into chat or email.
@@ -333,7 +331,7 @@
       '<p class="sum-from">' + esc(provenance(r, st)) + all + '</p></div>' +
       versus(fig) + gapCard(r, st, fig) + detail +
       '<div class="pair">' + fleetCard(fig, st, r) + nextCard(r, st) + '</div>' +
-      '<p class="basis">' + esc(method(st, labelsOf(data), model.thorasLeftOut(data, st.includeThoras))) + '</p>';
+      '<p class="basis">' + esc(method(st, labelsOf(data))) + '</p>';
   }
 
   function drawChart(host, r) {
