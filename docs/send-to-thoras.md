@@ -81,7 +81,7 @@ It uses your existing `kubectl` credentials and sends only reads:
 - `get` on `services/proxy`, to query Prometheus through the API server
 - When a cluster has no Prometheus, `list` on pods, workloads and nodes, plus metrics-server readings
 
-The full list of requests, with read-only service accounts you can use instead of your own credentials, is in [security.md](security.md).
+The full list of requests, with read-only service accounts you can use instead of your own credentials, is in [security.md](security.md). [cluster-load.md](cluster-load.md) explains why a run does not affect your workloads.
 
 ## If something goes wrong
 

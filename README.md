@@ -70,7 +70,7 @@ Send `savings-preview.zip` to your Thoras contact. [docs/send-to-thoras.md](docs
 
 The tool only reads. It uses your kubeconfig credentials to list services and Prometheus Operator resources to find a store, queries the store through the API server's service proxy, and, when it has to poll, lists pods, ReplicaSets, Deployments, StatefulSets, nodes and metrics-server usage. It never reads Secrets, ConfigMaps or logs, and writes nothing in the cluster. It sends nothing anywhere except requests to your API server, to the metrics store, cloud monitoring API or Datadog API you point it at (with the token requests their credentials need), and, in a terminal, one check for a newer release on `github.com` that carries nothing about your clusters.
 
-[docs/security.md](docs/security.md) lists every request, what the output contains and how releases are built. [docs/cluster-load.md](docs/cluster-load.md) covers how much load a run puts on your metrics store and API server, and how to limit it on a large cluster. [deploy/rbac/](deploy/rbac/README.md) has read-only ServiceAccounts for each source if you would rather not use your own credentials.
+[docs/security.md](docs/security.md) lists every request, what the output contains and how releases are built. [docs/cluster-load.md](docs/cluster-load.md) explains why a run does not affect your workloads, and how to make it lighter on a very large cluster. [deploy/rbac/](deploy/rbac/README.md) has read-only ServiceAccounts for each source if you would rather not use your own credentials.
 
 ## Documentation
 
@@ -78,7 +78,7 @@ The tool only reads. It uses your kubeconfig credentials to list services and Pr
 - [Getting started](docs/getting-started.md): every install method, each source, many clusters, reading the report, and troubleshooting.
 - [Sending results to Thoras](docs/send-to-thoras.md): collect the data from your clusters and send the zip.
 - [Security](docs/security.md): what the tool reads and writes, where its output goes, and how to check.
-- [Load on your cluster](docs/cluster-load.md): what a run costs your metrics store and API server, and how to run on a large cluster.
+- [Impact on your cluster](docs/cluster-load.md): what a run reads, why it does not affect your workloads, and options for very large clusters.
 - [Read-only access](deploy/rbac/README.md): ServiceAccounts and roles for each source.
 - [Prometheus adapter](docs/prometheus-adapter.md): in-cluster stores, and Mimir, Grafana Cloud, Amazon Managed Prometheus, CloudWatch, Azure Monitor and Google Managed Prometheus.
 - [Datadog adapter](docs/datadog-adapter.md): reading usage from the Datadog metrics query API.
