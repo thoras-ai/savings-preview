@@ -561,9 +561,12 @@
   // cluster has data but it has none, such as before it starts, after it ends
   // or between runs, it adds 0: a workload counts only while it runs. A
   // bucket where a cluster in the list has no data at all, such as during an
-  // outage of its metrics source, is NaN in every field. NaN buckets at
-  // either end are dropped; in a fleet those include the buckets at the ends
-  // of the shared window where not every cluster has a value.
+  // outage of its metrics source, is NaN in every field, except that a
+  // single such bucket between two with values, such as a missed scrape,
+  // takes the mean of its two neighbours (for peaks, the higher of them).
+  // Two or more in a row stay NaN. NaN buckets at either end are dropped; in
+  // a fleet those include the buckets at the ends of the shared window where
+  // not every cluster has a value.
   //   cover  {cluster: {chart}}, the covered times on each cluster's charts
   //          (see coverage); a cluster without one is covered where its
   //          workloads in the list have a value
@@ -618,12 +621,22 @@
       }
     });
     var rows = Object.keys(clusterRows).map(function (c) { return clusterRows[c]; });
-    var lo = nb, hi = -1;
+    var lo = nb, hi = -1, ok = new Uint8Array(nb);
     for (var q = 0; q < nb; q++) {
-      if (rows.every(function (r) { return r[q]; })) { lo = Math.min(lo, q); hi = q; continue; }
+      if (rows.every(function (r) { return r[q]; })) { ok[q] = 1; lo = Math.min(lo, q); hi = q; continue; }
       for (var g = 0; g < nf; g++) outs[g][q] = NaN;
     }
     if (hi < 0) return out;
+    // One empty bucket between two with values, such as a missed scrape,
+    // draws through: the mean of its neighbours, or for peaks the higher.
+    // The chart only; totals still leave the time out.
+    for (var e = 1; e + 1 < nb; e++) {
+      if (ok[e] || !ok[e - 1] || !ok[e + 1]) continue;
+      for (var h = 0; h < nf; h++) {
+        var x = outs[h][e - 1], y = outs[h][e + 1];
+        outs[h][e] = peak[h] ? Math.max(x, y) : (x + y) / 2;
+      }
+    }
     out.t = out.t.subarray(lo, hi + 1);
     FIELDS.forEach(function (f) { out[f] = out[f].subarray(lo, hi + 1); });
     return out;

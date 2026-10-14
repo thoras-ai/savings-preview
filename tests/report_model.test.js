@@ -189,10 +189,10 @@ test('a gap of two buckets inside a workload range still drops the cluster bucke
   assert.ok(Number.isFinite(r.series.cur[4]));
 });
 
-test('one bucket where no workload has data is a gap on the cluster chart and is not covered time', () => {
+test('one bucket where no workload has data draws through on the chart and is not covered time', () => {
   const r = model.analyze(doc({ cpu: [1, 1, null, 1, 1], mem: [1, 1, 1, 1, 1] }));
-  assert.ok(Number.isNaN(r.series.cur[2]));
-  assert.ok([0, 1, 3, 4].every(i => Number.isFinite(r.series.cur[i])));
+  assert.ok(Array.from(r.series.cur).every(Number.isFinite));
+  assert.strictEqual(r.series.cur[2], (r.series.cur[1] + r.series.cur[3]) / 2);
   assert.ok(Number.isNaN(r.workloads[0].series.cur[2]));
   // The cluster has no data then, so the workload's averages leave it out.
   const whole = model.analyze(doc({ cpu: [1, 1, 1, 1, 1], mem: [1, 1, 1, 1, 1] }));
@@ -222,10 +222,10 @@ test('a workload is unknown at a step when none of its containers has usage', ()
   assert.strictEqual(s.t.length, 9);
   assert.strictEqual(s.reqCpu[4], 1);
   assert.strictEqual(s.reqCpu[5], 2);
-  // The workload has no point at step 4, and nor has its cluster, so the
-  // cluster chart has a gap there.
+  // The workload has no point at step 4, and nor has its cluster; one such
+  // bucket draws through on the cluster chart.
   assert.strictEqual(r.series.t.length, 10);
-  assert.ok(Number.isNaN(r.series.cur[4]) && Number.isFinite(r.series.cur[3]));
+  assert.strictEqual(r.series.cur[4], (r.series.cur[3] + r.series.cur[5]) / 2);
 });
 
 test('a container with only one usage value at a step is not running then', () => {
@@ -296,6 +296,23 @@ test('a workload present for half the covered time costs half of one present the
   const lw = Object.fromEntries(late.workloads.map(w => [w.name, w]));
   assert.ok(Math.abs(lw.half.annualSpend - lw.whole.annualSpend) < 1e-9);
   assert.ok(Math.abs(lw.whole.annualSpend - by.whole.annualSpend) < 1e-9);
+});
+
+test('a single missing bucket takes the mean of its neighbours, and the higher peak; two stay a gap', () => {
+  const cpu = Array(12).fill(0);
+  const r = model.analyze(multi([
+    { name: 'a', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 2, off: [3, 7, 8] }] },
+    { name: 'b', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 1, off: [2, 3, 7, 8] }] }
+  ]));
+  const s = r.series;
+  // Bucket 2 has only a (2 cores), bucket 4 both (3 cores); bucket 3 has neither.
+  assert.strictEqual(s.reqCpu[2], 2);
+  assert.strictEqual(s.reqCpu[4], 3);
+  for (const f of ['reqCpu', 'reqMem', 'useCpu', 'cur', 'opt', 'useCost', 'tgtCpu']) assert.strictEqual(s[f][3], (s[f][2] + s[f][4]) / 2, f);
+  for (const f of ['peakCpu', 'peakMem']) assert.strictEqual(s[f][3], Math.max(s[f][2], s[f][4]), f);
+  assert.ok(Number.isNaN(s.cur[7]) && Number.isNaN(s.cur[8]));
+  // Totals leave the missing time out: a runs 9 of the 9 covered steps.
+  assert.ok(Math.abs(r.workloads.find(w => w.name === 'a').reqCores - 2) < 1e-9);
 });
 
 test('a cluster-wide outage is left out of the covered time and is a gap on the chart', () => {
