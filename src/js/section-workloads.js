@@ -141,12 +141,10 @@
     if (data.multi) d.where = { cluster: w.cluster, clusterLabel: data.labels[w.cluster] || w.cluster };
     if (!d.counted) return d;
     var s = p.s, lohi = bounds(p, lv.range), lo = lohi[0], hi = lohi[1];
-    var sw = 0, swPod = 0, use = [0, 0], now = [0, 0], tgt = [0, 0], lim = [0, 0], peak = [0, 0], safe = [0, 0], limW = [0, 0];
+    var swPod = 0, now = [0, 0], tgt = [0, 0], lim = [0, 0], peak = [0, 0], safe = [0, 0], limW = [0, 0];
     for (var k = lo; k < hi; k++) {
       if (!isFinite(s.reqCpu[k])) continue;
       var wt = p.weight[k], rep = p.replicas[k];
-      sw += wt;
-      use[0] += s.useCpu[k] * wt; use[1] += s.useMem[k] * wt;
       peak[0] = Math.max(peak[0], s.peakCpu[k]); peak[1] = Math.max(peak[1], s.peakMem[k]);
       if (rep > 0) {
         swPod += wt;
@@ -157,16 +155,15 @@
       if (p.limCpu && isFinite(p.limCpu[k])) { lim[0] += p.limCpu[k] * wt; limW[0] += wt; }
       if (p.limMem && isFinite(p.limMem[k])) { lim[1] += p.limMem[k] * wt; limW[1] += wt; }
     }
-    var per = function (v) { return sw ? v / sw : NaN; };
     // Time scaled to zero has no pods, so it does not count toward per-pod values.
     var perPod = function (v) { return swPod ? v / swPod : NaN; };
     d.replicas = meanReplicas(p, lo, hi);
     d.cpu = {
-      requested: w.reqCores, mean: per(use[0]), peak: peak[0],
+      requested: w.reqCores, mean: w.useCores, peak: peak[0],
       now: perPod(now[0]), target: perPod(tgt[0]), peakSafe: safe[0] * lv.headroom, limit: limW[0] ? lim[0] / limW[0] : null
     };
     d.mem = {
-      requested: w.reqGiB, mean: per(use[1]), peak: peak[1],
+      requested: w.reqGiB, mean: w.useGiB, peak: peak[1],
       now: perPod(now[1]), target: perPod(tgt[1]), peakSafe: safe[1] * lv.headroom, limit: limW[1] ? lim[1] / limW[1] : null
     };
     return d;

@@ -217,8 +217,11 @@ test('a fleet charts the time every cluster covers and keeps each cluster’s ow
   assert.ok(r.series.t[0] >= r.window[0] && r.series.t[r.series.t.length - 1] < r.window[1]);
   for (const f of ['cur', 'opt', 'useCost', 'reqCpu', 'tgtCpu']) assert.ok(r.series[f].every(Number.isFinite), f);
 
-  // On its own, the longest cluster has a gap the fleet chart would have drawn blank.
-  assert.ok(Array.from(model.analyze(only(EAST)).series.cur).some(v => !Number.isFinite(v)));
+  // On its own, the longest cluster charts its whole two days: its batch
+  // workload adds 0 while it is not running, so there is no gap.
+  const east = model.analyze(only(EAST)).series;
+  assert.strictEqual(east.t.length, 192);
+  assert.ok(Array.from(east.cur).every(Number.isFinite));
 
   // Totals cover each cluster's whole history.
   const alone = data.clusters.map(c => model.analyze(only(c.name)));

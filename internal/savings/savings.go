@@ -310,8 +310,31 @@ func (cd *clusterData) summary() (*Summary, error) {
 		byWorkload[c.id] = append(byWorkload[c.id], c)
 	}
 	t := Totals{Workloads: len(order)}
+	var prepared []*workloadFigures
 	for _, id := range order {
-		analyzeWorkload(&t, workloads[id], byWorkload[id], rates)
+		if w := analyzeWorkload(workloads[id], byWorkload[id], rates); w != nil {
+			prepared = append(prepared, w)
+		}
+	}
+	// A workload counts only while it runs: its averages are over the time
+	// the cluster has data, the points where at least one workload has
+	// complete data, each weighted by the largest step weight of those
+	// workloads there.
+	covered := map[float64]float64{}
+	for _, w := range prepared {
+		for i, x := range w.grid {
+			if isFinite(w.reqCPU[i]) {
+				covered[x] = math.Max(covered[x], w.weight[i])
+			}
+		}
+	}
+	// The weights are whole seconds, so the sum is exact in any order.
+	coveredWeight := 0.0
+	for _, w := range covered {
+		coveredWeight += w
+	}
+	for _, w := range prepared {
+		w.addTo(&t, coveredWeight)
 	}
 	// The page sums workload means as they are, so a non-finite mean would
 	// show as NaN there. That needs infinite inputs; JSON cannot carry NaN or
@@ -727,8 +750,46 @@ func rollingMax(t, v []float64, window float64) []float64 {
 	return out
 }
 
-// analyzeWorkload adds the workload's figures to t when it can be priced.
-func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
+// workloadFigures is a workload's series on its own time grid, priced.
+type workloadFigures struct {
+	grid, weight                                 []float64
+	reqCPU, reqMem, cur, opt, wasteCPU, wasteMem []float64
+}
+
+// timeShare is the weighted sum of the finite values divided by the covered
+// weight, or by the weight of those values when that is more. Time the
+// workload has no value in counts as 0. NaN when it has none. It ports
+// timeShare in src/js/model.js.
+func timeShare(arr, weights []float64, covered float64) float64 {
+	s, n := 0.0, 0.0
+	for i, x := range arr {
+		if !isFinite(x) {
+			continue
+		}
+		s, n = s+x*weights[i], n+weights[i]
+	}
+	// JS tests n for truth, which NaN fails too.
+	if n == 0 || math.IsNaN(n) {
+		return math.NaN()
+	}
+	return s / math.Max(covered, n)
+}
+
+// addTo adds the workload's figures to t, averaged over the covered weight.
+func (w *workloadFigures) addTo(t *Totals, covered float64) {
+	avg := func(arr []float64) float64 { return timeShare(arr, w.weight, covered) }
+	cur := avg(w.cur)
+	t.Counted++
+	t.AnnualSpend += cur * hoursPerYear
+	t.AnnualSavings += (cur - avg(w.opt)) * hoursPerYear
+	t.WasteCores += avg(w.wasteCPU)
+	t.WasteGiB += avg(w.wasteMem)
+	t.RequestedCores += avg(w.reqCPU)
+	t.RequestedGiB += avg(w.reqMem)
+}
+
+// analyzeWorkload prices the workload, or returns nil when it cannot be priced.
+func analyzeWorkload(wl *resource, parts []*resource, r rates) *workloadFigures {
 	var usable []*resource
 	times := map[float64]bool{}
 	var grid []float64
@@ -744,11 +805,11 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 		}
 	}
 	if len(usable) == 0 || wl == nil {
-		return
+		return nil
 	}
 	rep := wl.series["k8s."+parts[0].kind+".pod.desired"]
 	if len(rep.t) == 0 {
-		return
+		return nil
 	}
 	sort.Float64s(grid)
 	replicas := resample(rep, grid, wl.step, wl.spans, wl.held["k8s."+parts[0].kind+".pod.desired"])
@@ -815,7 +876,7 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 		}
 	}
 	if !anyValid {
-		return
+		return nil
 	}
 	reqCPU, reqMem := sums[2], sums[3]
 	pc, pm := rollingMax(grid, pkCPU, peakWindowSeconds), rollingMax(grid, pkMem, peakWindowSeconds)
@@ -827,11 +888,5 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 		wasteCPU[k] = math.Max(0, reqCPU[k]-tgtCPU)
 		wasteMem[k] = math.Max(0, reqMem[k]-tgtMem)
 	}
-	t.Counted++
-	t.AnnualSpend += mean(cur, weight) * hoursPerYear
-	t.AnnualSavings += (mean(cur, weight) - mean(opt, weight)) * hoursPerYear
-	t.WasteCores += mean(wasteCPU, weight)
-	t.WasteGiB += mean(wasteMem, weight)
-	t.RequestedCores += mean(reqCPU, weight)
-	t.RequestedGiB += mean(reqMem, weight)
+	return &workloadFigures{grid: grid, weight: weight, reqCPU: reqCPU, reqMem: reqMem, cur: cur, opt: opt, wasteCPU: wasteCPU, wasteMem: wasteMem}
 }

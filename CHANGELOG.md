@@ -4,6 +4,11 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 
 ## Unreleased
 
+### Fixes
+
+- Spend and savings for workloads that run only part of the time. A workload now counts only while it runs, and each cluster's yearly figures are its average over the time observed. Before, a workload was priced as if it ran all year at the level it had while running. Clusters with workloads that run only part of the time, such as CI or batch jobs, now show lower and more accurate spend and savings. The CLI's `summary.json` changes the same way.
+- The page-one chart no longer has gaps where workloads that run only part of the time were absent. Such a workload adds nothing to the chart while it is not running. The chart still has a gap where a cluster has no data at all, such as during an outage of its metrics source.
+
 ### Changed
 
 - The docs are reorganized for customers. The [README](README.md) leads with installing and using the tool, the one-page quickstart is [docs/quickstart.md](docs/quickstart.md), and notes on building, the report page, fixtures and tests moved to [docs/development.md](docs/development.md).

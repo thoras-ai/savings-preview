@@ -3,8 +3,8 @@
 
 Four clusters at 15-minute steps, every one ending at the same time:
 - arn:aws:eks:us-east-1:111122223333:cluster/prod, 2 days. Its batch/report
-  workload runs for its first and last six hours only, so on its own the
-  cluster's chart has a gap between them.
+  workload runs for its first and last six hours only, so it is absent from
+  the cluster's chart between them while the other workloads keep running.
 - arn:aws:eks:eu-west-1:111122223333:cluster/prod, 1 day: the same short name
   in another region.
 - gke_acme-data_us-central1_analytics, 12 hours.

@@ -211,7 +211,7 @@
       'Waste at each step is ' + code('max(0, requested − target)') + '. A request below the target is left alone; the report never adds.',
       pricing,
       'A workload’s hourly cost is ' + code('max(CPU cost, memory cost)') + ': whichever resource runs out first decides how many nodes it needs. Current cost uses the request; optimized cost uses ' + code('min(request, target)') + '.',
-      'Average over ' + (st.range ? 'the time range set under Assumptions' : 'the window') + ', weighting each point by its step, and multiply by 8,760 hours. Savings is current minus optimized. The cluster figure is the sum over counted workloads' + (r.fleet ? ', and the fleet figure the sum over its clusters.' : '.')
+      'Average over ' + (st.range ? 'the time range set under Assumptions' : 'the window') + ', weighting each point by its step, and multiply by 8,760 hours. A workload counts as 0 at steps where its cluster has data and it has none, such as before it starts or between runs; steps where the cluster has no data at all are left out. Savings is current minus optimized. The cluster figure is the sum over counted workloads' + (r.fleet ? ', and the fleet figure the sum over its clusters.' : '.')
     ];
     return '<div class="card"><h2>How the savings are computed</h2><div class="sub">Per workload, per step, for CPU and memory separately</div>' +
       '<ol class="method-steps">' + steps.map(function (s) { return '<li>' + s + '</li>'; }).join('') + '</ol></div>';

@@ -598,7 +598,8 @@ process.stdout.write(JSON.stringify(out));
 
 // A container without both usage values at a step is not running then and
 // adds no request, so the check container's request counts at one step of
-// 192.
+// 192. The monitoring workloads have no memory or replicas for their first 24
+// steps, so they run 168 of the 192 steps the cluster has data for.
 func TestIntermittentContainers(t *testing.T) {
 	b, err := os.ReadFile("../../fixtures/intermittent.otlp.json")
 	if err != nil {
@@ -611,7 +612,7 @@ func TestIntermittentContainers(t *testing.T) {
 	if got.Totals.Counted != 5 {
 		t.Errorf("counted %d, want 5", got.Totals.Counted)
 	}
-	want := 3 + 1 + (0.45*191+0.55)/192 + 0.1 + 0.05
+	want := 3 + 1 + (0.45*191+0.55)/192 + (0.1+0.05)*168/192
 	if math.Abs(got.Totals.RequestedCores-want) > 1e-9 {
 		t.Errorf("requested cores %v, want %v", got.Totals.RequestedCores, want)
 	}
@@ -640,7 +641,7 @@ func TestParityWithModelJS(t *testing.T) {
 	}
 	dir := t.TempDir()
 	files := []string{fixture, intermittent}
-	for name, doc := range map[string]map[string]any{"partial": partialDoc(), "nodes": nodesDoc(), "clouds": cloudsDoc(), "snapshot": snapshotDoc(), "spans": spansDoc(), "held": heldDoc()} {
+	for name, doc := range map[string]map[string]any{"partial": partialDoc(), "nodes": nodesDoc(), "clouds": cloudsDoc(), "snapshot": snapshotDoc(), "spans": spansDoc(), "held": heldDoc(), "absent": absentDoc()} {
 		b, err := json.Marshal(doc)
 		if err != nil {
 			t.Fatal(err)
@@ -733,5 +734,118 @@ func TestParityWithModelJS(t *testing.T) {
 			js, _ := json.Marshal(got)
 			t.Logf("%s", js)
 		})
+	}
+}
+
+// absentDoc has 20 steps of 300 seconds. whole runs every step with data,
+// half the last 9 of them, and job the first 4 and the last 4. No workload
+// has data at steps 8 and 9, an outage of the metrics source.
+func absentDoc() map[string]any {
+	n, step := 20, 300
+	base := common(step, 2, "prometheus")
+	outage := func(i int) bool { return i == 8 || i == 9 }
+	var rms []any
+	for _, w := range []struct {
+		name    string
+		runs    func(int) bool
+		reqCPU  float64
+		memGiB  float64
+		usedCPU float64
+	}{
+		{"whole", func(int) bool { return true }, 2, 4, 0.5},
+		{"half", func(i int) bool { return i >= 11 }, 2, 4, 0.5},
+		{"job", func(i int) bool { return i < 4 || i >= 16 }, 3, 2, 1},
+	} {
+		at := func(v float64) func(int) float64 {
+			return func(i int) float64 {
+				if !w.runs(i) || outage(i) {
+					return math.NaN()
+				}
+				return v
+			}
+		}
+		wl := with(base, sAttr("k8s.namespace.name", "ns"), sAttr("k8s.deployment.name", w.name))
+		rms = append(rms,
+			rm(wl, metric("k8s.deployment.pod.desired", fill(n, func(int) float64 { return 1 }), step, true)),
+			rm(with(wl, sAttr("k8s.container.name", "app")),
+				metric(cpuUse, fill(n, at(w.usedCPU)), step, false),
+				metric(memUse, fill(n, at(gib)), step, true),
+				metric(cpuReq, fill(n, at(w.reqCPU)), step, false),
+				metric(memReq, fill(n, at(w.memGiB*gib)), step, true)))
+	}
+	return map[string]any{"resourceMetrics": rms}
+}
+
+// A workload counts only while it runs: its averages are over the time the
+// cluster has data, and an outage with no data from any workload is not part
+// of that time.
+func TestWorkloadsCountOnlyWhileTheyRun(t *testing.T) {
+	b, err := json.Marshal(absentDoc())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Analyze(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 18 steps have data. whole runs all 18, half 9 and job 8.
+	wantCores := 2 + 2*9.0/18 + 3*8.0/18
+	wantGiB := 4 + 4*9.0/18 + 2*8.0/18
+	if !same(got.Totals.RequestedCores, wantCores) || !same(got.Totals.RequestedGiB, wantGiB) {
+		t.Errorf("requested %v cores, %v GiB; want %v, %v", got.Totals.RequestedCores, got.Totals.RequestedGiB, wantCores, wantGiB)
+	}
+	// Default node pricing: CPU costs more than memory for every workload,
+	// at 0.048 per core-hour.
+	wantSpend := wantCores * 0.048 * hoursPerYear
+	if !same(got.Totals.AnnualSpend, wantSpend) {
+		t.Errorf("spend %v, want %v", got.Totals.AnnualSpend, wantSpend)
+	}
+}
+
+// A workload present for half the covered time with the same requests costs
+// half of one present the whole time.
+func TestHalfTheTimeCostsHalf(t *testing.T) {
+	doc := func(names ...string) *Summary {
+		t.Helper()
+		var rms []any
+		for _, r := range absentDoc()["resourceMetrics"].([]any) {
+			for _, a := range r.(map[string]any)["resource"].(map[string]any)["attributes"].([]map[string]any) {
+				if a["key"] == "k8s.deployment.name" && slices.Contains(names, a["value"].(map[string]any)["stringValue"].(string)) {
+					rms = append(rms, r)
+				}
+			}
+		}
+		b, err := json.Marshal(map[string]any{"resourceMetrics": rms})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := Analyze(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	whole, both := doc("whole"), doc("whole", "half")
+	half := Totals{
+		AnnualSpend: both.Totals.AnnualSpend - whole.Totals.AnnualSpend, AnnualSavings: both.Totals.AnnualSavings - whole.Totals.AnnualSavings,
+		WasteCores: both.Totals.WasteCores - whole.Totals.WasteCores, WasteGiB: both.Totals.WasteGiB - whole.Totals.WasteGiB,
+		RequestedCores: both.Totals.RequestedCores - whole.Totals.RequestedCores, RequestedGiB: both.Totals.RequestedGiB - whole.Totals.RequestedGiB,
+	}
+	// whole runs all 18 steps with data, half 9 of them.
+	f := 0.5
+	for _, c := range []struct {
+		name      string
+		got, want float64
+	}{
+		{"spend", half.AnnualSpend, whole.Totals.AnnualSpend * f},
+		{"savings", half.AnnualSavings, whole.Totals.AnnualSavings * f},
+		{"waste cores", half.WasteCores, whole.Totals.WasteCores * f},
+		{"waste GiB", half.WasteGiB, whole.Totals.WasteGiB * f},
+		{"requested cores", half.RequestedCores, whole.Totals.RequestedCores * f},
+		{"requested GiB", half.RequestedGiB, whole.Totals.RequestedGiB * f},
+	} {
+		if !same(c.got, c.want) {
+			t.Errorf("%s: got %v, want %v", c.name, c.got, c.want)
+		}
 	}
 }
