@@ -4,7 +4,7 @@ Savings Preview is a command-line program that runs on your machine with a kubec
 
 ## What it reads
 
-The program sends only reads: `list` on resources, and HTTP `GET` requests to four endpoints of a metrics store through the API server's service proxy. The one exception is `savings-preview check`, which also asks the API server who the identity is and what it may do; see its section below. The access a role grants can be wider than what the program uses; the service proxy section below explains where. [`deploy/rbac/`](../deploy/rbac/) has a ServiceAccount and role for each case.
+The program sends only reads: `list` on resources, and HTTP `GET` requests to four endpoints of a metrics store through the API server's service proxy. The one exception is `savings-preview check`, which also asks the API server who the identity is and what it may do; see its section below. The access a role grants can be wider than what the program uses; the service proxy section below explains where. [`deploy/rbac/`](../deploy/rbac/) has a ServiceAccount and role for each case. [Load on your cluster](cluster-load.md) covers how much work these reads cost.
 
 ### `savings-preview prometheus`
 
