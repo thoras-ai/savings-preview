@@ -304,6 +304,14 @@ func printFleet(w io.Writer, b *builtReport, members []*member) {
 	}
 	fmt.Fprintf(w, "\nFleet, %d of %d clusters: %s a year in requests, %s a year in savings (%d of %d workloads counted)\n",
 		read, len(sum.Clusters), money(sum.Totals.AnnualSpend), money(sum.Totals.AnnualSavings), sum.Totals.Counted, sum.Totals.Workloads)
+	printExcluded(w, sum)
+}
+
+// printExcluded names Thoras's own namespaces, which the totals leave out.
+func printExcluded(w io.Writer, sum *savings.Summary) {
+	if len(sum.ExcludedNamespaces) > 0 {
+		fmt.Fprintf(w, "Thoras's own namespaces are left out: %s\n", strings.Join(sum.ExcludedNamespaces, ", "))
+	}
 }
 
 func shownName(c savings.ClusterSummary) string { return cmp.Or(c.DisplayName, c.Cluster) }

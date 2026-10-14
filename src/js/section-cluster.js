@@ -97,7 +97,7 @@
       mix: mix(nodes),
       freed: { nodes: freed, cpu: cpuNodes, mem: memNodes, whole: Math.min(Math.floor(freed + 1e-9), nodes.length || Infinity), avg: avg },
       left: data.workloads.filter(function (p) {
-        return p.status === 'excluded' && (!st.namespaces || st.namespaces.indexOf(p.ns) >= 0) && (!st.onlyClusters || !data.multi || st.onlyClusters.indexOf(p.cluster) >= 0);
+        return p.status === 'excluded' && (st.includeThoras || !model.isThoras(p.nsName)) && (!st.namespaces || st.namespaces.indexOf(p.ns) >= 0) && (!st.onlyClusters || !data.multi || st.onlyClusters.indexOf(p.cluster) >= 0);
       }).length,
       filtered: !!st.namespaces, ranged: !!st.range,
       spot: priced.some(function (p) { return p.spot; }),

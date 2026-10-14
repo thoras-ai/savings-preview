@@ -514,11 +514,13 @@
   // the cluster's history starts or during an outage of its metrics source,
   // is not covered. chart holds the covered times the charts show: each
   // workload's points less the last one it leaves off its chart (partialEnd).
+  // Workloads in Thoras's own namespaces count only with includeThoras, so
+  // Thoras's pods alone do not make time covered.
   //   result  {cluster: {t, cum, chart}}; cum[i] is the weight of t[0..i)
-  function coverage(workloads) {
+  function coverage(workloads, includeThoras) {
     var by = {};
     workloads.forEach(function (p) {
-      if (!p.s) return;
+      if (!p.s || (!includeThoras && isThoras(p.nsName))) return;
       var c = by[p.cluster || ''] || (by[p.cluster || ''] = { w: new Map(), chart: new Set() });
       var t = p.s.t, last = t.length - 1;
       for (var i = 0; i < t.length; i++) {
@@ -538,6 +540,20 @@
       };
     });
     return out;
+  }
+
+  // Whether a namespace, as its cluster names it, is one of Thoras's own:
+  // thoras, or a name starting with thoras-. Their workloads are Thoras, not
+  // the customer's, so they are left out unless includeThoras is set.
+  // internal/savings IsThorasNamespace is the Go port.
+  function isThoras(ns) {
+    return ns === 'thoras' || String(ns || '').indexOf('thoras-') === 0;
+  }
+
+  // Thoras's own namespaces the figures leave out under these levers: none
+  // when includeThoras is set or the file has none.
+  function thorasLeftOut(data, includeThoras) {
+    return includeThoras ? [] : (data.thorasNamespaces || []);
   }
 
   // Weight of a cluster's covered points in [range[0], range[1]], or of all
@@ -844,9 +860,11 @@
     var lastAt = {};
     workloads.forEach(function (w) { if (w.s) lastAt[w.cluster] = Math.max(lastAt[w.cluster] || -Infinity, w.s.t[w.s.t.length - 1]); });
     workloads.forEach(function (w) { w.partialEnd = !!(w.s && w.compacted && w.s.t[w.s.t.length - 1] === lastAt[w.cluster]); });
-    var cover = coverage(workloads);
-    var namespaces = [];
-    workloads.forEach(function (w) { if (namespaces.indexOf(w.ns) < 0) namespaces.push(w.ns); });
+    var namespaces = [], thoras = [];
+    workloads.forEach(function (w) {
+      if (namespaces.indexOf(w.ns) < 0) namespaces.push(w.ns);
+      if (isThoras(w.nsName) && thoras.indexOf(w.ns) < 0) thoras.push(w.ns);
+    });
     var labels = displayNames(data.clusters.concat(data.failed.map(function (f) { return f.name; })));
     var clusters = data.clusters.map(function (name) {
       var mine = function (r) { return r.cluster === name; };
@@ -863,11 +881,13 @@
       cluster: multi ? clusters.length + ' clusters' : data.cluster, label: multi ? clusters.length + ' clusters' : labels[data.cluster] || data.cluster, contract: data.contract, fidelity: fid,
       pricing: multi ? fleetPricing(clusters, data.nodes) : clusters[0].pricing, nodes: data.nodes,
       namespaces: namespaces.sort(), workloads: workloads,
-      clusters: clusters, failed: data.failed, dropped: (opts && opts.dropped) || [], multi: multi, labels: labels, coverage: cover
+      clusters: clusters, failed: data.failed, dropped: (opts && opts.dropped) || [], multi: multi, labels: labels,
+      // Thoras's own namespaces in the file, as namespaces names them.
+      thorasNamespaces: thoras.sort()
     };
   }
 
-  var DEFAULT_LEVERS = { rates: null, discount: 0, headroom: TARGET_HEADROOM, peakWindow: PEAK_WINDOW_SECONDS, namespaces: null, clusters: null, range: null };
+  var DEFAULT_LEVERS = { rates: null, discount: 0, headroom: TARGET_HEADROOM, peakWindow: PEAK_WINDOW_SECONDS, namespaces: null, clusters: null, range: null, includeThoras: false };
 
   function fmtRate(v) { return '$' + Number(v.toPrecision(4)); }
 
@@ -888,6 +908,9 @@
   //   namespaces  namespaces to count, or null for all
   //   clusters    clusters to count, or null for all
   //   range       [from, to] in Unix seconds, or null for the whole file
+  //   includeThoras  count Thoras's own namespaces (false): thoras and
+  //                  thoras-*; left out, they are not in totals, workloads
+  //                  or the chart, and add no covered time
   function compute(data, levers) {
     var lv = Object.assign({}, DEFAULT_LEVERS, levers);
     var clusters = data.clusters || [{ name: data.cluster, pricing: data.pricing, nodes: data.nodes, fidelity: data.fidelity }];
@@ -900,12 +923,16 @@
     inScope.forEach(function (c) { own[c.name] = leverRates(c.pricing, lv); });
     var scope = null;
     if (lv.namespaces) { scope = {}; lv.namespaces.forEach(function (n) { scope[n] = true; }); }
-    // Each cluster's covered time is the same under every setting but the
-    // range, so it is worked out once per file.
-    var cover = data.coverage || (data.coverage = coverage(data.workloads));
+    // Each cluster's covered time depends only on whether Thoras's own
+    // namespaces count, and the range, so it is worked out once per file for
+    // each. A namespace filter leaves it as it is: the namespaces chosen are
+    // part of the same cluster time.
+    var withThoras = !!lv.includeThoras, key = withThoras ? 'coverageWithThoras' : 'coverage';
+    var cover = data[key] || (data[key] = coverage(data.workloads, withThoras));
     var workloads = [];
     data.workloads.forEach(function (p) {
       var r = data.multi ? own[p.cluster] : rates;
+      if (!withThoras && isThoras(p.nsName)) return;
       if (r && (!scope || scope[p.ns])) workloads.push(computeWorkload(p, r, lv, cover[p.cluster || '']));
     });
     var counted = workloads.filter(function (w) { return w.series; });
@@ -1027,7 +1054,7 @@
 
   var api = {
     analyze: analyze, prepare: prepare, forCluster: forCluster, displayNames: displayNames, mergeFidelity: mergeFidelity, priceNode: priceNode, liveMix: liveMix, priceTable: PRICES, cloudNames: CLOUD_NAMES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
-    lowerBound: lowerBound, upperBound: upperBound, mean: mean, timeShare: timeShare, coverage: coverage, combine: combine,
+    lowerBound: lowerBound, upperBound: upperBound, mean: mean, timeShare: timeShare, isThoras: isThoras, thorasLeftOut: thorasLeftOut, coverage: coverage, combine: combine,
     fidelityLabel: fidelityLabel, formatSpan: formatSpan, formatStep: formatStep, notes: NOTES, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

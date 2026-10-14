@@ -87,7 +87,7 @@
       '<p class="print-muted">' + esc(summary.provenance(r, st)) + '</p></div>' +
       versus(fig) + gap(r, st, fig) + (r.fleet ? clusters(r) : workloads(summary.pick(r, st), summary.oomKilled(ctx.data, r, st))) +
       '<div class="print-pair">' + fleet(fig, st, r) + next(r, st) + '</div>' +
-      '<p class="print-foot">' + esc(summary.method(st, summary.labelsOf(ctx.data))) + ' Every workload, the node inventory and the settings used are in the report link shared with this printout.</p>';
+      '<p class="print-foot">' + esc(summary.method(st, summary.labelsOf(ctx.data), SP.model.thorasLeftOut(ctx.data, st.includeThoras))) + ' Every workload, the node inventory and the settings used are in the report link shared with this printout.</p>';
   }
 
   function render(host, ctx) {

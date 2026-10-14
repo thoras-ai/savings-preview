@@ -56,9 +56,11 @@
 
   function workloadsText(r, data, st) {
     var t = r.totals, all = ui.num(data.workloads.length);
-    if (!st.namespaces) return ui.num(t.counted) + ' counted of ' + all + ' in the file';
+    var thoras = ui.thorasNote(model.thorasLeftOut(data, st.includeThoras));
+    var tail = thoras ? '. ' + thoras : '';
+    if (!st.namespaces) return ui.num(t.counted) + ' counted of ' + all + ' in the file' + tail;
     return ui.num(t.counted) + ' counted of ' + ui.num(t.workloads) + ' in ' + (st.namespaces.length === 1 ? 'the namespace ' + st.namespaces[0] : st.namespaces.length + ' selected namespaces') +
-      ', ' + all + ' in the file';
+      ', ' + all + ' in the file' + tail;
   }
 
   function nodesText(p) {

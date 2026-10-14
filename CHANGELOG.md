@@ -11,6 +11,7 @@ Each release's section here is its release notes on GitHub. `scripts/release_not
 
 ### Changed
 
+- Workloads in Thoras's own namespaces, `thoras` and any starting with `thoras-`, are left out of the report and of `summary.json` by default, so a cluster that already runs Thoras, for example during a trial, does not count Thoras's components as savings. The report says which namespaces it left out, and Assumptions has a control to include them (`thoras=1` in the link). `summary.json` lists them in the new optional field `excluded_namespaces`, and `run` prints them after the totals.
 - The docs are reorganized for customers. The [README](README.md) leads with installing and using the tool, the one-page quickstart is [docs/quickstart.md](docs/quickstart.md), and notes on building, the report page, fixtures and tests moved to [docs/development.md](docs/development.md).
 
 ## v0.2.6

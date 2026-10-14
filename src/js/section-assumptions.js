@@ -79,13 +79,20 @@
   }
 
   function namespaces(data) {
-    var counts = {};
+    var counts = {}, thoras = data.thorasNamespaces || [];
     data.workloads.forEach(function (w) { counts[w.ns] = (counts[w.ns] || 0) + 1; });
     return '<div class="card"><div class="card-head"><div><h2>Namespaces</h2><div class="sub">Include or exclude namespaces from every figure</div></div>' + reset('namespaces') + '</div>' +
       '<div class="lv-chips" role="group" aria-label="Namespaces">' + data.namespaces.map(function (ns) {
-        return '<label class="lv-chip"><input type="checkbox" value="' + esc(ns) + '" data-lever="ns">' + esc(ns || '(none)') +
+        return '<label class="lv-chip"' + (thoras.indexOf(ns) >= 0 ? ' data-thoras' : '') + '><input type="checkbox" value="' + esc(ns) + '" data-lever="ns">' + esc(ns || '(none)') +
           ' <span class="lv-count">' + counts[ns] + '</span></label>';
-      }).join('') + '</div></div>';
+      }).join('') + '</div>' + (thoras.length ? thorasControl(thoras) : '') + '</div>';
+  }
+
+  // Thoras's own namespaces, shown only when the file has some: they run
+  // Thoras, not the customer's workloads, so they are left out by default.
+  function thorasControl(list) {
+    return '<div class="lv-label lv-thoras"><label class="lv-chip"><input type="checkbox" id="lv-thoras" data-lever="thoras">Include Thoras’s own ' + ui.plural(list.length, 'namespace') + '</label>' + reset('thoras') + '</div>' +
+      '<p class="lv-note" data-note="thoras"></p>';
   }
 
   // Clusters, in a file with several. The links on page one set the same filter.
@@ -204,7 +211,8 @@
       } else if (name === 'cluster') {
         var names = view.data.clusters.map(function (c) { return c.name; });
         set({ onlyClusters: levers.toggleNamespace(view.current.onlyClusters, names, el.value, el.checked) });
-      } else if (name === 'ns') set({ namespaces: levers.toggleNamespace(view.current.namespaces, view.data.namespaces, el.value, el.checked) });
+      } else if (name === 'ns') set({ namespaces: levers.toggleNamespace(view.current.namespaces, levers.shownNamespaces(view.data, view.current), el.value, el.checked) });
+      else if (name === 'thoras') set({ includeThoras: el.checked });
       else if (name === 'from' || name === 'to') {
         set({ range: levers.rangeFor(view.choices, Number(q(host, '#lv-from').value), Number(q(host, '#lv-to').value)) });
       }
@@ -300,14 +308,23 @@
         ' per core-hour and $' + esc(rate(own.perGiB)) + ' per GiB-hour. <button type="button" class="link" data-use>Use these rates</button>';
     }
 
-    // Namespaces.
+    // Namespaces. Thoras's own are not offered while they are left out.
     var on = st.namespaces;
     var boxes = host.querySelectorAll('input[data-lever="ns"]');
     Array.prototype.forEach.call(boxes, function (b) {
       b.checked = !on || on.indexOf(b.value) >= 0;
       b.disabled = !!on && on.length === 1 && b.checked;
       b.parentNode.classList.toggle('off', !b.checked);
+      b.parentNode.hidden = b.parentNode.hasAttribute('data-thoras') && !st.includeThoras;
     });
+    var thoras = q(host, '#lv-thoras');
+    if (thoras) {
+      thoras.checked = !!st.includeThoras;
+      thoras.parentNode.classList.toggle('off', !thoras.checked);
+      q(host, '[data-note="thoras"]').textContent = st.includeThoras ?
+        'Thoras’s own ' + ui.plural(data.thorasNamespaces.length, 'namespace') + ' (' + data.thorasNamespaces.join(', ') + ') ' + (data.thorasNamespaces.length === 1 ? 'is' : 'are') + ' counted.' :
+        ui.thorasNote(data.thorasNamespaces) + ' ' + (data.thorasNamespaces.length === 1 ? 'It runs' : 'They run') + ' Thoras, not your workloads.';
+    }
 
     // Clusters.
     var only = st.onlyClusters;

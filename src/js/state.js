@@ -10,6 +10,7 @@
  *   headroom  target headroom over the peak, in percent (10)
  *   peak      rolling peak window, in minutes (15)
  *   ns        namespaces to count, comma separated (all)
+ *   thoras    1 to count Thoras's own namespaces, thoras and thoras-* (left out)
  *   cluster   clusters to count, in a file with several, comma separated (all)
  *   from, to  time range, Unix seconds (the whole file)
  *   cost      loaded cost of an engineer per year, in USD (200000)
@@ -31,6 +32,7 @@
     headroom: 0.1,
     peakMinutes: 15,
     namespaces: null,
+    includeThoras: false,
     onlyClusters: null,
     range: null,
     engineerCost: 200000,
@@ -61,6 +63,7 @@
     var w = positive(q.get('peak'));
     if (w && w <= 1440 && w === Math.round(w)) st.peakMinutes = w;
     if (q.get('ns')) st.namespaces = q.get('ns').split(',').filter(Boolean);
+    if (q.get('thoras') === '1') st.includeThoras = true;
     if (q.get('cluster')) st.onlyClusters = q.get('cluster').split(',').filter(Boolean);
     var from = Number(q.get('from')), to = Number(q.get('to'));
     if (q.get('from') && q.get('to') && isFinite(from) && isFinite(to) && from < to) st.range = [from, to];
@@ -86,6 +89,7 @@
     if (Math.abs(st.headroom - DEFAULTS.headroom) > 1e-9) q.set('headroom', round(st.headroom * 100));
     if (st.peakMinutes !== DEFAULTS.peakMinutes) q.set('peak', String(st.peakMinutes));
     if (st.namespaces) q.set('ns', st.namespaces.join(','));
+    if (st.includeThoras) q.set('thoras', '1');
     if (st.onlyClusters) q.set('cluster', st.onlyClusters.join(','));
     if (st.range) { q.set('from', String(st.range[0])); q.set('to', String(st.range[1])); }
     if (st.engineerCost !== DEFAULTS.engineerCost) q.set('cost', round(st.engineerCost));
@@ -100,7 +104,7 @@
   function levers(st) {
     return {
       rates: st.rates, discount: st.discount, headroom: 1 + st.headroom, peakWindow: st.peakMinutes * 60,
-      namespaces: st.namespaces, clusters: st.onlyClusters, range: st.range
+      namespaces: st.namespaces, clusters: st.onlyClusters, range: st.range, includeThoras: !!st.includeThoras
     };
   }
 
