@@ -347,7 +347,13 @@ func checkCompacts(t *testing.T, f *contract.File) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.Totals.Counted != b.Totals.Counted || math.Abs(a.Totals.RequestedCores-b.Totals.RequestedCores) > 1e-9*a.Totals.RequestedCores {
+	// A workload counts only while it runs, and the compact file keeps when it
+	// runs to the 15-minute step: one that runs for part of a step counts for
+	// the whole step, and so does the cluster's first and last step. In the
+	// 35-minute live recording two workloads run for 3 minutes, which the
+	// compact file counts as one of its three steps, so its requests come out
+	// 3.6% higher. Workloads that run the whole time match exactly.
+	if a.Totals.Counted != b.Totals.Counted || math.Abs(a.Totals.RequestedCores-b.Totals.RequestedCores) > 0.05*a.Totals.RequestedCores {
 		t.Errorf("full %+v, compact %+v", a.Totals, b.Totals)
 	}
 	t.Logf("%d to %d bytes; savings %.2f full, %.2f compact", full.Len(), small.Len(), a.Totals.AnnualSavings, b.Totals.AnnualSavings)

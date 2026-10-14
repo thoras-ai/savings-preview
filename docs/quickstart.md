@@ -23,7 +23,7 @@ To install from a release archive by hand instead, see [Install from the archive
 Check it worked:
 
     $ savings-preview --version
-    savings-preview v0.2.6
+    savings-preview v0.2.7
 
 ## 2. Before you run
 

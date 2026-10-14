@@ -26,9 +26,9 @@ Or use the install script:
 
     curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | sh
 
-`install.sh` picks the archive for this machine (macOS or Linux, amd64 or arm64), checks it against the release's `checksums.txt`, and installs `savings-preview` into `~/.local/bin` when that is on `PATH`, or `/usr/local/bin` otherwise. It asks before using sudo, and stops without installing anything when a checksum is missing or does not match. Set `VERSION=v0.2.6` to install a release other than the latest, and `INSTALL_DIR` to install somewhere else:
+`install.sh` picks the archive for this machine (macOS or Linux, amd64 or arm64), checks it against the release's `checksums.txt`, and installs `savings-preview` into `~/.local/bin` when that is on `PATH`, or `/usr/local/bin` otherwise. It asks before using sudo, and stops without installing anything when a checksum is missing or does not match. Set `VERSION=v0.2.7` to install a release other than the latest, and `INSTALL_DIR` to install somewhere else:
 
-    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | VERSION=v0.2.6 INSTALL_DIR=~/bin sh
+    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | VERSION=v0.2.7 INSTALL_DIR=~/bin sh
 
 Or download an archive from the [release page](https://github.com/thoras-ai/savings-preview/releases/latest), check it with `shasum -a 256 -c checksums.txt --ignore-missing`, and put the `savings-preview` binary on `PATH`. [Install from the archive](docs/getting-started.md#install-from-the-archive) has the steps, including the macOS download flag.
 
@@ -54,7 +54,7 @@ What you get, in the folder you ran it from:
 - `savings-preview.compact.otlp.json`: the usage data at 15-minute steps, which the report reads.
 - `savings-preview.otlp.json`: the full-resolution data. It stays on your machine and is not in the zip.
 
-The report opens on the annual saving and its share of what your current requests cost, today next to Thoras, and three workloads before and after. Details for engineers break the saving down by namespace, workload and node, and show every assumption. The target for each workload is 1.1 times its highest use in any 15 minutes, and waste is the request above that target. Nodes are priced by instance type from their cloud's list prices, the way the Thoras product prices them. You can change the headroom, the peak window, the prices and the namespaces in the report, and every figure follows.
+The report opens on the annual saving and its share of what your current requests cost, today next to Thoras, and three workloads before and after. Details for engineers break the saving down by namespace, workload and node, and show every assumption. The target for each workload is 1.1 times its highest use in any 15 minutes, and waste is the request above that target. A workload counts only while it runs, and each cluster's yearly figures are its average over the time observed. Workloads in Thoras's own namespaces, `thoras` and `thoras-console`, are left out, so a cluster that already runs Thoras shows only its own workloads; Assumptions can include them. Nodes are priced by instance type from their cloud's list prices, the way the Thoras product prices them. You can change the headroom, the peak window, the prices and the namespaces in the report, and every figure follows.
 
 [docs/quickstart.md](docs/quickstart.md) is the one-page version of these steps. [docs/getting-started.md](docs/getting-started.md) covers every source, the report section by section, and troubleshooting.
 

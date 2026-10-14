@@ -509,6 +509,8 @@ tr.excluded .wl-link { color: var(--text-light); }
   transition: background-color var(--primitive-duration-150) var(--primitive-ease-in-out);
 }
 .lv-chip input { margin: 0; accent-color: var(--primitive-brand-600); }
+.lv-chip[hidden] { display: none; }
+.lv-thoras { margin-top: var(--primitive-space-12); align-items: center; }
 [data-theme="dark"] .lv-chip input { accent-color: var(--primitive-brand-300); }
 .lv-chip.off { color: var(--text-lighter); background: var(--surface-inset); }
 .lv-chip:has(input:disabled) { cursor: default; }

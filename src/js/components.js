@@ -69,7 +69,15 @@
       '<div class="banner-body">' + opts.body + '</div></div>';
   }
 
+  // The sentence that says Thoras's own namespaces are left out, or '' when
+  // there are none to leave out.
+  function thorasNote(list) {
+    if (!list || !list.length) return '';
+    return 'Thoras’s own ' + plural(list.length, 'namespace') + ' (' + list.join(', ') + ') ' + (list.length === 1 ? 'is' : 'are') + ' left out.';
+  }
+
   var api = {
+    thorasNote: thorasNote,
     esc: esc, plural: plural, rough: rough, money: money, num: num, pct: pct, amount: amount,
     confidenceLevel: confidenceLevel, confidencePill: confidencePill, confidence: CONFIDENCE,
     kpiTile: kpiTile, banner: banner

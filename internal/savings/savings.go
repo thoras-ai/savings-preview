@@ -63,6 +63,10 @@ type Summary struct {
 	Totals             Totals    `json:"totals"`
 	// FidelityNotes is every thoras.fidelity_notes value in the file, sorted.
 	FidelityNotes []string `json:"fidelity_notes,omitempty"`
+	// ExcludedNamespaces are Thoras's own namespaces in the file, thoras and
+	// thoras-console, whose workloads the totals leave out, sorted. For a
+	// fleet it lists every cluster's, each name once.
+	ExcludedNamespaces []string `json:"excluded_namespaces,omitempty"`
 	// Clusters is set for a file with several clusters, or with a cluster
 	// that could not be read. The figures above are then the fleet's: totals
 	// summed over the clusters read, the worst tier, the coarsest step and
@@ -133,6 +137,7 @@ type resource struct {
 	coarseStep       float64
 	sourceStep       float64
 	source, id, kind string
+	ns               string
 	series           map[string]series
 	held             map[string]bool
 }
@@ -144,9 +149,29 @@ type node struct {
 	cores, gib                           float64
 }
 
+// Options change what Analyze counts.
+type Options struct {
+	// IncludeThoras counts the workloads in Thoras's own namespaces, which
+	// are left out by default.
+	IncludeThoras bool
+}
+
 // Analyze computes the summary of an OTLP-JSON Savings Preview file.
 func Analyze(doc []byte) (*Summary, error) {
 	return AnalyzeReader(bytes.NewReader(doc))
+}
+
+// AnalyzeWith is Analyze with options.
+func AnalyzeWith(doc []byte, opts Options) (*Summary, error) {
+	return AnalyzeReaderWith(bytes.NewReader(doc), opts)
+}
+
+// IsThorasNamespace reports whether a namespace is one of Thoras's own,
+// thoras or thoras-console, exactly. Others that start with thoras-, such as
+// thoras-example, hold sample workloads Thoras right-sizes, and count.
+// isThoras in src/js/model.js is the JS port.
+func IsThorasNamespace(ns string) bool {
+	return ns == "thoras" || ns == "thoras-console"
 }
 
 // AnalyzeReader is Analyze for a file read from r. It decodes one resource at
@@ -156,12 +181,17 @@ func Analyze(doc []byte) (*Summary, error) {
 // gets a Summary of the fleet: each cluster is priced from its own nodes and
 // listed in Clusters, and the top-level figures cover all of them.
 func AnalyzeReader(rd io.Reader) (*Summary, error) {
+	return AnalyzeReaderWith(rd, Options{})
+}
+
+// AnalyzeReaderWith is AnalyzeReader with options.
+func AnalyzeReaderWith(rd io.Reader, opts Options) (*Summary, error) {
 	byName := map[string]*clusterData{}
 	var clusters []*clusterData
 	get := func(name string) *clusterData {
 		cd := byName[name]
 		if cd == nil {
-			cd = &clusterData{name: name, workloads: map[string]*resource{}}
+			cd = &clusterData{name: name, workloads: map[string]*resource{}, includeThoras: opts.IncludeThoras}
 			byName[name] = cd
 			clusters = append(clusters, cd)
 		}
@@ -248,7 +278,8 @@ func AnalyzeReader(rd io.Reader) (*Summary, error) {
 			cd.nodes = append(cd.nodes, node{seq: seq, hostType: strs["host.type"], provider: strs["cloud.provider"], region: strs["cloud.region"], capacity: strs["thoras.node.capacity_type"],
 				pool: strs["thoras.node.pool"], typeSource: strs["thoras.node.type_source"], cores: r.levelMean("k8s.node.cpu.allocatable"), gib: r.levelMean("k8s.node.memory.allocatable") / gib})
 		case r.kind != "":
-			r.id = strs["k8s.namespace.name"] + "/" + r.kind + "/" + strs["k8s."+r.kind+".name"]
+			r.ns = strs["k8s.namespace.name"]
+			r.id = r.ns + "/" + r.kind + "/" + strs["k8s."+r.kind+".name"]
 			if strs["k8s.container.name"] != "" {
 				cd.containers = append(cd.containers, r)
 			} else {
@@ -292,6 +323,8 @@ type clusterData struct {
 	nodes      []node
 	workloads  map[string]*resource
 	notes      []string
+	// includeThoras counts Thoras's own namespaces (Options.IncludeThoras).
+	includeThoras bool
 }
 
 func (cd *clusterData) summary() (*Summary, error) {
@@ -302,16 +335,47 @@ func (cd *clusterData) summary() (*Summary, error) {
 
 	rates := pricing(nodes)
 	byWorkload := map[string][]*resource{}
-	var order []string
+	var order, excluded []string
 	for _, c := range containers {
+		// Thoras's own workloads are not the customer's to right-size. They
+		// are left out of the totals and of the cluster's covered time.
+		if IsThorasNamespace(c.ns) && !cd.includeThoras {
+			if !slices.Contains(excluded, c.ns) {
+				excluded = append(excluded, c.ns)
+			}
+			continue
+		}
 		if byWorkload[c.id] == nil {
 			order = append(order, c.id)
 		}
 		byWorkload[c.id] = append(byWorkload[c.id], c)
 	}
 	t := Totals{Workloads: len(order)}
+	var prepared []*workloadFigures
 	for _, id := range order {
-		analyzeWorkload(&t, workloads[id], byWorkload[id], rates)
+		if w := analyzeWorkload(workloads[id], byWorkload[id], rates); w != nil {
+			prepared = append(prepared, w)
+		}
+	}
+	// A workload counts only while it runs: its averages are over the time
+	// the cluster has data, the points where at least one workload has
+	// complete data, each weighted by the largest step weight of those
+	// workloads there.
+	covered := map[float64]float64{}
+	for _, w := range prepared {
+		for i, x := range w.grid {
+			if isFinite(w.reqCPU[i]) {
+				covered[x] = math.Max(covered[x], w.weight[i])
+			}
+		}
+	}
+	// The weights are whole seconds, so the sum is exact in any order.
+	coveredWeight := 0.0
+	for _, w := range covered {
+		coveredWeight += w
+	}
+	for _, w := range prepared {
+		w.addTo(&t, coveredWeight)
 	}
 	// The page sums workload means as they are, so a non-finite mean would
 	// show as NaN there. That needs infinite inputs; JSON cannot carry NaN or
@@ -325,7 +389,8 @@ func (cd *clusterData) summary() (*Summary, error) {
 	// Fidelity: worst tier and coarsest step, span from the first to one step
 	// past the last usage point.
 	slices.Sort(notes)
-	s := &Summary{Cluster: cd.name, DisplayName: DisplayNames([]string{cd.name})[cd.name], Pricing: rates.basis, Totals: t, FidelityNotes: slices.Compact(notes)}
+	slices.Sort(excluded)
+	s := &Summary{Cluster: cd.name, DisplayName: DisplayNames([]string{cd.name})[cd.name], Pricing: rates.basis, Totals: t, FidelityNotes: slices.Compact(notes), ExcludedNamespaces: excluded}
 	tier, step, sourceStep := 1.0, 0.0, 0.0
 	t0, t1 := math.Inf(1), math.Inf(-1)
 	var sources []string
@@ -392,6 +457,11 @@ func fleet(clusters []*clusterData) (*Summary, error) {
 			pricing = append(pricing, c.Pricing)
 		}
 		notes = append(notes, c.FidelityNotes...)
+		for _, ns := range c.ExcludedNamespaces {
+			if !slices.Contains(s.ExcludedNamespaces, ns) {
+				s.ExcludedNamespaces = append(s.ExcludedNamespaces, ns)
+			}
+		}
 		t := &s.Totals
 		t.AnnualSpend += c.Totals.AnnualSpend
 		t.AnnualSavings += c.Totals.AnnualSavings
@@ -433,6 +503,7 @@ func fleet(clusters []*clusterData) (*Summary, error) {
 	s.Snapshot = step <= 0 || s.SpanSeconds <= int64(step)
 	slices.Sort(notes)
 	s.FidelityNotes = slices.Compact(notes)
+	slices.Sort(s.ExcludedNamespaces)
 	return s, nil
 }
 
@@ -727,8 +798,46 @@ func rollingMax(t, v []float64, window float64) []float64 {
 	return out
 }
 
-// analyzeWorkload adds the workload's figures to t when it can be priced.
-func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
+// workloadFigures is a workload's series on its own time grid, priced.
+type workloadFigures struct {
+	grid, weight                                 []float64
+	reqCPU, reqMem, cur, opt, wasteCPU, wasteMem []float64
+}
+
+// timeShare is the weighted sum of the finite values divided by the covered
+// weight, or by the weight of those values when that is more. Time the
+// workload has no value in counts as 0. NaN when it has none. It ports
+// timeShare in src/js/model.js.
+func timeShare(arr, weights []float64, covered float64) float64 {
+	s, n := 0.0, 0.0
+	for i, x := range arr {
+		if !isFinite(x) {
+			continue
+		}
+		s, n = s+x*weights[i], n+weights[i]
+	}
+	// JS tests n for truth, which NaN fails too.
+	if n == 0 || math.IsNaN(n) {
+		return math.NaN()
+	}
+	return s / math.Max(covered, n)
+}
+
+// addTo adds the workload's figures to t, averaged over the covered weight.
+func (w *workloadFigures) addTo(t *Totals, covered float64) {
+	avg := func(arr []float64) float64 { return timeShare(arr, w.weight, covered) }
+	cur := avg(w.cur)
+	t.Counted++
+	t.AnnualSpend += cur * hoursPerYear
+	t.AnnualSavings += (cur - avg(w.opt)) * hoursPerYear
+	t.WasteCores += avg(w.wasteCPU)
+	t.WasteGiB += avg(w.wasteMem)
+	t.RequestedCores += avg(w.reqCPU)
+	t.RequestedGiB += avg(w.reqMem)
+}
+
+// analyzeWorkload prices the workload, or returns nil when it cannot be priced.
+func analyzeWorkload(wl *resource, parts []*resource, r rates) *workloadFigures {
 	var usable []*resource
 	times := map[float64]bool{}
 	var grid []float64
@@ -744,11 +853,11 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 		}
 	}
 	if len(usable) == 0 || wl == nil {
-		return
+		return nil
 	}
 	rep := wl.series["k8s."+parts[0].kind+".pod.desired"]
 	if len(rep.t) == 0 {
-		return
+		return nil
 	}
 	sort.Float64s(grid)
 	replicas := resample(rep, grid, wl.step, wl.spans, wl.held["k8s."+parts[0].kind+".pod.desired"])
@@ -815,7 +924,7 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 		}
 	}
 	if !anyValid {
-		return
+		return nil
 	}
 	reqCPU, reqMem := sums[2], sums[3]
 	pc, pm := rollingMax(grid, pkCPU, peakWindowSeconds), rollingMax(grid, pkMem, peakWindowSeconds)
@@ -827,11 +936,5 @@ func analyzeWorkload(t *Totals, wl *resource, parts []*resource, r rates) {
 		wasteCPU[k] = math.Max(0, reqCPU[k]-tgtCPU)
 		wasteMem[k] = math.Max(0, reqMem[k]-tgtMem)
 	}
-	t.Counted++
-	t.AnnualSpend += mean(cur, weight) * hoursPerYear
-	t.AnnualSavings += (mean(cur, weight) - mean(opt, weight)) * hoursPerYear
-	t.WasteCores += mean(wasteCPU, weight)
-	t.WasteGiB += mean(wasteMem, weight)
-	t.RequestedCores += mean(reqCPU, weight)
-	t.RequestedGiB += mean(reqMem, weight)
+	return &workloadFigures{grid: grid, weight: weight, reqCPU: reqCPU, reqMem: reqMem, cur: cur, opt: opt, wasteCPU: wasteCPU, wasteMem: wasteMem}
 }

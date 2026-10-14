@@ -84,6 +84,14 @@
     return all.filter(function (n) { return set.indexOf(n) >= 0; });
   }
 
+  // The namespaces the Namespaces filter offers: all of them, less Thoras's
+  // own while they are left out.
+  function shownNamespaces(data, st) {
+    var out = data.thorasNamespaces || [];
+    if (st.includeThoras || !out.length) return data.namespaces;
+    return data.namespaces.filter(function (n) { return out.indexOf(n) < 0; });
+  }
+
   // Each lever as the state keys it owns. Reset sets them to their defaults.
   var LEVERS = {
     headroom: ['headroom'],
@@ -93,6 +101,7 @@
     bill: ['bill'],
     cost: ['engineerCost'],
     namespaces: ['namespaces'],
+    thoras: ['includeThoras'],
     clusters: ['onlyClusters'],
     range: ['range']
   };
@@ -155,7 +164,7 @@
 
   var api = {
     PEAK_WINDOWS: PEAK_WINDOWS, LEVERS: LEVERS, peakWindows: peakWindows, peakIndex: peakIndex, rangeChoices: rangeChoices, rangeFor: rangeFor,
-    toggleNamespace: toggleNamespace, changed: changed, anyChanged: anyChanged, resetPatch: resetPatch, suggestionNodes: suggestionNodes, figures: figures, pctOf: pctOf, when: when
+    toggleNamespace: toggleNamespace, shownNamespaces: shownNamespaces, changed: changed, anyChanged: anyChanged, resetPatch: resetPatch, suggestionNodes: suggestionNodes, figures: figures, pctOf: pctOf, when: when
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else (self.SP = self.SP || {}).levers = api;

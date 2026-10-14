@@ -189,12 +189,12 @@ test('a gap of two buckets inside a workload range still drops the cluster bucke
   assert.ok(Number.isFinite(r.series.cur[4]));
 });
 
-test('one missing bucket draws through on the cluster chart with the value next to it', () => {
+test('one bucket where no workload has data draws through on the chart and is not covered time', () => {
   const r = model.analyze(doc({ cpu: [1, 1, null, 1, 1], mem: [1, 1, 1, 1, 1] }));
   assert.ok(Array.from(r.series.cur).every(Number.isFinite));
-  assert.strictEqual(r.series.cur[2], r.series.cur[1]);
-  // The workload's own figures still leave the bucket out.
+  assert.strictEqual(r.series.cur[2], (r.series.cur[1] + r.series.cur[3]) / 2);
   assert.ok(Number.isNaN(r.workloads[0].series.cur[2]));
+  // The cluster has no data then, so the workload's averages leave it out.
   const whole = model.analyze(doc({ cpu: [1, 1, 1, 1, 1], mem: [1, 1, 1, 1, 1] }));
   assert.strictEqual(r.totals.spend, whole.totals.spend);
 });
@@ -222,9 +222,10 @@ test('a workload is unknown at a step when none of its containers has usage', ()
   assert.strictEqual(s.t.length, 9);
   assert.strictEqual(s.reqCpu[4], 1);
   assert.strictEqual(s.reqCpu[5], 2);
-  // The workload has no point at step 4; the cluster chart draws through it.
+  // The workload has no point at step 4, and nor has its cluster; one such
+  // bucket draws through on the cluster chart.
   assert.strictEqual(r.series.t.length, 10);
-  assert.strictEqual(r.series.cur[4], r.series.cur[3]);
+  assert.strictEqual(r.series.cur[4], (r.series.cur[3] + r.series.cur[5]) / 2);
 });
 
 test('a container with only one usage value at a step is not running then', () => {
@@ -239,26 +240,93 @@ test('a container with only one usage value at a step is not running then', () =
   assert.strictEqual(s.reqCpu[2], 2);
 });
 
-test('a small workload with a gap is filled from its nearest bucket, a large one drops the bucket', () => {
+test('a workload with a gap adds 0 to the cluster chart there, however large it is', () => {
   const cpu = Array(10).fill(0);
   const small = model.analyze(multi([
     { name: 'big', replicas: 1, cpu, containers: [{ name: 'a', use: 1, req: 40 }] },
     { name: 'small', replicas: 1, cpu, containers: [{ name: 'a', use: 0.1, req: 1, off: [3, 4, 5, 6] }] }
   ]));
   assert.ok(Array.from(small.series.cur).every(Number.isFinite));
-  assert.strictEqual(small.series.reqCpu[3], 41);
+  assert.strictEqual(small.series.reqCpu[3], 40);
+  assert.strictEqual(small.series.reqCpu[7], 41);
   const large = model.analyze(multi([
     { name: 'big', replicas: 1, cpu, containers: [{ name: 'a', use: 1, req: 40, off: [3, 4] }] },
     { name: 'small', replicas: 1, cpu, containers: [{ name: 'a', use: 0.1, req: 1 }] }
   ]));
-  assert.ok(Number.isNaN(large.series.cur[3]) && Number.isNaN(large.series.cur[4]));
+  assert.ok(Array.from(large.series.cur).every(Number.isFinite));
+  assert.strictEqual(large.series.reqCpu[3], 1);
   assert.strictEqual(large.series.reqCpu[5], 41);
-  const once = model.analyze(multi([
-    { name: 'big', replicas: 1, cpu, containers: [{ name: 'a', use: 1, req: 40, off: [3] }] },
-    { name: 'small', replicas: 1, cpu, containers: [{ name: 'a', use: 0.1, req: 1 }] }
+});
+
+test('a workload absent for days in the middle adds 0 there and leaves no gap', () => {
+  // Five days at 5-minute steps; the job runs on the first and last day only.
+  const n = 5 * 288, day = 288;
+  const cpu = Array(n).fill(0);
+  const off = Array.from({ length: 3 * day }, (_, i) => day + i);
+  const r = model.analyze(multi([
+    { name: 'api', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 2 }] },
+    { name: 'job', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 3, off }] }
   ]));
-  assert.ok(Array.from(once.series.cur).every(Number.isFinite));
-  assert.strictEqual(once.series.reqCpu[3], 41);
+  assert.strictEqual(r.series.t.length, n);
+  assert.ok(Array.from(r.series.cur).every(Number.isFinite));
+  assert.strictEqual(r.series.reqCpu[0], 5);
+  assert.strictEqual(r.series.reqCpu[2 * day], 2);
+  assert.strictEqual(r.series.reqCpu[n - 1], 5);
+  // The job runs 2 of the 5 days, so its averages are 2/5 of its request.
+  const job = r.workloads.find(w => w.name === 'job');
+  assert.ok(Math.abs(job.reqCores - 3 * 2 / 5) < 1e-9, String(job.reqCores));
+});
+
+test('a workload present for half the covered time costs half of one present the whole time', () => {
+  const cpu = Array(20).fill(0);
+  const r = model.analyze(multi([
+    { name: 'whole', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 2 }] },
+    { name: 'half', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 2, first: 10 }] }
+  ]));
+  const by = Object.fromEntries(r.workloads.map(w => [w.name, w]));
+  assert.ok(Math.abs(by.half.annualSpend - by.whole.annualSpend / 2) < 1e-9, String(by.half.annualSpend));
+  assert.ok(Math.abs(by.half.annualSavings - by.whole.annualSavings / 2) < 1e-9);
+  for (const k of ['reqCores', 'reqGiB', 'useCores', 'useGiB', 'wasteCores', 'wasteGiB']) assert.ok(Math.abs(by.half[k] - by.whole[k] / 2) < 1e-9, k);
+  // A range that covers only the time it runs counts it in full.
+  const t = by.whole.series.t;
+  const late = model.compute(model.prepare(multi([
+    { name: 'whole', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 2 }] },
+    { name: 'half', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 2, first: 10 }] }
+  ])), { range: [t[10], t[19]] });
+  const lw = Object.fromEntries(late.workloads.map(w => [w.name, w]));
+  assert.ok(Math.abs(lw.half.annualSpend - lw.whole.annualSpend) < 1e-9);
+  assert.ok(Math.abs(lw.whole.annualSpend - by.whole.annualSpend) < 1e-9);
+});
+
+test('a single missing bucket takes the mean of its neighbours, and the higher peak; two stay a gap', () => {
+  const cpu = Array(12).fill(0);
+  const r = model.analyze(multi([
+    { name: 'a', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 2, off: [3, 7, 8] }] },
+    { name: 'b', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 1, off: [2, 3, 7, 8] }] }
+  ]));
+  const s = r.series;
+  // Bucket 2 has only a (2 cores), bucket 4 both (3 cores); bucket 3 has neither.
+  assert.strictEqual(s.reqCpu[2], 2);
+  assert.strictEqual(s.reqCpu[4], 3);
+  for (const f of ['reqCpu', 'reqMem', 'useCpu', 'cur', 'opt', 'useCost', 'tgtCpu']) assert.strictEqual(s[f][3], (s[f][2] + s[f][4]) / 2, f);
+  for (const f of ['peakCpu', 'peakMem']) assert.strictEqual(s[f][3], Math.max(s[f][2], s[f][4]), f);
+  assert.ok(Number.isNaN(s.cur[7]) && Number.isNaN(s.cur[8]));
+  // Totals leave the missing time out: a runs 9 of the 9 covered steps.
+  assert.ok(Math.abs(r.workloads.find(w => w.name === 'a').reqCores - 2) < 1e-9);
+});
+
+test('a cluster-wide outage is left out of the covered time and is a gap on the chart', () => {
+  const cpu = Array(20).fill(0), out = [8, 9, 10, 11];
+  const r = model.analyze(multi([
+    { name: 'a', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 2, off: out }] },
+    { name: 'b', replicas: 1, cpu, containers: [{ name: 'a', use: 0.5, req: 1, off: out.concat([0, 1, 2, 3, 4, 5, 6, 7]) }] }
+  ]));
+  out.forEach(i => assert.ok(Number.isNaN(r.series.cur[i]), String(i)));
+  assert.ok(Array.from(r.series.cur).filter(Number.isFinite).length === 16);
+  const by = Object.fromEntries(r.workloads.map(w => [w.name, w]));
+  // Covered time is the 16 steps with data: a runs all of it, b 8 of it.
+  assert.ok(Math.abs(by.a.reqCores - 2) < 1e-9, String(by.a.reqCores));
+  assert.ok(Math.abs(by.b.reqCores - 0.5) < 1e-9, String(by.b.reqCores));
 });
 
 test('leading buckets where no workload has data are dropped from the cluster series', () => {
@@ -292,11 +360,14 @@ test('intermittent containers and late series do not blank the cluster chart', (
   assert.ok(Math.abs(lg.series.reqCpu[10] - 0.45) < 1e-9);
   assert.ok(Math.abs(lg.series.reqCpu[20] - 0.45) < 1e-9);
   assert.ok(Math.abs(lg.series.reqCpu[150] - 0.55) < 1e-9);
-  // The monitoring workloads have no memory or replicas for six hours; the
-  // chart fills them from their first value, since they are a small share.
+  // The monitoring workloads have no memory or replicas for six hours, so
+  // they add 0 to the chart until then: prometheus-server requests 0.1 cores
+  // and alertmanager 0.05.
   const prom = r.workloads.find(w => w.name === 'prometheus-server');
   assert.ok(Number.isNaN(prom.series.cur[23]) && Number.isFinite(prom.series.cur[24]));
-  assert.ok(Math.abs(r.series.reqCpu[0] - r.series.reqCpu[24]) < 1e-9);
+  assert.ok(Math.abs(r.series.reqCpu[24] - r.series.reqCpu[0] - 0.15) < 1e-9);
+  // They run 168 of the 192 covered steps, so they count for 168/192 of their request.
+  assert.ok(Math.abs(prom.reqCores - 0.1 * 168 / 192) < 1e-9, String(prom.reqCores));
 });
 
 test('totals for the committed fixtures keep their golden values', () => {

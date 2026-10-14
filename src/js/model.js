@@ -447,7 +447,8 @@
   // The workload's figures under the given levers. The target, spend and
   // waste arrays belong to the prepared workload and are overwritten by the
   // next call.
-  function computeWorkload(p, rates, lv) {
+  //   cover  its cluster's coverage (see coverage)
+  function computeWorkload(p, rates, lv, cover) {
     var res = {
       id: p.id, cluster: p.cluster, ns: p.ns, nsName: p.nsName, kind: p.kind, name: p.name, containers: p.containers, notes: p.notes,
       status: p.status, reason: p.reason, series: null, chart: null,
@@ -477,17 +478,94 @@
     }
     res.series = lv.range ? clip(s, lv.range) : s;
     res.chart = p.partialEnd ? withoutLast(res.series, s.t[n - 1]) : res.series;
-    res.reqCores = mean(s.reqCpu, weight, lo, hi);
-    res.reqGiB = mean(s.reqMem, weight, lo, hi);
-    res.useCores = mean(s.useCpu, weight, lo, hi);
-    res.useGiB = mean(s.useMem, weight, lo, hi);
-    var cur = mean(s.cur, weight, lo, hi);
+    // A workload counts only while it runs: its averages are over the time
+    // its cluster has data, in the selected range when there is one.
+    var covered = cover ? coveredWeight(cover, lv.range) : 0;
+    var avg = function (arr) { return timeShare(arr, weight, lo, hi, covered); };
+    res.reqCores = avg(s.reqCpu);
+    res.reqGiB = avg(s.reqMem);
+    res.useCores = avg(s.useCpu);
+    res.useGiB = avg(s.useMem);
+    var cur = avg(s.cur);
     res.annualSpend = cur * HOURS_PER_YEAR;
-    res.annualSavings = (cur - mean(s.opt, weight, lo, hi)) * HOURS_PER_YEAR;
+    res.annualSavings = (cur - avg(s.opt)) * HOURS_PER_YEAR;
     res.savingsPct = res.annualSpend > 0 ? res.annualSavings / res.annualSpend : 0;
-    res.wasteCores = mean(p.wasteCpu, weight, lo, hi);
-    res.wasteGiB = mean(p.wasteMem, weight, lo, hi);
+    res.wasteCores = avg(p.wasteCpu);
+    res.wasteGiB = avg(p.wasteMem);
     return res;
+  }
+
+  // The weighted sum of the finite values over indexes [from, to), divided by
+  // the covered weight, or by the weight of those values when that is more.
+  // Time the workload has no value in counts as 0. NaN when it has none.
+  // internal/savings timeShare is the Go port.
+  function timeShare(arr, weights, from, to, covered) {
+    var s = 0, n = 0;
+    for (var i = from; i < to; i++) {
+      if (!isFinite(arr[i])) continue;
+      s += arr[i] * weights[i]; n += weights[i];
+    }
+    return n ? s / Math.max(covered, n) : NaN;
+  }
+
+  // Each cluster's covered time: the points where at least one of its
+  // workloads has complete data, each weighted by the largest step weight of
+  // those workloads there. Time with no data from any workload, such as before
+  // the cluster's history starts or during an outage of its metrics source,
+  // is not covered. chart holds the covered times the charts show: each
+  // workload's points less the last one it leaves off its chart (partialEnd).
+  // Workloads in Thoras's own namespaces count only with includeThoras, so
+  // Thoras's pods alone do not make time covered.
+  //   result  {cluster: {t, cum, chart}}; cum[i] is the weight of t[0..i)
+  function coverage(workloads, includeThoras) {
+    var by = {};
+    workloads.forEach(function (p) {
+      if (!p.s || (!includeThoras && isThoras(p.nsName))) return;
+      var c = by[p.cluster || ''] || (by[p.cluster || ''] = { w: new Map(), chart: new Set() });
+      var t = p.s.t, last = t.length - 1;
+      for (var i = 0; i < t.length; i++) {
+        if (!isFinite(p.s.reqCpu[i])) continue;
+        c.w.set(t[i], Math.max(c.w.get(t[i]) || 0, p.weight[i]));
+        if (!(p.partialEnd && i === last)) c.chart.add(t[i]);
+      }
+    });
+    var out = {};
+    Object.keys(by).forEach(function (name) {
+      var times = Array.from(by[name].w.keys()).sort(function (a, b) { return a - b; });
+      var cum = new Float64Array(times.length + 1);
+      times.forEach(function (x, i) { cum[i + 1] = cum[i] + by[name].w.get(x); });
+      out[name] = {
+        t: Float64Array.from(times), cum: cum,
+        chart: Float64Array.from(Array.from(by[name].chart).sort(function (a, b) { return a - b; }))
+      };
+    });
+    return out;
+  }
+
+  // Thoras's own namespaces, exactly. Others that start with thoras-, such
+  // as thoras-example, hold sample workloads Thoras right-sizes, and count.
+  var THORAS_NAMESPACES = ['thoras', 'thoras-console'];
+
+  // Whether a namespace, as its cluster names it, is one of Thoras's own.
+  // Their workloads are Thoras, not the customer's, so they are left out
+  // unless includeThoras is set. internal/savings IsThorasNamespace is the
+  // Go port.
+  function isThoras(ns) {
+    return THORAS_NAMESPACES.indexOf(ns) >= 0;
+  }
+
+  // Thoras's own namespaces the figures leave out under these levers, as the
+  // page names them (thorasLabels): none when includeThoras is set or the
+  // file has none.
+  function thorasLeftOut(data, includeThoras) {
+    return includeThoras ? [] : (data.thorasLabels || []);
+  }
+
+  // Weight of a cluster's covered points in [range[0], range[1]], or of all
+  // of them without a range.
+  function coveredWeight(cover, range) {
+    var a = range ? lowerBound(cover.t, range[0]) : 0, b = range ? upperBound(cover.t, range[1]) : cover.t.length;
+    return b > a ? cover.cum[b] - cover.cum[a] : 0;
   }
 
   function shortMetric(name) {
@@ -498,17 +576,23 @@
     return name;
   }
 
-  // Sum workload chart series onto one grid. Each workload adds its mean to a
-  // bucket, except for peaks, where it adds its highest point, and adds
-  // nothing outside its first and last point. A bucket inside that span where
-  // the workload has no value takes the value of its nearest bucket that has
-  // one. The bucket counts only when the workloads filled this way, other
-  // than across a single missing bucket, make up at most FILL_SHARE of the
-  // spend of the workloads in it; otherwise every field is NaN. Buckets at
-  // either end that do not count are dropped.
+  // Sum workload chart series onto one grid of buckets, each the longest
+  // step among them. A workload adds its mean over its points in a bucket,
+  // except for peaks, where it adds its highest point. In a bucket where its
+  // cluster has data but it has none, such as before it starts, after it ends
+  // or between runs, it adds 0: a workload counts only while it runs. A
+  // bucket where a cluster in the list has no data at all, such as during an
+  // outage of its metrics source, is NaN in every field, except that a
+  // single such bucket between two with values, such as a missed scrape,
+  // takes the mean of its two neighbours (for peaks, the higher of them).
+  // Two or more in a row stay NaN. NaN buckets at either end are dropped; in
+  // a fleet those include the buckets at the ends of the shared window where
+  // not every cluster has a value.
+  //   cover  {cluster: {chart}}, the covered times on each cluster's charts
+  //          (see coverage); a cluster without one is covered where its
+  //          workloads in the list have a value
   var PEAKS = ['peakCpu', 'peakMem'];
-  var FILL_SHARE = 0.05;
-  function combine(list) {
+  function combine(list, cover) {
     var step = 0, t0 = Infinity, t1 = -Infinity;
     list.forEach(function (w) {
       step = Math.max(step, w.chart.step);
@@ -521,61 +605,58 @@
     for (var b = 0; b < nb; b++) out.t[b] = t0 + b * step;
     var outs = FIELDS.map(function (f) { return (out[f] = new Float64Array(nb)); });
     var peak = FIELDS.map(function (f) { return PEAKS.indexOf(f) >= 0; });
-    // Spend of the workloads in each bucket, of those filled there, and how
-    // many have a value there.
-    var inSpend = new Float64Array(nb), fillSpend = new Float64Array(nb), real = new Float64Array(nb);
-    // One scratch row per field, reset over each workload's own buckets.
-    var sum = FIELDS.map(function () { return new Float64Array(nb); }), cnt = new Float64Array(nb), near = new Int32Array(nb);
+    // One scratch row per field, reset over each workload's own buckets, and
+    // how many of its points are in each bucket.
+    var sum = FIELDS.map(function () { return new Float64Array(nb); }), cnt = new Float64Array(nb);
     var bin = new Int32Array(0);
-    // Which clusters have a value in each bucket. Each cluster's steps start
-    // on its own minute, so at either end of a fleet's window a bucket can
-    // hold only some clusters; those buckets are dropped below.
+    // Which buckets each cluster has data in.
     var clusterRows = {};
+    var rowOf = function (name) {
+      if (clusterRows[name]) return clusterRows[name];
+      var row = (clusterRows[name] = new Uint8Array(nb));
+      var ct = cover && cover[name] && cover[name].chart;
+      if (ct) {
+        for (var i = lowerBound(ct, t0); i < ct.length; i++) {
+          var k = Math.floor((ct[i] - t0) / step);
+          if (k >= nb) break;
+          row[k] = 1;
+        }
+      }
+      return row;
+    };
     list.forEach(function (w) {
       var s = w.chart, n = s.t.length, i, k;
-      var crow = clusterRows[w.cluster || ''] || (clusterRows[w.cluster || ''] = new Uint8Array(nb));
+      var crow = rowOf(w.cluster || '');
       var first = Math.floor((s.t[0] - t0) / step), last = Math.floor((s.t[n - 1] - t0) / step);
-      var spend = w.annualSpend > 0 ? w.annualSpend : 0;
       if (bin.length < n) bin = new Int32Array(n);
       // The bucket of each valid point, or -1.
       for (i = 0; i < n; i++) bin[i] = isFinite(s.cur[i]) ? Math.floor((s.t[i] - t0) / step) : -1;
       for (k = first; k <= last; k++) cnt[k] = 0;
       for (i = 0; i < n; i++) if (bin[i] >= 0) { cnt[bin[i]]++; crow[bin[i]] = 1; }
-      // The nearest bucket with a value, the earlier one on a tie.
-      var prev = -1;
-      for (k = first; k <= last; k++) { if (cnt[k]) prev = k; near[k] = prev; }
-      var next = -1;
-      for (k = last; k >= first; k--) {
-        if (cnt[k]) next = k;
-        if (next >= 0 && (near[k] < 0 || next - k < k - near[k])) near[k] = next;
-      }
-      for (k = first; k <= last; k++) {
-        inSpend[k] += spend;
-        // One missing bucket, such as a missed scrape, draws through with
-        // the value next to it. Longer gaps count as filled.
-        if (cnt[k] || (k > first && k < last && cnt[k - 1] && cnt[k + 1])) real[k]++;
-        else fillSpend[k] += spend;
-      }
       for (var f = 0; f < nf; f++) {
         var row = sum[f], src = s[FIELDS[f]], dst = outs[f];
         for (k = first; k <= last; k++) row[k] = peak[f] ? -Infinity : 0;
         if (peak[f]) { for (i = 0; i < n; i++) if (bin[i] >= 0) row[bin[i]] = Math.max(row[bin[i]], src[i]); }
         else { for (i = 0; i < n; i++) if (bin[i] >= 0) row[bin[i]] += src[i]; }
-        for (k = first; k <= last; k++) if (cnt[k]) row[k] = peak[f] ? row[k] : row[k] / cnt[k];
-        for (k = first; k <= last; k++) if (near[k] >= 0) dst[k] += row[near[k]];
+        for (k = first; k <= last; k++) if (cnt[k]) dst[k] += peak[f] ? row[k] : row[k] / cnt[k];
       }
     });
-    var lo = nb, hi = -1;
+    var rows = Object.keys(clusterRows).map(function (c) { return clusterRows[c]; });
+    var lo = nb, hi = -1, ok = new Uint8Array(nb);
     for (var q = 0; q < nb; q++) {
-      if (real[q] && fillSpend[q] <= inSpend[q] * FILL_SHARE) { lo = Math.min(lo, q); hi = q; continue; }
+      if (rows.every(function (r) { return r[q]; })) { ok[q] = 1; lo = Math.min(lo, q); hi = q; continue; }
       for (var g = 0; g < nf; g++) outs[g][q] = NaN;
     }
     if (hi < 0) return out;
-    var rows = Object.keys(clusterRows).map(function (c) { return clusterRows[c]; });
-    var everyCluster = function (q) { return rows.every(function (r) { return r[q]; }); };
-    if (rows.length > 1) {
-      while (lo < hi && !everyCluster(lo)) lo++;
-      while (hi > lo && !everyCluster(hi)) hi--;
+    // One empty bucket between two with values, such as a missed scrape,
+    // draws through: the mean of its neighbours, or for peaks the higher.
+    // The chart only; totals still leave the time out.
+    for (var e = 1; e + 1 < nb; e++) {
+      if (ok[e] || !ok[e - 1] || !ok[e + 1]) continue;
+      for (var h = 0; h < nf; h++) {
+        var x = outs[h][e - 1], y = outs[h][e + 1];
+        outs[h][e] = peak[h] ? Math.max(x, y) : (x + y) / 2;
+      }
     }
     out.t = out.t.subarray(lo, hi + 1);
     FIELDS.forEach(function (f) { out[f] = out[f].subarray(lo, hi + 1); });
@@ -784,8 +865,12 @@
     var lastAt = {};
     workloads.forEach(function (w) { if (w.s) lastAt[w.cluster] = Math.max(lastAt[w.cluster] || -Infinity, w.s.t[w.s.t.length - 1]); });
     workloads.forEach(function (w) { w.partialEnd = !!(w.s && w.compacted && w.s.t[w.s.t.length - 1] === lastAt[w.cluster]); });
-    var namespaces = [];
-    workloads.forEach(function (w) { if (namespaces.indexOf(w.ns) < 0) namespaces.push(w.ns); });
+    var namespaces = [], thoras = [];
+    workloads.forEach(function (w) {
+      if (namespaces.indexOf(w.ns) < 0) namespaces.push(w.ns);
+      if (isThoras(w.nsName) && thoras.indexOf(w.ns) < 0) thoras.push(w.ns);
+    });
+    thoras.sort();
     var labels = displayNames(data.clusters.concat(data.failed.map(function (f) { return f.name; })));
     var clusters = data.clusters.map(function (name) {
       var mine = function (r) { return r.cluster === name; };
@@ -802,11 +887,19 @@
       cluster: multi ? clusters.length + ' clusters' : data.cluster, label: multi ? clusters.length + ' clusters' : labels[data.cluster] || data.cluster, contract: data.contract, fidelity: fid,
       pricing: multi ? fleetPricing(clusters, data.nodes) : clusters[0].pricing, nodes: data.nodes,
       namespaces: namespaces.sort(), workloads: workloads,
-      clusters: clusters, failed: data.failed, dropped: (opts && opts.dropped) || [], multi: multi, labels: labels
+      clusters: clusters, failed: data.failed, dropped: (opts && opts.dropped) || [], multi: multi, labels: labels,
+      // Thoras's own namespaces in the file, as namespaces names them, and
+      // as the page shows them: in a fleet, with the cluster's short name.
+      thorasNamespaces: thoras,
+      thorasLabels: thoras.map(function (ns) {
+        if (!multi) return ns;
+        var w = workloads.filter(function (x) { return x.ns === ns; })[0];
+        return (labels[w.cluster] || w.cluster) + '/' + w.nsName;
+      })
     };
   }
 
-  var DEFAULT_LEVERS = { rates: null, discount: 0, headroom: TARGET_HEADROOM, peakWindow: PEAK_WINDOW_SECONDS, namespaces: null, clusters: null, range: null };
+  var DEFAULT_LEVERS = { rates: null, discount: 0, headroom: TARGET_HEADROOM, peakWindow: PEAK_WINDOW_SECONDS, namespaces: null, clusters: null, range: null, includeThoras: false };
 
   function fmtRate(v) { return '$' + Number(v.toPrecision(4)); }
 
@@ -827,6 +920,9 @@
   //   namespaces  namespaces to count, or null for all
   //   clusters    clusters to count, or null for all
   //   range       [from, to] in Unix seconds, or null for the whole file
+  //   includeThoras  count Thoras's own namespaces (false): thoras and
+  //                  thoras-console; left out, they are not in totals, workloads
+  //                  or the chart, and add no covered time
   function compute(data, levers) {
     var lv = Object.assign({}, DEFAULT_LEVERS, levers);
     var clusters = data.clusters || [{ name: data.cluster, pricing: data.pricing, nodes: data.nodes, fidelity: data.fidelity }];
@@ -839,10 +935,17 @@
     inScope.forEach(function (c) { own[c.name] = leverRates(c.pricing, lv); });
     var scope = null;
     if (lv.namespaces) { scope = {}; lv.namespaces.forEach(function (n) { scope[n] = true; }); }
+    // Each cluster's covered time depends only on whether Thoras's own
+    // namespaces count, and the range, so it is worked out once per file for
+    // each. A namespace filter leaves it as it is: the namespaces chosen are
+    // part of the same cluster time.
+    var withThoras = !!lv.includeThoras, key = withThoras ? 'coverageWithThoras' : 'coverage';
+    var cover = data[key] || (data[key] = coverage(data.workloads, withThoras));
     var workloads = [];
     data.workloads.forEach(function (p) {
       var r = data.multi ? own[p.cluster] : rates;
-      if (r && (!scope || scope[p.ns])) workloads.push(computeWorkload(p, r, lv));
+      if (!withThoras && isThoras(p.nsName)) return;
+      if (r && (!scope || scope[p.ns])) workloads.push(computeWorkload(p, r, lv, cover[p.cluster || '']));
     });
     var counted = workloads.filter(function (w) { return w.series; });
     var totals = totalsOf(workloads);
@@ -863,7 +966,7 @@
     var chartable = counted.filter(function (w) { return w.chart; });
     var charted = window ? within(chartable, window) : chartable;
     if (!charted.length) { window = null; charted = chartable; }
-    var series = charted.length ? combine(charted) : null;
+    var series = charted.length ? combine(charted, cover) : null;
     if (series && lv.range) series = clip(series, lv.range);
     return {
       cluster: one ? (data.multi ? inScope[0].name : data.cluster) : inScope.length + ' clusters',
@@ -935,7 +1038,7 @@
       var a = lowerBound(w.chart.t, range[0]), b = lowerBound(w.chart.t, range[1]);
       var s = { step: w.chart.step, t: w.chart.t.subarray(a, b) };
       FIELDS.forEach(function (f) { s[f] = w.chart[f].subarray(a, b); });
-      if (s.t.length) out.push({ chart: s, annualSpend: w.annualSpend, cluster: w.cluster });
+      if (s.t.length) out.push({ chart: s, cluster: w.cluster });
     });
     return out;
   }
@@ -963,7 +1066,7 @@
 
   var api = {
     analyze: analyze, prepare: prepare, forCluster: forCluster, displayNames: displayNames, mergeFidelity: mergeFidelity, priceNode: priceNode, liveMix: liveMix, priceTable: PRICES, cloudNames: CLOUD_NAMES, compute: compute, defaultLevers: DEFAULT_LEVERS, parse: parse, pricing: pricing, stepAt: stepAt, resample: resample, rollingMax: rollingMax,
-    lowerBound: lowerBound, upperBound: upperBound, mean: mean,
+    lowerBound: lowerBound, upperBound: upperBound, mean: mean, timeShare: timeShare, isThoras: isThoras, thorasLeftOut: thorasLeftOut, coverage: coverage, combine: combine,
     fidelityLabel: fidelityLabel, formatSpan: formatSpan, formatStep: formatStep, notes: NOTES, constants: { GIB: GIB, HOURS_PER_YEAR: HOURS_PER_YEAR, PEAK_WINDOW_SECONDS: PEAK_WINDOW_SECONDS, TARGET_HEADROOM: TARGET_HEADROOM, DEFAULT_NODE: DEFAULT_NODE }
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

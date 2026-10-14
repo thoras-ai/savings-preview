@@ -1,6 +1,7 @@
 package savings
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"fmt"
@@ -544,7 +545,11 @@ type jsResult struct {
 	} `json:"fidelity"`
 	Basis  string             `json:"basis"`
 	Totals map[string]float64 `json:"totals"`
-	Rows   map[string]float64 `json:"rows"`
+	// WithThoras is totals with Thoras's own namespaces counted, and Thoras
+	// the namespaces the defaults leave out.
+	WithThoras map[string]float64 `json:"withThoras"`
+	Thoras     []string           `json:"thoras"`
+	Rows       map[string]float64 `json:"rows"`
 	// The money section's namespace figures, added up.
 	Money map[string]float64 `json:"money"`
 	// Section holds the figures the cluster and nodes section shows.
@@ -578,6 +583,7 @@ const workloads = require(path.join(path.dirname(process.argv[2]), 'section-work
 const out = process.argv.slice(4).map(f => {
   const data = model.prepare(JSON.parse(fs.readFileSync(f, 'utf8')));
   model.compute(data, { headroom: 1.5, peakWindow: 3600, rates: { perCore: 1, perGiB: 1 } });
+  const withThoras = model.compute(data, { includeThoras: true }).totals;
   const r = model.compute(data, model.defaultLevers);
   const rows = { spend: 0, savings: 0, cores: 0, gib: 0 };
   workloads.rows(data, r).filter(w => w.status !== 'excluded').forEach(w => {
@@ -588,7 +594,7 @@ const out = process.argv.slice(4).map(f => {
   const s = section.summarize(data, r, { range: null, namespaces: null });
   const counted = r.totals.counted > 0;
   return {
-    cluster: r.cluster, fidelity: r.fidelity, basis: r.pricing.basis, totals: r.totals, money: ns, rows,
+    cluster: r.cluster, fidelity: r.fidelity, basis: r.pricing.basis, totals: r.totals, withThoras, thoras: data.thorasNamespaces, money: ns, rows,
     nodes: data.nodes.map(n => ({ in: { hostType: n.hostType, provider: n.provider, region: n.region, capacity: n.capacity, cores: n.cores, gib: n.gib }, out: model.priceNode(n) })),
     section: counted ? { ReqCores: s.cpu.req, ReqGiB: s.mem.req, WasteCores: s.cpu.req - s.cpu.target, WasteGiB: s.mem.req - s.mem.target } : {}
   };
@@ -598,7 +604,8 @@ process.stdout.write(JSON.stringify(out));
 
 // A container without both usage values at a step is not running then and
 // adds no request, so the check container's request counts at one step of
-// 192.
+// 192. The monitoring workloads have no memory or replicas for their first 24
+// steps, so they run 168 of the 192 steps the cluster has data for.
 func TestIntermittentContainers(t *testing.T) {
 	b, err := os.ReadFile("../../fixtures/intermittent.otlp.json")
 	if err != nil {
@@ -611,7 +618,7 @@ func TestIntermittentContainers(t *testing.T) {
 	if got.Totals.Counted != 5 {
 		t.Errorf("counted %d, want 5", got.Totals.Counted)
 	}
-	want := 3 + 1 + (0.45*191+0.55)/192 + 0.1 + 0.05
+	want := 3 + 1 + (0.45*191+0.55)/192 + (0.1+0.05)*168/192
 	if math.Abs(got.Totals.RequestedCores-want) > 1e-9 {
 		t.Errorf("requested cores %v, want %v", got.Totals.RequestedCores, want)
 	}
@@ -640,7 +647,7 @@ func TestParityWithModelJS(t *testing.T) {
 	}
 	dir := t.TempDir()
 	files := []string{fixture, intermittent}
-	for name, doc := range map[string]map[string]any{"partial": partialDoc(), "nodes": nodesDoc(), "clouds": cloudsDoc(), "snapshot": snapshotDoc(), "spans": spansDoc(), "held": heldDoc()} {
+	for name, doc := range map[string]map[string]any{"partial": partialDoc(), "nodes": nodesDoc(), "clouds": cloudsDoc(), "snapshot": snapshotDoc(), "spans": spansDoc(), "held": heldDoc(), "absent": absentDoc(), "thoras": thorasDoc()} {
 		b, err := json.Marshal(doc)
 		if err != nil {
 			t.Fatal(err)
@@ -730,8 +737,262 @@ func TestParityWithModelJS(t *testing.T) {
 			if name == "clouds" && len(w.Nodes) != len(cloudNodes) {
 				t.Errorf("clouds: %d nodes, want %d", len(w.Nodes), len(cloudNodes))
 			}
+			if !slices.Equal(got.ExcludedNamespaces, w.Thoras) && len(got.ExcludedNamespaces)+len(w.Thoras) > 0 {
+				t.Errorf("excluded namespaces: got %v, want %v", got.ExcludedNamespaces, w.Thoras)
+			}
+			all, err := AnalyzeWith(b, Options{IncludeThoras: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, n := range []struct {
+				name      string
+				got, want float64
+			}{
+				{"spend", all.Totals.AnnualSpend, w.WithThoras["spend"]},
+				{"savings", all.Totals.AnnualSavings, w.WithThoras["savings"]},
+				{"wasteCores", all.Totals.WasteCores, w.WithThoras["cores"]},
+				{"wasteGiB", all.Totals.WasteGiB, w.WithThoras["gib"]},
+				{"reqCores", all.Totals.RequestedCores, w.WithThoras["reqCores"]},
+				{"reqGiB", all.Totals.RequestedGiB, w.WithThoras["reqGiB"]},
+				{"workloads", float64(all.Totals.Workloads), w.WithThoras["workloads"]},
+				{"counted", float64(all.Totals.Counted), w.WithThoras["counted"]},
+			} {
+				if !same(n.got, n.want) {
+					t.Errorf("with Thoras %s: got %v, want %v", n.name, n.got, n.want)
+				}
+			}
+			if len(all.ExcludedNamespaces) > 0 {
+				t.Errorf("with Thoras, excluded %v", all.ExcludedNamespaces)
+			}
 			js, _ := json.Marshal(got)
 			t.Logf("%s", js)
 		})
+	}
+}
+
+// absentDoc has 20 steps of 300 seconds. whole runs every step with data,
+// half the last 9 of them, and job the first 4 and the last 4. No workload
+// has data at steps 8 and 9, an outage of the metrics source.
+func absentDoc() map[string]any {
+	n, step := 20, 300
+	base := common(step, 2, "prometheus")
+	outage := func(i int) bool { return i == 8 || i == 9 }
+	var rms []any
+	for _, w := range []struct {
+		name    string
+		runs    func(int) bool
+		reqCPU  float64
+		memGiB  float64
+		usedCPU float64
+	}{
+		{"whole", func(int) bool { return true }, 2, 4, 0.5},
+		{"half", func(i int) bool { return i >= 11 }, 2, 4, 0.5},
+		{"job", func(i int) bool { return i < 4 || i >= 16 }, 3, 2, 1},
+	} {
+		at := func(v float64) func(int) float64 {
+			return func(i int) float64 {
+				if !w.runs(i) || outage(i) {
+					return math.NaN()
+				}
+				return v
+			}
+		}
+		wl := with(base, sAttr("k8s.namespace.name", "ns"), sAttr("k8s.deployment.name", w.name))
+		rms = append(rms,
+			rm(wl, metric("k8s.deployment.pod.desired", fill(n, func(int) float64 { return 1 }), step, true)),
+			rm(with(wl, sAttr("k8s.container.name", "app")),
+				metric(cpuUse, fill(n, at(w.usedCPU)), step, false),
+				metric(memUse, fill(n, at(gib)), step, true),
+				metric(cpuReq, fill(n, at(w.reqCPU)), step, false),
+				metric(memReq, fill(n, at(w.memGiB*gib)), step, true)))
+	}
+	return map[string]any{"resourceMetrics": rms}
+}
+
+// A workload counts only while it runs: its averages are over the time the
+// cluster has data, and an outage with no data from any workload is not part
+// of that time.
+func TestWorkloadsCountOnlyWhileTheyRun(t *testing.T) {
+	b, err := json.Marshal(absentDoc())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Analyze(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 18 steps have data. whole runs all 18, half 9 and job 8.
+	wantCores := 2 + 2*9.0/18 + 3*8.0/18
+	wantGiB := 4 + 4*9.0/18 + 2*8.0/18
+	if !same(got.Totals.RequestedCores, wantCores) || !same(got.Totals.RequestedGiB, wantGiB) {
+		t.Errorf("requested %v cores, %v GiB; want %v, %v", got.Totals.RequestedCores, got.Totals.RequestedGiB, wantCores, wantGiB)
+	}
+	// Default node pricing: CPU costs more than memory for every workload,
+	// at 0.048 per core-hour.
+	wantSpend := wantCores * 0.048 * hoursPerYear
+	if !same(got.Totals.AnnualSpend, wantSpend) {
+		t.Errorf("spend %v, want %v", got.Totals.AnnualSpend, wantSpend)
+	}
+}
+
+// A workload present for half the covered time with the same requests costs
+// half of one present the whole time.
+func TestHalfTheTimeCostsHalf(t *testing.T) {
+	doc := func(names ...string) *Summary {
+		t.Helper()
+		var rms []any
+		for _, r := range absentDoc()["resourceMetrics"].([]any) {
+			for _, a := range r.(map[string]any)["resource"].(map[string]any)["attributes"].([]map[string]any) {
+				if a["key"] == "k8s.deployment.name" && slices.Contains(names, a["value"].(map[string]any)["stringValue"].(string)) {
+					rms = append(rms, r)
+				}
+			}
+		}
+		b, err := json.Marshal(map[string]any{"resourceMetrics": rms})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := Analyze(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	whole, both := doc("whole"), doc("whole", "half")
+	half := Totals{
+		AnnualSpend: both.Totals.AnnualSpend - whole.Totals.AnnualSpend, AnnualSavings: both.Totals.AnnualSavings - whole.Totals.AnnualSavings,
+		WasteCores: both.Totals.WasteCores - whole.Totals.WasteCores, WasteGiB: both.Totals.WasteGiB - whole.Totals.WasteGiB,
+		RequestedCores: both.Totals.RequestedCores - whole.Totals.RequestedCores, RequestedGiB: both.Totals.RequestedGiB - whole.Totals.RequestedGiB,
+	}
+	// whole runs all 18 steps with data, half 9 of them.
+	f := 0.5
+	for _, c := range []struct {
+		name      string
+		got, want float64
+	}{
+		{"spend", half.AnnualSpend, whole.Totals.AnnualSpend * f},
+		{"savings", half.AnnualSavings, whole.Totals.AnnualSavings * f},
+		{"waste cores", half.WasteCores, whole.Totals.WasteCores * f},
+		{"waste GiB", half.WasteGiB, whole.Totals.WasteGiB * f},
+		{"requested cores", half.RequestedCores, whole.Totals.RequestedCores * f},
+		{"requested GiB", half.RequestedGiB, whole.Totals.RequestedGiB * f},
+	} {
+		if !same(c.got, c.want) {
+			t.Errorf("%s: got %v, want %v", c.name, c.got, c.want)
+		}
+	}
+}
+
+// thorasDoc has 20 steps of 300 seconds. shop/app and thoras-example/ledger
+// run the last 10; thoras/metrics-collector and thoras-console/console run
+// all 20. thoras-example holds a sample workload, not Thoras, so it counts.
+func thorasDoc() map[string]any {
+	n, step := 20, 300
+	base := common(step, 2, "prometheus")
+	var rms []any
+	for _, w := range []struct {
+		ns, name string
+		from     int
+		reqCPU   float64
+	}{
+		{"shop", "app", 10, 2},
+		{"thoras-example", "ledger", 10, 1},
+		{"thoras", "metrics-collector", 0, 0.5},
+		{"thoras-console", "console", 0, 0.25},
+	} {
+		at := func(v float64) func(int) float64 {
+			return func(i int) float64 {
+				if i < w.from {
+					return math.NaN()
+				}
+				return v
+			}
+		}
+		wl := with(base, sAttr("k8s.namespace.name", w.ns), sAttr("k8s.deployment.name", w.name))
+		rms = append(rms,
+			rm(wl, metric("k8s.deployment.pod.desired", fill(n, func(int) float64 { return 1 }), step, true)),
+			rm(with(wl, sAttr("k8s.container.name", "app")),
+				metric(cpuUse, fill(n, at(0.1)), step, false),
+				metric(memUse, fill(n, at(gib/4)), step, true),
+				metric(cpuReq, fill(n, at(w.reqCPU)), step, false),
+				metric(memReq, fill(n, at(gib)), step, true)))
+	}
+	return map[string]any{"resourceMetrics": rms}
+}
+
+// Thoras's own namespaces are left out by default, and add no covered time:
+// on its own, the customer's time is the last 10 steps, so its workloads count
+// in full. With them, the cluster has data for all 20 steps.
+func TestThorasNamespacesAreLeftOut(t *testing.T) {
+	b, err := json.Marshal(thorasDoc())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Analyze(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Totals.Workloads != 2 || got.Totals.Counted != 2 || !same(got.Totals.RequestedCores, 2+1) {
+		t.Errorf("without Thoras: %+v", got.Totals)
+	}
+	if !slices.Equal(got.ExcludedNamespaces, []string{"thoras", "thoras-console"}) {
+		t.Errorf("excluded %v", got.ExcludedNamespaces)
+	}
+	all, err := AnalyzeWith(b, Options{IncludeThoras: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all.Totals.Workloads != 4 || !same(all.Totals.RequestedCores, (2+1)*0.5+0.5+0.25) || all.ExcludedNamespaces != nil {
+		t.Errorf("with Thoras: %+v, excluded %v", all.Totals, all.ExcludedNamespaces)
+	}
+	written := func(s *Summary) map[string]any {
+		var m map[string]any
+		out, _ := json.Marshal(s)
+		if err := json.Unmarshal(out, &m); err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	if v := written(got)["excluded_namespaces"]; fmt.Sprint(v) != "[thoras thoras-console]" {
+		t.Errorf("summary.json excluded_namespaces: %v", v)
+	}
+	if _, ok := written(all)["excluded_namespaces"]; ok {
+		t.Error("excluded_namespaces written with nothing left out")
+	}
+	for _, ns := range []string{"thoras", "thoras-console"} {
+		if !IsThorasNamespace(ns) {
+			t.Errorf("%s is Thoras's", ns)
+		}
+	}
+	for _, ns := range []string{"thoras-example", "thoras-trial", "thoras-workload-ref-example", "thorasbank", "my-thoras", "Thoras", ""} {
+		if IsThorasNamespace(ns) {
+			t.Errorf("%s is not Thoras's", ns)
+		}
+	}
+}
+
+// In a fleet each cluster lists its own Thoras namespaces, and the fleet
+// lists each name once.
+func TestFleetThorasNamespaces(t *testing.T) {
+	b, err := json.Marshal(thorasDoc())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rms []any
+	for _, name := range []string{"a", "b"} {
+		var d struct{ ResourceMetrics []any }
+		if err := json.Unmarshal(bytes.ReplaceAll(b, []byte(`"test-cluster"`), []byte(`"`+name+`"`)), &d); err != nil {
+			t.Fatal(err)
+		}
+		rms = append(rms, d.ResourceMetrics...)
+	}
+	fleet := analyzeAll(t, rms)
+	if !slices.Equal(fleet.ExcludedNamespaces, []string{"thoras", "thoras-console"}) || fleet.Totals.Workloads != 4 {
+		t.Errorf("fleet: excluded %v, %+v", fleet.ExcludedNamespaces, fleet.Totals)
+	}
+	for _, c := range fleet.Clusters {
+		if !slices.Equal(c.ExcludedNamespaces, []string{"thoras", "thoras-console"}) {
+			t.Errorf("%s: excluded %v", c.Cluster, c.ExcludedNamespaces)
+		}
 	}
 }
