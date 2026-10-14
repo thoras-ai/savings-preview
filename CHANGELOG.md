@@ -2,7 +2,7 @@
 
 Each release's section here is its release notes on GitHub. `scripts/release_notes.py` reads the section for a tag, and the release workflow fails when there is none.
 
-## Unreleased
+## v0.2.7
 
 ### Fixes
 

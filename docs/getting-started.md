@@ -26,7 +26,7 @@ With Node.js 20 or later, run the CLI without installing it:
 
     npx @thoras-ai/savings-preview@latest check --context my-cluster
 
-The first run downloads the release binary of the package's version for your machine, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux. Later runs start it from there. `@latest` makes npx look up the newest version each time; without it, npx can keep running a version it cached earlier. Pin a version with `npx @thoras-ai/savings-preview@0.2.6`, or install it with `npm install -g @thoras-ai/savings-preview` to get a `savings-preview` command, and upgrade that with `npm update -g @thoras-ai/savings-preview`.
+The first run downloads the release binary of the package's version for your machine, checks it against the release's `checksums.txt`, and keeps it in `~/Library/Caches/savings-preview` on macOS or `~/.cache/savings-preview` on Linux. Later runs start it from there. `@latest` makes npx look up the newest version each time; without it, npx can keep running a version it cached earlier. Pin a version with `npx @thoras-ai/savings-preview@0.2.7`, or install it with `npm install -g @thoras-ai/savings-preview` to get a `savings-preview` command, and upgrade that with `npm update -g @thoras-ai/savings-preview`.
 
 | Variable | Use |
 | --- | --- |
@@ -43,13 +43,13 @@ It reads these environment variables:
 
 | Variable | Use |
 | --- | --- |
-| `VERSION` | Release to install, such as `v0.2.6`. Default: the latest release. |
+| `VERSION` | Release to install, such as `v0.2.7`. Default: the latest release. |
 | `INSTALL_DIR` | Directory to install into. |
 | `GITHUB_TOKEN` or `GH_TOKEN` | Optional. Sent to the GitHub API when gh is not installed or not logged in, which raises its limit of 60 requests an hour. |
 
 For example:
 
-    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | VERSION=v0.2.6 INSTALL_DIR=~/bin sh
+    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | VERSION=v0.2.7 INSTALL_DIR=~/bin sh
 
 Then check the install:
 

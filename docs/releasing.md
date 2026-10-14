@@ -86,9 +86,9 @@ It detects the OS and architecture, downloads the matching archive and `checksum
 
 To render it by hand for an existing release:
 
-    gh release download v0.2.6 -R thoras-ai/savings-preview -p checksums.txt
-    gh release view v0.2.6 -R thoras-ai/savings-preview --json tagName,assets > release.json
-    scripts/homebrew_formula.py v0.2.6 checksums.txt release.json > savings-preview.rb
+    gh release download v0.2.7 -R thoras-ai/savings-preview -p checksums.txt
+    gh release view v0.2.7 -R thoras-ai/savings-preview --json tagName,assets > release.json
+    scripts/homebrew_formula.py v0.2.7 checksums.txt release.json > savings-preview.rb
 
 ### Publishing to the tap
 
@@ -98,8 +98,8 @@ The formula is published from the public tap repository `thoras-ai/homebrew-tap`
 
 **homebrew-tap** commits the formula of each release to the tap once the `HOMEBREW_TAP_DEPLOY_KEY` secret is set. To publish one by hand, or while the secret is not set, with your own push access to the tap:
 
-    gh release download v0.2.6 -R thoras-ai/savings-preview -p savings-preview.rb
-    scripts/update_tap.sh v0.2.6 savings-preview.rb
+    gh release download v0.2.7 -R thoras-ai/savings-preview -p savings-preview.rb
+    scripts/update_tap.sh v0.2.7 savings-preview.rb
 
 `update_tap.sh` clones the tap (`TAP_URL`, by default `git@github.com:thoras-ai/homebrew-tap.git`), writes `Formula/savings-preview.rb` on its default branch and pushes, and leaves the tap alone when it already holds the same formula. Check the result with `brew update`, then `brew upgrade savings-preview` (or `brew install thoras-ai/tap/savings-preview`), then `brew test savings-preview`.
 
@@ -119,11 +119,11 @@ To publish by hand:
 
     cd packaging/npm
     cp ../../LICENSE .
-    npm version 0.2.6 --no-git-tag-version
+    npm version 0.2.7 --no-git-tag-version
     npm login
     npm publish --access public
 
-A package published by hand has no provenance. Check a release with `npx @thoras-ai/savings-preview@0.2.6 --version`. To try the package before publishing it, run `npm pack` after `npm version` and then `npx --yes ./thoras-ai-savings-preview-0.2.6.tgz --version`. `tests/npm_launcher.test.js` runs the launcher against a local server that serves a release the way GitHub does.
+A package published by hand has no provenance. Check a release with `npx @thoras-ai/savings-preview@0.2.7 --version`. To try the package before publishing it, run `npm pack` after `npm version` and then `npx --yes ./thoras-ai-savings-preview-0.2.7.tgz --version`. `tests/npm_launcher.test.js` runs the launcher against a local server that serves a release the way GitHub does.
 
 ## Secrets to create
 

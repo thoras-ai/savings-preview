@@ -26,9 +26,9 @@ Or use the install script:
 
     curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | sh
 
-`install.sh` picks the archive for this machine (macOS or Linux, amd64 or arm64), checks it against the release's `checksums.txt`, and installs `savings-preview` into `~/.local/bin` when that is on `PATH`, or `/usr/local/bin` otherwise. It asks before using sudo, and stops without installing anything when a checksum is missing or does not match. Set `VERSION=v0.2.6` to install a release other than the latest, and `INSTALL_DIR` to install somewhere else:
+`install.sh` picks the archive for this machine (macOS or Linux, amd64 or arm64), checks it against the release's `checksums.txt`, and installs `savings-preview` into `~/.local/bin` when that is on `PATH`, or `/usr/local/bin` otherwise. It asks before using sudo, and stops without installing anything when a checksum is missing or does not match. Set `VERSION=v0.2.7` to install a release other than the latest, and `INSTALL_DIR` to install somewhere else:
 
-    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | VERSION=v0.2.6 INSTALL_DIR=~/bin sh
+    curl -fsSL https://github.com/thoras-ai/savings-preview/releases/latest/download/install.sh | VERSION=v0.2.7 INSTALL_DIR=~/bin sh
 
 Or download an archive from the [release page](https://github.com/thoras-ai/savings-preview/releases/latest), check it with `shasum -a 256 -c checksums.txt --ignore-missing`, and put the `savings-preview` binary on `PATH`. [Install from the archive](docs/getting-started.md#install-from-the-archive) has the steps, including the macOS download flag.
 
