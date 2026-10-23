@@ -20,6 +20,7 @@ Commands:
   poll         Write the file from requests, nodes and metrics-server usage read at an interval (alias: snapshot)
   datadog      Write the file from the Datadog metrics query API
   export       Write a compact copy of a file, or the file for a poll's readings
+  report       Build the report and the zip from contract files of any size, of one cluster or several
   check        Say whether run can read usage data, from where and at what tier, without reading any history
 
 Run "savings-preview <command> -h" for the flags of a command.
@@ -57,6 +58,8 @@ func main() {
 		err = datadog.Main(args)
 	case "export":
 		err = runExport(args)
+	case "report":
+		err = runReport(args)
 	case "check":
 		code := runCheck(args)
 		reportUpdate(os.Stderr)

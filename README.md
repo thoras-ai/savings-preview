@@ -77,6 +77,7 @@ The tool only reads. It uses your kubeconfig credentials to list services and Pr
 - [Quickstart](docs/quickstart.md): install, check, run and share, on one page.
 - [Getting started](docs/getting-started.md): every install method, each source, many clusters, reading the report, and troubleshooting.
 - [Sending results to Thoras](docs/send-to-thoras.md): collect the data from your clusters and send the zip.
+- [Building a report from data files](docs/large-files.md): which file to send, and building the report from full-resolution files of any size with `savings-preview report`.
 - [Security](docs/security.md): what the tool reads and writes, where its output goes, and how to check.
 - [Impact on your cluster](docs/cluster-load.md): what a run reads, why it does not affect your workloads, and options for very large clusters.
 - [Read-only access](deploy/rbac/README.md): ServiceAccounts and roles for each source.

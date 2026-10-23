@@ -253,14 +253,18 @@ func collectAndBuild(ctx context.Context, o *runOptions, w io.Writer) (*builtRep
 	if err != nil {
 		return nil, err
 	}
-	sum := b.summary
+	printCluster(w, b.summary)
+	fmt.Fprintf(w, "wrote %s with a summary, report.html, a copy of the report that opens without this tool, and the compact file\n", b.zip)
+	fmt.Fprintf(w, "the full-resolution file stays at %s (%s); it is not in the zip\n", o.out, megabytes(b.full.Bytes))
+	return b, nil
+}
+
+// printCluster prints the totals of a report of one cluster.
+func printCluster(w io.Writer, sum *savings.Summary) {
 	fmt.Fprintf(w, "\n%s: %s a year in requests, %s a year in savings (%d of %d workloads counted, tier %d, %s)\n",
 		cmp.Or(sum.DisplayName, sum.Cluster), money(sum.Totals.AnnualSpend), money(sum.Totals.AnnualSavings), sum.Totals.Counted, sum.Totals.Workloads,
 		sum.Tier, spanText(time.Duration(sum.SpanSeconds)*time.Second))
 	printExcluded(w, sum.ExcludedNamespaces)
-	fmt.Fprintf(w, "wrote %s with a summary, report.html, a copy of the report that opens without this tool, and the compact file\n", b.zip)
-	fmt.Fprintf(w, "the full-resolution file stays at %s (%s); it is not in the zip\n", o.out, megabytes(b.full.Bytes))
-	return b, nil
 }
 
 // builtReport is what buildReport wrote.
@@ -279,7 +283,11 @@ func buildReport(out string) (*builtReport, error) {
 	if err := compactChecked(out, os.Stderr); err != nil {
 		return nil, err
 	}
-	return finishReport(out, []bundleData{{Name: filepath.Base(compactName(out)), Path: compactName(out)}})
+	full, err := fullDataOf(out)
+	if err != nil {
+		return nil, err
+	}
+	return finishReport(out, full, []bundleData{{Name: filepath.Base(compactName(out)), Path: compactName(out)}})
 }
 
 // compactChecked writes the compact copy of the contract file at out and
@@ -307,13 +315,10 @@ func checkContract(path string, w io.Writer) error {
 }
 
 // finishReport computes the totals from the checked compact copy of out and
-// writes the zip, which also carries the compact files in data.
-func finishReport(out string, data []bundleData) (*builtReport, error) {
-	b := &builtReport{compact: compactName(out)}
-	var err error
-	if b.full, err = fullDataOf(out); err != nil {
-		return nil, err
-	}
+// writes the zip, which also carries the compact files in data. full names
+// the full-resolution file in summary.json; nil leaves it out.
+func finishReport(out string, full *fullData, data []bundleData) (*builtReport, error) {
+	b := &builtReport{compact: compactName(out), full: full}
 	f, err := os.Open(b.compact)
 	if err != nil {
 		return nil, err

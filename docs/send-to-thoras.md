@@ -66,6 +66,8 @@ It reads 14 days of CPU and memory history from each cluster's Prometheus, a few
 
 Send `savings-preview.zip` to your Thoras contact. You don't need to send the larger `.otlp.json` files in the folder.
 
+Send the zip; if you only have the larger .otlp.json files, send those and we can build the report from them. [Building a report from data files](large-files.md) explains how.
+
 ## What the zip contains
 
 - For each cluster: workload and namespace names, node instance types, and CPU and memory requests and usage at 15-minute steps

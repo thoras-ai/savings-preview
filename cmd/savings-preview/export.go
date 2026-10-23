@@ -207,8 +207,13 @@ func compactReport(in, out string, st compact.Stats, took time.Duration) string 
 		}
 		return " (" + megabytes(fi.Size()) + ")"
 	}
+	return fmt.Sprintf("wrote %s%s from %s%s in %s: %s", out, size(out), in, size(in), took.Round(time.Second), compactDetails(st))
+}
+
+// compactDetails says how many resources Compact wrote and how.
+func compactDetails(st compact.Stats) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "wrote %s%s from %s%s in %s: %d resources", out, size(out), in, size(in), took.Round(time.Second), st.Resources)
+	fmt.Fprintf(&b, "%d resources", st.Resources)
 	if st.Compacted > 0 {
 		from := shortDur(time.Duration(st.FinestStep) * time.Second)
 		if st.SourceStep != st.FinestStep {
