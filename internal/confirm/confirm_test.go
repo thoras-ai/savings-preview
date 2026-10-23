@@ -69,7 +69,6 @@ func TestGateQuitsOnCancel(t *testing.T) {
 	}
 }
 
-
 // blockReader never returns, like a terminal nobody types in.
 type blockReader struct{}
 
