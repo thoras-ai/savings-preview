@@ -153,3 +153,111 @@ func eachResource(path string, fn func(*resource) error) error {
 	}
 	return nil
 }
+
+// Clusters lists the clusters in the contract file at path, in the order
+// their first resource appears: those with data, and those that could not be
+// read with the reason. The file is read one resource at a time.
+func Clusters(path string) (read []string, failed []Failed, err error) {
+	seen := map[string]bool{}
+	err = eachResource(path, func(rm *resource) error {
+		at, err := attrsOf(rm.Resource)
+		if err != nil {
+			return err
+		}
+		c := at["k8s.cluster.name"]
+		if reason, ok := failedReason(at); ok {
+			failed = append(failed, Failed{Cluster: c, Reason: reason})
+			return nil
+		}
+		if !seen[c] {
+			seen[c] = true
+			read = append(read, c)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return read, failed, nil
+}
+
+// Extract writes the resources of one cluster in the contract file at path
+// to w, as a file of that cluster alone: every resource is written with
+// contract.ScopeVersion, which a file with one cluster carries.
+func Extract(w io.Writer, path, cluster string) error {
+	bw := bufio.NewWriterSize(w, 1<<20)
+	n := 0
+	err := eachResource(path, func(rm *resource) error {
+		at, err := attrsOf(rm.Resource)
+		if err != nil {
+			return err
+		}
+		if _, ok := failedReason(at); ok || at["k8s.cluster.name"] != cluster {
+			return nil
+		}
+		for i := range rm.ScopeMetrics {
+			rm.ScopeMetrics[i].Scope.Version = contract.ScopeVersion
+		}
+		b, err := json.Marshal(rm)
+		if err != nil {
+			return err
+		}
+		sep := ",\n"
+		if n == 0 {
+			sep = "{\"resourceMetrics\":[\n"
+		}
+		n++
+		if _, err := bw.WriteString(sep); err != nil {
+			return err
+		}
+		_, err = bw.Write(b)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("%s holds no data for cluster %q", path, cluster)
+	}
+	if _, err := bw.WriteString("\n]}\n"); err != nil {
+		return err
+	}
+	return bw.Flush()
+}
+
+// attrsOf reads the string attributes of a resource.
+func attrsOf(raw json.RawMessage) (map[string]string, error) {
+	var r struct {
+		Attributes []struct {
+			Key   string `json:"key"`
+			Value struct {
+				StringValue *string `json:"stringValue"`
+			} `json:"value"`
+		} `json:"attributes"`
+	}
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return nil, fmt.Errorf("bad resource attributes: %w", err)
+	}
+	at := map[string]string{}
+	for _, a := range r.Attributes {
+		if a.Value.StringValue != nil {
+			at[a.Key] = *a.Value.StringValue
+		}
+	}
+	return at, nil
+}
+
+// failedReason is the reason of a cluster resource, which stands for a
+// cluster that could not be read.
+func failedReason(at map[string]string) (string, bool) {
+	reason, ok := at["thoras.cluster.error"]
+	if !ok {
+		return "", false
+	}
+	for _, k := range []string{"k8s.node.name", "k8s.deployment.name", "k8s.statefulset.name", "k8s.container.name"} {
+		if at[k] != "" {
+			return "", false
+		}
+	}
+	return reason, true
+}

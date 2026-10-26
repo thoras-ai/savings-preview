@@ -112,6 +112,17 @@ func clustersDir(out string) string {
 	return strings.TrimSuffix(base, ".otlp") + ".clusters"
 }
 
+// clusterFile is the base name of a cluster's own files in a fleet's
+// clusters directory, unique among the names in used, which it adds to.
+func clusterFile(used map[string]bool, cluster string) string {
+	file := unsafeName.ReplaceAllString(cluster, "_")
+	for k := 2; used[file]; k++ {
+		file = fmt.Sprintf("%s-%d", unsafeName.ReplaceAllString(cluster, "_"), k)
+	}
+	used[file] = true
+	return file
+}
+
 var errPollLater = errors.New("poll with the other clusters")
 
 // The cluster calls of a fleet run; tests replace them.
@@ -164,12 +175,7 @@ func runFleet(ctx context.Context, o *runOptions, w io.Writer) (*builtReport, er
 			m.cluster = cmp.Or(m.cluster, m.context)
 			continue
 		}
-		file := unsafeName.ReplaceAllString(m.cluster, "_")
-		for k := 2; used[file]; k++ {
-			file = fmt.Sprintf("%s-%d", unsafeName.ReplaceAllString(m.cluster, "_"), k)
-		}
-		used[file] = true
-		m.out = filepath.Join(dir, file+".otlp.json")
+		m.out = filepath.Join(dir, clusterFile(used, m.cluster)+".otlp.json")
 		m.opts = *o
 		m.opts.context, m.opts.contexts, m.opts.allContexts, m.opts.contextsFile = m.context, nil, false, ""
 		m.opts.fleet, m.opts.member = false, true
@@ -246,11 +252,15 @@ func runFleet(ctx context.Context, o *runOptions, w io.Writer) (*builtReport, er
 	if err := checkContract(compactName(o.out), w); err != nil {
 		return nil, err
 	}
-	b, err := finishReport(o.out, data)
+	full, err := fullDataOf(o.out)
 	if err != nil {
 		return nil, err
 	}
-	printFleet(w, b, members)
+	b, err := finishReport(o.out, full, data)
+	if err != nil {
+		return nil, err
+	}
+	printFleet(w, b)
 	fmt.Fprintf(w, "wrote %s with a summary, report.html, a copy of the report that opens without this tool, and each cluster's compact file\n", b.zip)
 	fmt.Fprintf(w, "the full-resolution file for every cluster stays at %s (%s); each cluster's own files are in %s\n", o.out, megabytes(b.full.Bytes), dir)
 	return b, nil
@@ -283,7 +293,7 @@ func nameClusters(members []*member, w io.Writer) {
 	}
 }
 
-func printFleet(w io.Writer, b *builtReport, members []*member) {
+func printFleet(w io.Writer, b *builtReport) {
 	sum := b.summary
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "cluster\tsource\ttier\trequests/yr\tsavings/yr")

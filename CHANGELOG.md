@@ -2,6 +2,12 @@
 
 Each release's section here is its release notes on GitHub. `scripts/release_notes.py` reads the section for a tag, and the release workflow fails when there is none.
 
+## Unreleased
+
+### New
+
+- `savings-preview report FILE...` builds the report from contract files without reading a cluster. Each file can be a full-resolution or compact `.otlp.json` file of one cluster or several, a `report.html`, or a zip that `run` wrote. Full-resolution files are compacted as a stream, so their size does not matter: two files of 2.5 GB take about 40 seconds and under 150 MB of memory. Several clusters are joined into one report of several clusters, as `run` does with several contexts, and two files that hold the same cluster are an error. It writes the compact file, the zip and, for several clusters, each cluster's compact file, to the current directory or `-o DIR`, then opens the report, or exits with `--no-open`. `summary.json` has no `full_data`, since `report` writes no full-resolution file. See [docs/large-files.md](docs/large-files.md).
+
 ## v0.2.7
 
 ### Fixes

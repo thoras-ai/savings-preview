@@ -2,6 +2,7 @@ package fleet
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,5 +67,41 @@ func TestMerge(t *testing.T) {
 
 	if err := Merge(&out, []string{filepath.Join(dir, "missing.json")}, nil); err == nil {
 		t.Error("a missing file merged")
+	}
+}
+
+func TestClustersAndExtract(t *testing.T) {
+	dir := t.TempDir()
+	a, b := clusterFile(t, dir, "alpha"), clusterFile(t, dir, "beta")
+	merged := filepath.Join(dir, "fleet.json")
+	f, err := os.Create(merged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Merge(f, []string{a, b}, []Failed{{Cluster: "gamma", Reason: "Unauthorized"}}); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	read, failed, err := Clusters(merged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(read, ",") != "alpha,beta" || len(failed) != 1 || failed[0] != (Failed{Cluster: "gamma", Reason: "Unauthorized"}) {
+		t.Errorf("Clusters: %q %+v", read, failed)
+	}
+	var out bytes.Buffer
+	if err := Extract(&out, merged, "beta"); err != nil {
+		t.Fatal(err)
+	}
+	if errs := validate.ValidateReader(&out); len(errs) > 0 {
+		t.Errorf("extracted file: %v", errs)
+	}
+	var again bytes.Buffer
+	Extract(&again, merged, "beta")
+	if s := again.String(); strings.Contains(s, "alpha") || strings.Contains(s, contract.FleetScopeVersion) || !strings.Contains(s, `"beta"`) {
+		t.Errorf("extracted file holds other clusters or the fleet version:\n%s", s)
+	}
+	if err := Extract(io.Discard, merged, "delta"); err == nil {
+		t.Error("extracting a cluster that is not in the file succeeded")
 	}
 }

@@ -133,6 +133,8 @@ After the plan, `run`:
 
 `--collect-only` reads and writes the same files, then exits instead of serving the report or opening a browser; see [Sending us your results](#sending-us-your-results).
 
+`savings-preview report FILE...` builds the compact file, the zip and the report from contract files, without reading a cluster: full-resolution or compact files of any size, `report.html` pages, or zips that `run` wrote. Several files of different clusters are joined into one report of several clusters. [large-files.md](large-files.md) covers it.
+
 `savings-preview export --compact FILE` writes the compact copy of any contract file, of a poll's readings directory (`FILE.readings`), or of the data in a report page, reading it as a stream. [contract.md](contract.md#compact-files) describes compact files and how their totals compare with the full file. [upgrading.md](upgrading.md) lists what changed in the zip and `summary.json` since v0.1.0. `savings-preview --version` prints the version.
 
 ### No metrics store

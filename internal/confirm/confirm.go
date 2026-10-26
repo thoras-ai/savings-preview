@@ -59,6 +59,9 @@ type Plan struct {
 	// Title names the command and its target, such as "savings-preview
 	// prometheus, context prod-us".
 	Title string
+	// Intro is the line before Reads. Empty means the line for a command
+	// that reads clusters: it reads only and changes nothing in them.
+	Intro string
 	// Reads lists the requests it makes, one line each.
 	Reads []string
 	// Writes says what it writes and where, or is empty when it writes
@@ -74,7 +77,11 @@ type Plan struct {
 func Gate(ctx context.Context, p Plan, in io.Reader, w io.Writer, ask bool) bool {
 	fmt.Fprintln(w, p.Title)
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "This command only reads; it creates, changes and deletes nothing in your clusters. It will:")
+	intro := p.Intro
+	if intro == "" {
+		intro = "This command only reads; it creates, changes and deletes nothing in your clusters. It will:"
+	}
+	fmt.Fprintln(w, intro)
 	for _, r := range p.Reads {
 		fmt.Fprintln(w, "  - "+r)
 	}
