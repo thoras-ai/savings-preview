@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# This file replaces CodeRabbit's UI settings for this repo; keys not set here use CodeRabbit's defaults.
+reviews:
+  merge_risk_instructions: >-
+    Rate risk by one question: could this change break the promise in the
+    README, that the tool is read-only, installs nothing in the cluster and
+    uploads nothing, or make the report show a wrong number? Prospects run
+    this tool against production clusters and decide on its numbers.
+
+    Rate High or Critical when a mistake could: write to a cluster or send
+    data anywhere, which includes the kube and adapter packages and the RBAC
+    under deploy/; change the savings estimate, the node prices or the data
+    contract; or change what users, CI and releases execute, which is the
+    install, release, packaging and build scripts, the Makefile and the
+    workflows. Rate these High even when the tests pass.
+
+    Rate Moderate when the report or the command-line output could present a
+    number or a recommendation misleadingly without changing how it is
+    computed, or when a flag changes behaviour.
+
+    Rate Minimal or Low when neither the collected data nor the numbers
+    change: docs, tests, fixtures, design tokens and dependency updates that
+    pass CI.
+
+    Size alone does not raise risk.
+  auto_approvals:
+    enabled: true
+    max_merge_risk: moderate
+    allow_author_approval: false
+    overrides:
+      # CodeRabbit withholds every approval if it can't see a team listed here.
+      - teams: ["thoras-ai/engineering-contractors"]
+        enabled: false
+      # Keep in sync with .github/CODEOWNERS.
+      - paths:
+          - ".github/**"
+          - ".coderabbit.yaml"
+          - "Makefile"
+          - "scripts/**"
+          - "packaging/**"
+          - "deploy/**"
+        enabled: false
+  auto_review:
+    # Pausing leaves later commits unreviewed.
+    auto_pause_after_reviewed_commits: 0
+  finishing_touches:
+    docstrings:
+      enabled: false
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+  path_instructions:
+    - path: "**"
+      instructions: >-
+        Report as a security issue any code a reviewer could miss: content pushed
+        off-screen by long lines or whitespace, encoded or obfuscated payloads, and
+        executable changes unrelated to the pull request's stated purpose.
+chat:
+  allow_non_org_members: false
+knowledge_base:
+  learnings:
+    approval_delay: 7
