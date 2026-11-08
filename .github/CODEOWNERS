@@ -1,0 +1,14 @@
+# Only these paths require a person. Keep them in sync with the auto_approvals overrides in .coderabbit.yaml.
+# Members of child teams count as members here, so keep engineering-contractors un-nested.
+
+# CI, releases and the review rules
+/.github/ @thoras-ai/engineering-approvers
+/.coderabbit.yaml @thoras-ai/engineering-approvers
+
+# What users, CI and releases execute
+/Makefile @thoras-ai/engineering-approvers
+/scripts/ @thoras-ai/engineering-approvers
+/packaging/ @thoras-ai/engineering-approvers
+
+# What users apply in their clusters
+/deploy/ @thoras-ai/engineering-approvers
